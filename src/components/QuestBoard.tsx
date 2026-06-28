@@ -44,7 +44,7 @@ function useCountdown(rotateHour: number, rotateMinute: number) {
 
 function CheckIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
       <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
     </svg>
   )
@@ -325,7 +325,7 @@ export function QuestBoard({
                         <CheckIcon />
                       </button>
                     ) : (
-                      <div style={{ width: 16, height: 16, border: '1.5px solid var(--kp-fg-3)', borderRadius: 'var(--kp-radius-sm)', flexShrink: 0 }} />
+                      <div style={{ width: 16, height: 16, border: '1.5px solid var(--kp-fg)', borderRadius: 'var(--kp-radius-sm)', flexShrink: 0 }} />
                     )}
                     {editingId === t.id ? (
                       <EditInput
