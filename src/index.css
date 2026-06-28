@@ -916,6 +916,11 @@ a { color: var(--kp-fg); text-decoration: none; }
   .auth-user { display: none; }
   .auth-btn { display: none; }
 
+  /* Hide task action buttons on mobile — keep items clean */
+  .task-edit-btn { display: none; }
+  .task-delete { display: none; }
+  .task-reorder { display: none; }
+
   /* Slot header stacks on very narrow screens */
   .slot-header {
     flex-direction: column;
@@ -946,20 +951,3 @@ a { color: var(--kp-fg); text-decoration: none; }
   .add-task-btn { height: 40px; }
 }
 
-/* Touch devices: always show action buttons (no hover) */
-@media (hover: none) and (pointer: coarse) {
-  .task-delete,
-  .task-edit-btn,
-  .task-reorder { opacity: 1; }
-
-  /* Larger tap targets for action buttons */
-  .task-delete,
-  .task-edit-btn {
-    padding: var(--kp-space-1);
-    margin: calc(-1 * var(--kp-space-1));
-  }
-  .task-reorder-btn {
-    width: 24px;
-    height: 20px;
-  }
-}
