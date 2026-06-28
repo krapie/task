@@ -430,6 +430,11 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .task-delete:hover { color: var(--kp-fg-2); }
 
+/* Mobile unified add input */
+.mobile-add {
+  display: none;
+}
+
 /* Add task input */
 .add-task {
   display: flex;
@@ -921,6 +926,41 @@ a { color: var(--kp-fg); text-decoration: none; }
   .task-edit-btn { display: none; }
   .task-delete { display: none; }
   .task-reorder { display: none; }
+
+  /* Unified add input on mobile */
+  .desktop-add { display: none; }
+  .mobile-add {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kp-space-2);
+    margin-top: var(--kp-space-5);
+  }
+  .mobile-add-toggle {
+    display: flex;
+    border: 1px solid var(--kp-border);
+    border-radius: var(--kp-radius-sm);
+    overflow: hidden;
+  }
+  .mobile-add-type {
+    flex: 1;
+    height: 34px;
+    font-size: var(--kp-text-xs);
+    font-weight: 600;
+    color: var(--kp-fg-3);
+    background: none;
+    transition: background var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease);
+  }
+  .mobile-add-type + .mobile-add-type {
+    border-left: 1px solid var(--kp-border);
+  }
+  .mobile-add-type.selected {
+    background: var(--kp-fg);
+    color: var(--kp-bg);
+  }
+  .mobile-add-row {
+    display: flex;
+    gap: var(--kp-space-2);
+  }
 
   /* Slot header stacks on very narrow screens */
   .slot-header {

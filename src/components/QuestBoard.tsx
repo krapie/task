@@ -165,6 +165,63 @@ function AddInput({ placeholder, onAdd }: { placeholder: string; onAdd: (text: s
   )
 }
 
+function MobileAddInput({
+  slot,
+  isActive,
+  onAddTemplate,
+  onAddAddition,
+}: {
+  slot: Slot
+  isActive: boolean
+  onAddTemplate: (text: string, slots: Slot[]) => void
+  onAddAddition: (text: string) => void
+}) {
+  const [text, setText] = useState('')
+  const [type, setType] = useState<'daily' | 'bonus'>('daily')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function submit() {
+    const t = text.trim()
+    if (!t) return
+    if (type === 'daily') onAddTemplate(t, [slot])
+    else onAddAddition(t)
+    setText('')
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div className="mobile-add">
+      <div className="mobile-add-toggle">
+        <button
+          type="button"
+          className={`mobile-add-type${type === 'daily' ? ' selected' : ''}`}
+          onClick={() => setType('daily')}
+        >
+          Daily
+        </button>
+        <button
+          type="button"
+          className={`mobile-add-type${type === 'bonus' ? ' selected' : ''}`}
+          onClick={() => setType('bonus')}
+        >
+          Bonus
+        </button>
+      </div>
+      <div className="mobile-add-row">
+        <input
+          ref={inputRef}
+          className="add-task-input"
+          placeholder={type === 'daily' ? 'Add daily task…' : isActive ? 'Add bonus task for today…' : `Add bonus task for ${SLOT_LABELS[slot]}…`}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+        />
+        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
+      </div>
+    </div>
+  )
+}
+
 interface EditInputProps {
   initialText: string
   onConfirm: (text: string) => void
@@ -314,7 +371,7 @@ export function QuestBoard({
           ) : (
             <div className="empty-state">No daily tasks yet. Add one below.</div>
           )}
-          <DailyTaskAddInput slot={slot} onAdd={onAddTemplate} />
+          <div className="desktop-add"><DailyTaskAddInput slot={slot} onAdd={onAddTemplate} /></div>
         </div>
 
         {/* Bonus Tasks */}
@@ -365,12 +422,19 @@ export function QuestBoard({
               {isActive ? 'No bonus tasks for today.' : `No bonus tasks for ${SLOT_LABELS[slot]}.`}
             </div>
           )}
-          <AddInput
+          <div className="desktop-add"><AddInput
             placeholder={isActive ? 'Add bonus task for today…' : `Add bonus task for ${SLOT_LABELS[slot]}…`}
             onAdd={onAddAddition}
-          />
+          /></div>
         </div>
       </div>
+
+      <MobileAddInput
+        slot={slot}
+        isActive={isActive}
+        onAddTemplate={onAddTemplate}
+        onAddAddition={onAddAddition}
+      />
     </div>
   )
 }
