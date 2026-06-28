@@ -175,6 +175,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .header {
   border-bottom: 1px solid var(--kp-border);
   padding: 0 var(--kp-space-5);
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .header-inner {
@@ -873,10 +874,17 @@ a { color: var(--kp-fg); text-decoration: none; }
     padding-bottom: calc(var(--kp-space-6) + env(safe-area-inset-bottom, 0px));
   }
   .header {
-    padding: 0 var(--kp-space-4);
+    padding-top: env(safe-area-inset-top, 0px);
     padding-left: calc(var(--kp-space-4) + env(safe-area-inset-left, 0px));
     padding-right: calc(var(--kp-space-4) + env(safe-area-inset-right, 0px));
   }
+
+  /* Hide reset countdown and progress on mobile — too much clutter */
+  .reset-countdown { display: none; }
+  .progress-label { display: none; }
+
+  /* Hide multi-day chips on mobile — just adds to current slot */
+  .day-toggle-row { display: none; }
   .panel { width: 100%; border-left: none; border-top: 1px solid var(--kp-border); }
 
   /* Slot header stacks on very narrow screens */
