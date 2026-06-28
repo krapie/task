@@ -268,7 +268,7 @@ export function QuestBoard({
                         <CheckIcon />
                       </button>
                     ) : (
-                      <div style={{ width: 16, height: 16, border: '1.5px solid var(--kp-border)', borderRadius: 'var(--kp-radius-sm)', flexShrink: 0 }} />
+                      <div style={{ width: 16, height: 16, border: '1.5px solid var(--kp-fg-3)', borderRadius: 'var(--kp-radius-sm)', flexShrink: 0 }} />
                     )}
                     {editingId === t.id ? (
                       <EditInput
