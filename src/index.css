@@ -542,6 +542,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   align-items: center;
   justify-content: space-between;
   padding: var(--kp-space-4) var(--kp-space-5);
+  padding-top: calc(var(--kp-space-4) + env(safe-area-inset-top, 0px));
   border-bottom: 1px solid var(--kp-border);
 }
 
