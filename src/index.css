@@ -866,8 +866,63 @@ a { color: var(--kp-fg); text-decoration: none; }
   }
 }
 
+/* Mobile */
 @media (max-width: 600px) {
-  .app-main { padding: var(--kp-space-4) var(--kp-space-4); }
-  .header { padding: 0 var(--kp-space-4); }
-  .panel { width: 100%; }
+  .app-main {
+    padding: var(--kp-space-4) var(--kp-space-4);
+    padding-bottom: calc(var(--kp-space-6) + env(safe-area-inset-bottom, 0px));
+  }
+  .header {
+    padding: 0 var(--kp-space-4);
+    padding-left: calc(var(--kp-space-4) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--kp-space-4) + env(safe-area-inset-right, 0px));
+  }
+  .panel { width: 100%; border-left: none; border-top: 1px solid var(--kp-border); }
+
+  /* Slot header stacks on very narrow screens */
+  .slot-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--kp-space-2);
+    margin-bottom: var(--kp-space-4);
+  }
+
+  /* Day tabs: tighter, allow scroll if needed */
+  .day-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .day-tabs::-webkit-scrollbar { display: none; }
+
+  /* Larger task items for touch */
+  .task-item {
+    padding: var(--kp-space-4) var(--kp-space-3);
+    gap: var(--kp-space-2);
+  }
+
+  /* Bigger checkbox tap target */
+  .task-checkbox {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+
+  /* Add input full-width comfortable sizing */
+  .add-task-input { height: 40px; }
+  .add-task-btn { height: 40px; }
+}
+
+/* Touch devices: always show action buttons (no hover) */
+@media (hover: none) and (pointer: coarse) {
+  .task-delete,
+  .task-edit-btn,
+  .task-reorder { opacity: 1; }
+
+  /* Larger tap targets for action buttons */
+  .task-delete,
+  .task-edit-btn {
+    padding: var(--kp-space-1);
+    margin: calc(-1 * var(--kp-space-1));
+  }
+  .task-reorder-btn {
+    width: 24px;
+    height: 20px;
+  }
 }
