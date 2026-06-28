@@ -886,6 +886,9 @@ a { color: var(--kp-fg); text-decoration: none; }
   /* Larger π mark on mobile */
   .pi-mark { width: 30px; height: 30px; font-size: 15px; }
 
+  /* Prevent iOS auto-zoom on input focus (triggers when font-size < 16px) */
+  input { font-size: 16px; }
+
   /* Hide multi-day chips on mobile — just adds to current slot */
   .day-toggle-row { display: none; }
   .panel { width: 100%; border-left: none; border-top: 1px solid var(--kp-border); }
