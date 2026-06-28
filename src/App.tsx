@@ -106,18 +106,32 @@ export default function App() {
     loadedDatesRef.current.add(slotDate)
     if (isAuth) {
       const d = await api.daily.get(slotDate).catch(() => null) as DailyData | null
-      setDailyData(prev => ({
-        ...prev,
-        [slotDate]: d
-          ? {
-              completions: d.templates.filter(t => t.completed).map(t => t.id),
-              additions: d.additions,
-            }
-          : { completions: [], additions: [] }
-      }))
+      if (!d) return
+      const serverCompletions = d.templates.filter(t => t.completed).map(t => t.id)
+      const serverAdditions = d.additions
+      setDailyData(prev => {
+        const existing = prev[slotDate]
+        if (!existing) {
+          return { ...prev, [slotDate]: { completions: serverCompletions, additions: serverAdditions } }
+        }
+        // Merge: server is authoritative for completions; preserve any locally-added
+        // additions not yet reflected in this (possibly stale) GET response
+        const serverIds = new Set(serverAdditions.map(a => a.id))
+        const localOnly = existing.additions.filter(a => !serverIds.has(a.id) && !a.id.startsWith('temp-'))
+        return {
+          ...prev,
+          [slotDate]: {
+            completions: serverCompletions,
+            additions: [...serverAdditions, ...localOnly],
+          },
+        }
+      })
     } else {
       const d = storage.getDaily(slotDate)
-      setDailyData(prev => ({ ...prev, [slotDate]: d }))
+      setDailyData(prev => {
+        if (prev[slotDate]) return prev
+        return { ...prev, [slotDate]: d }
+      })
     }
   }, [isAuth])
 
@@ -200,8 +214,18 @@ export default function App() {
   async function handleAddTemplate(text: string, slots: Slot[]) {
     for (const slot of slots) {
       if (isAuth) {
-        const t = await api.templates.create(slot, text)
-        setTemplates(prev => ({ ...prev, [slot]: [...prev[slot], t] }))
+        const tempId = `temp-${crypto.randomUUID()}`
+        const tempTemplate: Template = { id: tempId, slot, text, position: templates[slot].length, created_at: Date.now() }
+        setTemplates(prev => ({ ...prev, [slot]: [...prev[slot], tempTemplate] }))
+        try {
+          const t = await api.templates.create(slot, text)
+          setTemplates(prev => ({
+            ...prev,
+            [slot]: prev[slot].map(item => item.id === tempId ? t : item),
+          }))
+        } catch {
+          setTemplates(prev => ({ ...prev, [slot]: prev[slot].filter(item => item.id !== tempId) }))
+        }
       } else {
         setTemplates(prev => {
           const t: Template = { id: crypto.randomUUID(), slot, text, position: prev[slot].length, created_at: Date.now() }
@@ -276,14 +300,33 @@ export default function App() {
   async function handleAddAddition(text: string) {
     const slotDate = selectedSlotDate
     if (isAuth) {
-      const a = await api.daily.addAddition(slotDate, text)
+      const tempId = `temp-${crypto.randomUUID()}`
+      const tempAddition: Addition = { id: tempId, slot_date: slotDate, text, completed: false, created_at: Date.now() }
       setDailyData(prev => ({
         ...prev,
         [slotDate]: {
           ...(prev[slotDate] ?? { completions: [], additions: [] }),
-          additions: [...(prev[slotDate]?.additions ?? []), a],
+          additions: [...(prev[slotDate]?.additions ?? []), tempAddition],
         },
       }))
+      try {
+        const a = await api.daily.addAddition(slotDate, text)
+        setDailyData(prev => ({
+          ...prev,
+          [slotDate]: {
+            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            additions: (prev[slotDate]?.additions ?? []).map(item => item.id === tempId ? a : item),
+          },
+        }))
+      } catch {
+        setDailyData(prev => ({
+          ...prev,
+          [slotDate]: {
+            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            additions: (prev[slotDate]?.additions ?? []).filter(item => item.id !== tempId),
+          },
+        }))
+      }
     } else {
       const a: Addition = { id: crypto.randomUUID(), slot_date: slotDate, text, completed: false, created_at: Date.now() }
       setDailyData(prev => ({

@@ -2,7 +2,7 @@
 
 RPG-style daily task board at [task.kevinprk.com](https://task.kevinprk.com).
 
-Set up recurring **Daily Tasks** per day-of-week (Mon, Tue, Wed, Thu, Fri, Sat/Sun) that auto-reset at a configurable time each day. Add one-off **Bonus Tasks** to any day. Works without an account (localStorage) or sign in to sync across devices.
+Set up recurring **Daily Tasks** per day-of-week (Mon, Tue, Wed, Thu, Fri, Sat/Sun) that auto-reset at a configurable time each day. Add one-off **Bonus Tasks** to any day. Works in guest mode (localStorage) or with an account for cross-device sync.
 
 ## Features
 
@@ -11,7 +11,7 @@ Set up recurring **Daily Tasks** per day-of-week (Mon, Tue, Wed, Thu, Fri, Sat/S
 - **Bonus Tasks** — one-off additions per day, visible on every day tab
 - **Multi-day add** — when adding a daily task, toggle which days it applies to and add to all at once
 - **Guest mode** — fully functional with no account; state lives in localStorage
-- **Authenticated mode** — sign in as `kevinprk` to persist data server-side across devices
+- **Authenticated mode** — sign in to persist data server-side across devices
 - **Import / Export** — JSON export of all templates and settings for backup or migration
 - **Dark mode** — follows system preference, with manual toggle
 
@@ -62,7 +62,7 @@ The dev server proxies `/api/*` to `localhost:3000`, so both run simultaneously.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `TASK_PASSWORD` | Yes (auth) | Password for the `kevinprk` account. Accepts bcrypt hash or plain text. |
+| `TASK_PASSWORD` | Yes (auth) | Account password. Accepts bcrypt hash or plain text. |
 | `JWT_SECRET` | Yes (auth) | Secret for signing JWT tokens. |
 | `TASK_USERNAME` | No | Username override (default: `kevinprk`). |
 | `DB_PATH` | No | Path to SQLite database file (default: `../task.db`). |
