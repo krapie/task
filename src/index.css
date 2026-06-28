@@ -244,6 +244,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   font-size: var(--kp-text-xs);
   color: var(--kp-fg-3);
   font-family: var(--kp-font-mono);
+  margin-right: var(--kp-space-2);
 }
 
 /* Day Tabs */
@@ -271,7 +272,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   border-bottom-color: var(--kp-fg);
 }
 
-/* Quest Board */
+/* Task Board */
 .slot-header {
   display: flex;
   align-items: baseline;
@@ -313,12 +314,18 @@ a { color: var(--kp-fg); text-decoration: none; }
   margin-bottom: var(--kp-space-2);
 }
 
-.quest-section {
-  margin-bottom: var(--kp-space-6);
+.task-board {
+  display: flex;
+  flex-direction: column;
 }
 
-/* Quest Items */
-.quest-list {
+.task-section {
+  margin-bottom: var(--kp-space-6);
+}
+.task-section:last-child { margin-bottom: 0; }
+
+/* Task Items */
+.task-list {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--kp-border);
@@ -326,7 +333,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   overflow: hidden;
 }
 
-.quest-item {
+.task-item {
   display: flex;
   align-items: center;
   gap: var(--kp-space-3);
@@ -335,11 +342,11 @@ a { color: var(--kp-fg); text-decoration: none; }
   background: var(--kp-surface);
   transition: background var(--kp-dur-fast) var(--kp-ease);
 }
-.quest-item:last-child { border-bottom: none; }
-.quest-item:hover { background: var(--kp-hover-bg); }
-.quest-item:hover .quest-delete { opacity: 1; }
+.task-item:last-child { border-bottom: none; }
+.task-item:hover { background: var(--kp-hover-bg); }
+.task-item:hover .task-delete { opacity: 1; }
 
-.quest-checkbox {
+.task-checkbox {
   width: 16px;
   height: 16px;
   border: 1.5px solid var(--kp-border-strong);
@@ -351,34 +358,34 @@ a { color: var(--kp-fg); text-decoration: none; }
   cursor: pointer;
   transition: border-color var(--kp-dur-fast) var(--kp-ease), background var(--kp-dur-fast) var(--kp-ease);
 }
-.quest-checkbox.checked {
+.task-checkbox.checked {
   background: var(--kp-fg);
   border-color: var(--kp-fg);
 }
-.quest-checkbox svg { display: none; }
-.quest-checkbox.checked svg { display: block; }
+.task-checkbox svg { display: none; }
+.task-checkbox.checked svg { display: block; }
 
-.quest-text {
+.task-text {
   flex: 1;
   font-size: var(--kp-text-sm);
   color: var(--kp-fg-1);
   transition: color var(--kp-dur-fast) var(--kp-ease);
 }
-.quest-text.done {
+.task-text.done {
   text-decoration: line-through;
   color: var(--kp-fg-4);
 }
 
-.quest-reorder {
+.task-reorder {
   display: flex;
   flex-direction: column;
   gap: 1px;
   opacity: 0;
   transition: opacity var(--kp-dur-fast) var(--kp-ease);
 }
-.quest-item:hover .quest-reorder { opacity: 1; }
+.task-item:hover .task-reorder { opacity: 1; }
 
-.quest-reorder-btn {
+.task-reorder-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -387,26 +394,32 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-4);
   border-radius: 2px;
 }
-.quest-reorder-btn:hover { color: var(--kp-fg-2); background: var(--kp-hover-bg); }
-.quest-reorder-btn:disabled { opacity: 0.3; cursor: default; }
+.task-reorder-btn:hover { color: var(--kp-fg-2); background: var(--kp-hover-bg); }
+.task-reorder-btn:disabled { opacity: 0.3; cursor: default; }
 
-.quest-delete {
+.task-delete {
   opacity: 0;
   color: var(--kp-fg-4);
   transition: opacity var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease);
   display: flex;
   align-items: center;
 }
-.quest-delete:hover { color: var(--kp-fg-2); }
+.task-delete:hover { color: var(--kp-fg-2); }
 
-/* Add quest input */
-.add-quest {
+/* Add task input */
+.add-task {
   display: flex;
+  flex-direction: column;
   gap: var(--kp-space-2);
   margin-top: var(--kp-space-2);
 }
 
-.add-quest-input {
+.add-task-row {
+  display: flex;
+  gap: var(--kp-space-2);
+}
+
+.add-task-input {
   flex: 1;
   height: 36px;
   padding: 0 var(--kp-space-3);
@@ -417,10 +430,10 @@ a { color: var(--kp-fg); text-decoration: none; }
   outline: none;
   transition: border-color var(--kp-dur-fast) var(--kp-ease);
 }
-.add-quest-input::placeholder { color: var(--kp-fg-4); }
-.add-quest-input:focus { border-color: var(--kp-border-strong); }
+.add-task-input::placeholder { color: var(--kp-fg-4); }
+.add-task-input:focus { border-color: var(--kp-border-strong); }
 
-.add-quest-btn {
+.add-task-btn {
   height: 36px;
   padding: 0 var(--kp-space-3);
   border: 1px solid var(--kp-border);
@@ -430,8 +443,33 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-2);
   transition: background var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease);
 }
-.add-quest-btn:hover { background: var(--kp-hover-bg); color: var(--kp-fg); }
-.add-quest-btn:active { background: var(--kp-press-bg); }
+.add-task-btn:hover { background: var(--kp-hover-bg); color: var(--kp-fg); }
+.add-task-btn:active { background: var(--kp-press-bg); }
+
+/* Day-toggle chips (daily task add input) */
+.day-toggle-row {
+  display: flex;
+  gap: var(--kp-space-1);
+  flex-wrap: wrap;
+}
+
+.day-toggle-chip {
+  padding: 2px var(--kp-space-2);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  font-size: var(--kp-text-xs);
+  font-weight: 500;
+  color: var(--kp-fg-4);
+  background: none;
+  cursor: pointer;
+  transition: background var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease), border-color var(--kp-dur-fast) var(--kp-ease);
+}
+.day-toggle-chip:hover { background: var(--kp-hover-bg); color: var(--kp-fg-2); }
+.day-toggle-chip.selected {
+  background: var(--kp-fg);
+  border-color: var(--kp-fg);
+  color: var(--kp-bg);
+}
 
 .empty-state {
   padding: var(--kp-space-5) var(--kp-space-4);
@@ -784,6 +822,26 @@ a { color: var(--kp-fg); text-decoration: none; }
   transition: color var(--kp-dur-fast) var(--kp-ease);
 }
 .footer-pi a:hover { color: var(--kp-fg-2); }
+
+/* Wide layout: side-by-side sections, expanded content width */
+@media (min-width: 900px) {
+  .app-main {
+    max-width: 1040px;
+  }
+  .header-inner,
+  .footer-inner {
+    max-width: 1040px;
+  }
+  .task-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--kp-space-7);
+    align-items: start;
+  }
+  .task-section {
+    margin-bottom: 0;
+  }
+}
 
 @media (max-width: 600px) {
   .app-main { padding: var(--kp-space-4) var(--kp-space-4); }

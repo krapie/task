@@ -51,3 +51,15 @@ export function slotFromDate(slotDate: string): Slot {
   const date = new Date(y, m - 1, d)
   return DAY_TO_SLOT[date.getDay()]
 }
+
+export function getNextSlotDate(slot: Slot, activeSlot: Slot, activeSlotDate: string): string {
+  if (slot === activeSlot) return activeSlotDate
+  const [y, m, d] = activeSlotDate.split('-').map(Number)
+  const base = new Date(y, m - 1, d)
+  for (let i = 1; i <= 7; i++) {
+    const next = new Date(base)
+    next.setDate(base.getDate() + i)
+    if (DAY_TO_SLOT[next.getDay()] === slot) return formatDate(next)
+  }
+  return activeSlotDate
+}

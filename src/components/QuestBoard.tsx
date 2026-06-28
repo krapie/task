@@ -1,17 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
-import type { TemplateWithState, Addition, Template, Slot } from '../types'
-import { formatDayLabel, getNextReset, SLOT_LABELS } from '../lib/slots'
+import type { TemplateWithState, Addition, Slot } from '../types'
+import { formatDayLabel, getNextReset, SLOTS, SLOT_LABELS } from '../lib/slots'
 
 interface QuestBoardProps {
   slot: Slot
   slotDate: string
   isActive: boolean
-  templates: TemplateWithState[] | Template[]
+  templates: TemplateWithState[]
   additions: Addition[]
   rotateHour: number
   rotateMinute: number
   onToggleTemplate: (id: string) => void
-  onAddTemplate: (text: string) => void
+  onAddTemplate: (text: string, slots: Slot[]) => void
   onDeleteTemplate: (id: string) => void
   onMoveTemplate: (id: string, dir: -1 | 1) => void
   onAddAddition: (text: string) => void
@@ -72,6 +72,60 @@ function ChevronDownIcon() {
   )
 }
 
+function DailyTaskAddInput({ slot: currentSlot, onAdd }: { slot: Slot; onAdd: (text: string, slots: Slot[]) => void }) {
+  const [text, setText] = useState('')
+  const [selectedDays, setSelectedDays] = useState<Slot[]>([currentSlot])
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setSelectedDays([currentSlot])
+  }, [currentSlot])
+
+  function toggleDay(s: Slot) {
+    setSelectedDays(prev =>
+      prev.includes(s)
+        ? prev.length > 1 ? prev.filter(d => d !== s) : prev
+        : [...prev, s]
+    )
+  }
+
+  function submit() {
+    const t = text.trim()
+    if (!t) return
+    onAdd(t, selectedDays)
+    setText('')
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div className="add-task">
+      <div className="day-toggle-row">
+        {SLOTS.map(s => (
+          <button
+            key={s}
+            type="button"
+            className={`day-toggle-chip${selectedDays.includes(s) ? ' selected' : ''}`}
+            onClick={() => toggleDay(s)}
+          >
+            {SLOT_LABELS[s]}
+          </button>
+        ))}
+      </div>
+      <div className="add-task-row">
+        <input
+          ref={inputRef}
+          className="add-task-input"
+          placeholder="Add daily task…"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+        />
+        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
+      </div>
+    </div>
+  )
+}
+
 function AddInput({ placeholder, onAdd }: { placeholder: string; onAdd: (text: string) => void }) {
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -85,16 +139,18 @@ function AddInput({ placeholder, onAdd }: { placeholder: string; onAdd: (text: s
   }
 
   return (
-    <div className="add-quest">
-      <input
-        ref={inputRef}
-        className="add-quest-input"
-        placeholder={placeholder}
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && submit()}
-      />
-      <button className="add-quest-btn" onClick={submit}>Add</button>
+    <div className="add-task">
+      <div className="add-task-row">
+        <input
+          ref={inputRef}
+          className="add-task-input"
+          placeholder={placeholder}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+        />
+        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
+      </div>
     </div>
   )
 }
@@ -117,20 +173,21 @@ export function QuestBoard({
 }: QuestBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
 
-  const activeTemplates = templates as TemplateWithState[]
-  const completedCount = isActive
-    ? activeTemplates.filter(t => t.completed).length + additions.filter(a => a.completed).length
-    : 0
-  const totalCount = isActive ? templates.length + additions.length : 0
+  const completedCount = templates.filter(t => t.completed).length + additions.filter(a => a.completed).length
+  const totalCount = templates.length + additions.length
 
   return (
     <div>
       <div className="slot-header">
         <div>
           <div style={{ fontWeight: 600, fontSize: 'var(--kp-text-base)', color: 'var(--kp-fg)' }}>
-            {isActive ? formatDayLabel(slotDate) : SLOT_LABELS[slot]}
+            {slotDate ? formatDayLabel(slotDate) : SLOT_LABELS[slot]}
           </div>
-          {isActive && <div className="slot-date">{slotDate}</div>}
+          {slotDate && (
+            <div className="slot-date">
+              {slotDate}{!isActive && ' · upcoming'}
+            </div>
+          )}
         </div>
         <div className="slot-meta">
           {isActive && totalCount > 0 && (
@@ -140,89 +197,98 @@ export function QuestBoard({
         </div>
       </div>
 
-      {/* Daily Quests (Templates) */}
-      <div className="quest-section">
-        <div className="section-label">Daily Quests</div>
-        {templates.length > 0 ? (
-          <div className="quest-list">
-            {templates.map((t, i) => {
-              const done = isActive ? (t as TemplateWithState).completed : false
-              return (
-                <div key={t.id} className="quest-item">
-                  {isActive ? (
-                    <button
-                      className={`quest-checkbox${done ? ' checked' : ''}`}
-                      onClick={() => onToggleTemplate(t.id)}
-                      aria-label={done ? 'Mark incomplete' : 'Mark complete'}
-                    >
-                      <CheckIcon />
-                    </button>
-                  ) : (
-                    <div style={{ width: 16, height: 16, border: '1.5px solid var(--kp-border)', borderRadius: 'var(--kp-radius-sm)', flexShrink: 0 }} />
-                  )}
-                  <span className={`quest-text${done ? ' done' : ''}`}>{t.text}</span>
-                  <div className="quest-reorder">
-                    <button
-                      className="quest-reorder-btn"
-                      onClick={() => onMoveTemplate(t.id, -1)}
-                      disabled={i === 0}
-                      aria-label="Move up"
-                    >
-                      <ChevronUpIcon />
-                    </button>
-                    <button
-                      className="quest-reorder-btn"
-                      onClick={() => onMoveTemplate(t.id, 1)}
-                      disabled={i === templates.length - 1}
-                      aria-label="Move down"
-                    >
-                      <ChevronDownIcon />
+      <div className="task-board">
+        {/* Daily Tasks */}
+        <div className="task-section">
+          <div className="section-label">Daily Tasks</div>
+          {templates.length > 0 ? (
+            <div className="task-list">
+              {templates.map((t, i) => {
+                const done = isActive ? t.completed : false
+                return (
+                  <div key={t.id} className="task-item">
+                    {isActive ? (
+                      <button
+                        className={`task-checkbox${done ? ' checked' : ''}`}
+                        onClick={() => onToggleTemplate(t.id)}
+                        aria-label={done ? 'Mark incomplete' : 'Mark complete'}
+                      >
+                        <CheckIcon />
+                      </button>
+                    ) : (
+                      <div style={{ width: 16, height: 16, border: '1.5px solid var(--kp-border)', borderRadius: 'var(--kp-radius-sm)', flexShrink: 0 }} />
+                    )}
+                    <span className={`task-text${done ? ' done' : ''}`}>{t.text}</span>
+                    <div className="task-reorder">
+                      <button
+                        className="task-reorder-btn"
+                        onClick={() => onMoveTemplate(t.id, -1)}
+                        disabled={i === 0}
+                        aria-label="Move up"
+                      >
+                        <ChevronUpIcon />
+                      </button>
+                      <button
+                        className="task-reorder-btn"
+                        onClick={() => onMoveTemplate(t.id, 1)}
+                        disabled={i === templates.length - 1}
+                        aria-label="Move down"
+                      >
+                        <ChevronDownIcon />
+                      </button>
+                    </div>
+                    <button className="task-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
+                      <TrashIcon />
                     </button>
                   </div>
-                  <button className="quest-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
-                    <TrashIcon />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="empty-state">No daily quests yet. Add one below.</div>
-        )}
-        <AddInput
-          placeholder={`Add daily quest for ${SLOT_LABELS[slot]}…`}
-          onAdd={onAddTemplate}
-        />
-      </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="empty-state">No daily tasks yet. Add one below.</div>
+          )}
+          <DailyTaskAddInput slot={slot} onAdd={onAddTemplate} />
+        </div>
 
-      {/* Bonus Quests (only for active slot) */}
-      {isActive && (
-        <div className="quest-section">
-          <div className="section-label">Bonus Quests</div>
+        {/* Bonus Tasks */}
+        <div className="task-section">
+          <div className="section-label">
+            Bonus Tasks
+            {!isActive && slotDate && (
+              <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--kp-fg-4)' }}>
+                — {slotDate}
+              </span>
+            )}
+          </div>
           {additions.length > 0 ? (
-            <div className="quest-list">
+            <div className="task-list">
               {additions.map(a => (
-                <div key={a.id} className="quest-item">
+                <div key={a.id} className="task-item">
                   <button
-                    className={`quest-checkbox${a.completed ? ' checked' : ''}`}
+                    className={`task-checkbox${a.completed ? ' checked' : ''}`}
                     onClick={() => onToggleAddition(a.id)}
                     aria-label={a.completed ? 'Mark incomplete' : 'Mark complete'}
                   >
                     <CheckIcon />
                   </button>
-                  <span className={`quest-text${a.completed ? ' done' : ''}`}>{a.text}</span>
-                  <button className="quest-delete" onClick={() => onDeleteAddition(a.id)} aria-label="Delete">
+                  <span className={`task-text${a.completed ? ' done' : ''}`}>{a.text}</span>
+                  <button className="task-delete" onClick={() => onDeleteAddition(a.id)} aria-label="Delete">
                     <TrashIcon />
                   </button>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="empty-state">No bonus quests for today.</div>
+            <div className="empty-state">
+              {isActive ? 'No bonus tasks for today.' : `No bonus tasks for ${SLOT_LABELS[slot]}.`}
+            </div>
           )}
-          <AddInput placeholder="Add bonus quest for today…" onAdd={onAddAddition} />
+          <AddInput
+            placeholder={isActive ? 'Add bonus task for today…' : `Add bonus task for ${SLOT_LABELS[slot]}…`}
+            onAdd={onAddAddition}
+          />
         </div>
-      )}
+      </div>
     </div>
   )
 }
