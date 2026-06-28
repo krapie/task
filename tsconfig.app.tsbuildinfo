@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/types.ts","./src/components/DayTabs.tsx","./src/components/Footer.tsx","./src/components/Header.tsx","./src/components/ImportModal.tsx","./src/components/QuestBoard.tsx","./src/components/SettingsPanel.tsx","./src/components/SignInModal.tsx","./src/lib/api.ts","./src/lib/slots.ts","./src/lib/storage.ts"],"version":"5.8.3"}
