@@ -13,9 +13,11 @@ interface QuestBoardProps {
   onToggleTemplate: (id: string) => void
   onAddTemplate: (text: string, slots: Slot[]) => void
   onDeleteTemplate: (id: string) => void
+  onEditTemplate: (id: string, text: string) => void
   onMoveTemplate: (id: string, dir: -1 | 1) => void
   onAddAddition: (text: string) => void
   onDeleteAddition: (id: string) => void
+  onEditAddition: (id: string, text: string) => void
   onToggleAddition: (id: string) => void
 }
 
@@ -52,6 +54,14 @@ function TrashIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+    </svg>
+  )
+}
+
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
     </svg>
   )
 }
@@ -155,6 +165,42 @@ function AddInput({ placeholder, onAdd }: { placeholder: string; onAdd: (text: s
   )
 }
 
+interface EditInputProps {
+  initialText: string
+  onConfirm: (text: string) => void
+  onCancel: () => void
+}
+
+function EditInput({ initialText, onConfirm, onCancel }: EditInputProps) {
+  const [text, setText] = useState(initialText)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [])
+
+  function confirm() {
+    const t = text.trim()
+    if (t && t !== initialText) onConfirm(t)
+    else onCancel()
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      className="task-edit-input"
+      value={text}
+      onChange={e => setText(e.target.value)}
+      onKeyDown={e => {
+        if (e.key === 'Enter') confirm()
+        if (e.key === 'Escape') onCancel()
+      }}
+      onBlur={confirm}
+    />
+  )
+}
+
 export function QuestBoard({
   slot,
   slotDate,
@@ -166,15 +212,21 @@ export function QuestBoard({
   onToggleTemplate,
   onAddTemplate,
   onDeleteTemplate,
+  onEditTemplate,
   onMoveTemplate,
   onAddAddition,
   onDeleteAddition,
+  onEditAddition,
   onToggleAddition,
 }: QuestBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const completedCount = templates.filter(t => t.completed).length + additions.filter(a => a.completed).length
   const totalCount = templates.length + additions.length
+
+  function startEdit(id: string) { setEditingId(id) }
+  function cancelEdit() { setEditingId(null) }
 
   return (
     <div>
@@ -218,28 +270,43 @@ export function QuestBoard({
                     ) : (
                       <div style={{ width: 16, height: 16, border: '1.5px solid var(--kp-border)', borderRadius: 'var(--kp-radius-sm)', flexShrink: 0 }} />
                     )}
-                    <span className={`task-text${done ? ' done' : ''}`}>{t.text}</span>
-                    <div className="task-reorder">
-                      <button
-                        className="task-reorder-btn"
-                        onClick={() => onMoveTemplate(t.id, -1)}
-                        disabled={i === 0}
-                        aria-label="Move up"
-                      >
-                        <ChevronUpIcon />
-                      </button>
-                      <button
-                        className="task-reorder-btn"
-                        onClick={() => onMoveTemplate(t.id, 1)}
-                        disabled={i === templates.length - 1}
-                        aria-label="Move down"
-                      >
-                        <ChevronDownIcon />
-                      </button>
-                    </div>
-                    <button className="task-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
-                      <TrashIcon />
-                    </button>
+                    {editingId === t.id ? (
+                      <EditInput
+                        initialText={t.text}
+                        onConfirm={text => { onEditTemplate(t.id, text); cancelEdit() }}
+                        onCancel={cancelEdit}
+                      />
+                    ) : (
+                      <span className={`task-text${done ? ' done' : ''}`}>{t.text}</span>
+                    )}
+                    {editingId !== t.id && (
+                      <>
+                        <button className="task-edit-btn" onClick={() => startEdit(t.id)} aria-label="Edit">
+                          <PencilIcon />
+                        </button>
+                        <div className="task-reorder">
+                          <button
+                            className="task-reorder-btn"
+                            onClick={() => onMoveTemplate(t.id, -1)}
+                            disabled={i === 0}
+                            aria-label="Move up"
+                          >
+                            <ChevronUpIcon />
+                          </button>
+                          <button
+                            className="task-reorder-btn"
+                            onClick={() => onMoveTemplate(t.id, 1)}
+                            disabled={i === templates.length - 1}
+                            aria-label="Move down"
+                          >
+                            <ChevronDownIcon />
+                          </button>
+                        </div>
+                        <button className="task-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
+                          <TrashIcon />
+                        </button>
+                      </>
+                    )}
                   </div>
                 )
               })}
@@ -271,10 +338,25 @@ export function QuestBoard({
                   >
                     <CheckIcon />
                   </button>
-                  <span className={`task-text${a.completed ? ' done' : ''}`}>{a.text}</span>
-                  <button className="task-delete" onClick={() => onDeleteAddition(a.id)} aria-label="Delete">
-                    <TrashIcon />
-                  </button>
+                  {editingId === a.id ? (
+                    <EditInput
+                      initialText={a.text}
+                      onConfirm={text => { onEditAddition(a.id, text); cancelEdit() }}
+                      onCancel={cancelEdit}
+                    />
+                  ) : (
+                    <span className={`task-text${a.completed ? ' done' : ''}`}>{a.text}</span>
+                  )}
+                  {editingId !== a.id && (
+                    <>
+                      <button className="task-edit-btn" onClick={() => startEdit(a.id)} aria-label="Edit">
+                        <PencilIcon />
+                      </button>
+                      <button className="task-delete" onClick={() => onDeleteAddition(a.id)} aria-label="Delete">
+                        <TrashIcon />
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
             </div>

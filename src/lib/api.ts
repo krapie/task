@@ -42,6 +42,8 @@ export const api = {
     get: (slotDate: string) => req<DailyData>('GET', `/daily/${slotDate}`),
     addAddition: (slotDate: string, text: string) =>
       req<Addition>('POST', '/daily/additions', { slotDate, text }),
+    updateAddition: (id: string, text: string) =>
+      req<Addition>('PUT', `/daily/additions/${id}`, { text }),
     removeAddition: (id: string) => req<void>('DELETE', `/daily/additions/${id}`),
     toggleTemplate: (templateId: string, slotDate: string, completed: boolean) =>
       req<void>('POST', '/daily/toggle', { type: 'template', id: templateId, slotDate, completed }),

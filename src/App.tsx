@@ -259,6 +259,35 @@ export default function App() {
     }
   }
 
+  async function handleEditTemplate(id: string, text: string) {
+    const slot = selectedSlot
+    if (isAuth) {
+      const original = templates[slot].find(t => t.id === id)?.text ?? ''
+      setTemplates(prev => ({
+        ...prev,
+        [slot]: prev[slot].map(t => t.id === id ? { ...t, text } : t),
+      }))
+      try {
+        const t = await api.templates.update(id, text)
+        setTemplates(prev => ({
+          ...prev,
+          [slot]: prev[slot].map(item => item.id === id ? t : item),
+        }))
+      } catch {
+        setTemplates(prev => ({
+          ...prev,
+          [slot]: prev[slot].map(t => t.id === id ? { ...t, text: original } : t),
+        }))
+      }
+    } else {
+      setTemplates(prev => {
+        const next = { ...prev, [slot]: prev[slot].map(t => t.id === id ? { ...t, text } : t) }
+        storage.setTemplates(next)
+        return next
+      })
+    }
+  }
+
   async function handleMoveTemplate(id: string, dir: -1 | 1) {
     const slot = selectedSlot
     const list = [...templates[slot]]
@@ -359,6 +388,48 @@ export default function App() {
     }
   }
 
+  async function handleEditAddition(id: string, text: string) {
+    const slotDate = selectedSlotDate
+    if (isAuth) {
+      const original = dailyData[slotDate]?.additions.find(a => a.id === id)?.text ?? ''
+      setDailyData(prev => ({
+        ...prev,
+        [slotDate]: {
+          ...(prev[slotDate] ?? { completions: [], additions: [] }),
+          additions: (prev[slotDate]?.additions ?? []).map(a => a.id === id ? { ...a, text } : a),
+        },
+      }))
+      try {
+        const a = await api.daily.updateAddition(id, text)
+        setDailyData(prev => ({
+          ...prev,
+          [slotDate]: {
+            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            additions: (prev[slotDate]?.additions ?? []).map(item => item.id === id ? a : item),
+          },
+        }))
+      } catch {
+        setDailyData(prev => ({
+          ...prev,
+          [slotDate]: {
+            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            additions: (prev[slotDate]?.additions ?? []).map(a => a.id === id ? { ...a, text: original } : a),
+          },
+        }))
+      }
+    } else {
+      setDailyData(prev => ({
+        ...prev,
+        [slotDate]: {
+          ...(prev[slotDate] ?? { completions: [], additions: [] }),
+          additions: (prev[slotDate]?.additions ?? []).map(a => a.id === id ? { ...a, text } : a),
+        },
+      }))
+      const d = storage.getDaily(slotDate)
+      storage.setDaily(slotDate, { ...d, additions: d.additions.map(a => a.id === id ? { ...a, text } : a) })
+    }
+  }
+
   async function handleToggleAddition(id: string) {
     const slotDate = selectedSlotDate
     const additions = dailyData[slotDate]?.additions ?? []
@@ -442,7 +513,9 @@ export default function App() {
           onMoveTemplate={handleMoveTemplate}
           onAddAddition={handleAddAddition}
           onDeleteAddition={handleDeleteAddition}
+          onEditAddition={handleEditAddition}
           onToggleAddition={handleToggleAddition}
+          onEditTemplate={handleEditTemplate}
         />
       </main>
 

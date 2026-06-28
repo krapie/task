@@ -158,6 +158,14 @@ app.post('/api/daily/additions', auth, (req, res) => {
   res.json({ id, slot_date: slotDate, text: text.trim(), completed: false, created_at: now })
 })
 
+app.put('/api/daily/additions/:id', auth, (req, res) => {
+  const { text } = req.body ?? {}
+  if (!text?.trim()) return res.status(400).json({ error: 'Text required' })
+  db.prepare('UPDATE daily_additions SET text = ? WHERE id = ?').run(text.trim(), req.params.id)
+  const row = db.prepare('SELECT * FROM daily_additions WHERE id = ?').get(req.params.id)
+  res.json({ ...row, completed: row.completed === 1 })
+})
+
 app.delete('/api/daily/additions/:id', auth, (req, res) => {
   db.prepare('DELETE FROM daily_additions WHERE id = ?').run(req.params.id)
   res.json({ ok: true })
