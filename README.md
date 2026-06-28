@@ -1,6 +1,6 @@
 # Task
 
-RPG-style daily task board at [task.kevinprk.com](https://task.kevinprk.com).
+Daily task board at [task.kevinprk.com](https://task.kevinprk.com).
 
 Set up recurring **Daily Tasks** per day-of-week (Mon, Tue, Wed, Thu, Fri, Sat/Sun) that auto-reset at a configurable time each day. Add one-off **Bonus Tasks** to any day. Works in guest mode (localStorage) or with an account for cross-device sync.
 
