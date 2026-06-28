@@ -284,6 +284,9 @@ export function QuestBoard({
                         <button className="task-edit-btn" onClick={() => startEdit(t.id)} aria-label="Edit">
                           <PencilIcon />
                         </button>
+                        <button className="task-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
+                          <TrashIcon />
+                        </button>
                         <div className="task-reorder">
                           <button
                             className="task-reorder-btn"
@@ -302,9 +305,6 @@ export function QuestBoard({
                             <ChevronDownIcon />
                           </button>
                         </div>
-                        <button className="task-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
-                          <TrashIcon />
-                        </button>
                       </>
                     )}
                   </div>

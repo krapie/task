@@ -652,6 +652,23 @@ a { color: var(--kp-fg); text-decoration: none; }
   background: var(--kp-border);
 }
 
+.settings-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--kp-space-3);
+}
+
+.settings-account-user {
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg-2);
+  font-family: var(--kp-font-mono);
+}
+
+.settings-signout-btn {
+  width: auto;
+}
+
 .settings-action-btn {
   display: flex;
   align-items: center;
@@ -892,6 +909,12 @@ a { color: var(--kp-fg); text-decoration: none; }
   /* Hide multi-day chips on mobile — just adds to current slot */
   .day-toggle-row { display: none; }
   .panel { width: 100%; border-left: none; border-top: 1px solid var(--kp-border); }
+
+  /* Hide section labels, footer, and auth from header on mobile */
+  .section-label { display: none; }
+  .footer { display: none; }
+  .auth-user { display: none; }
+  .auth-btn { display: none; }
 
   /* Slot header stacks on very narrow screens */
   .slot-header {

@@ -2,13 +2,16 @@ import type { Settings, ExportData } from '../types'
 
 interface SettingsPanelProps {
   settings: Settings
+  username: string | null
   onClose: () => void
   onSave: (s: Partial<Settings>) => void
+  onSignIn: () => void
+  onSignOut: () => void
   onExport: () => void
   onImport: () => void
 }
 
-export function SettingsPanel({ settings, onClose, onSave, onExport, onImport }: SettingsPanelProps) {
+export function SettingsPanel({ settings, username, onClose, onSave, onSignIn, onSignOut, onExport, onImport }: SettingsPanelProps) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   function handleHourChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -34,6 +37,24 @@ export function SettingsPanel({ settings, onClose, onSave, onExport, onImport }:
           </button>
         </div>
         <div className="panel-body">
+          <div className="settings-group settings-account">
+            <div className="settings-label">Account</div>
+            {username ? (
+              <div className="settings-account-row">
+                <span className="settings-account-user">{username}</span>
+                <button className="settings-action-btn settings-signout-btn" onClick={() => { onSignOut(); onClose() }}>
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button className="settings-action-btn" onClick={() => { onSignIn(); onClose() }}>
+                Sign in
+              </button>
+            )}
+          </div>
+
+          <div className="settings-divider" />
+
           <div className="settings-group">
             <div className="settings-label">Daily reset time</div>
             <div className="time-input-row">
@@ -61,7 +82,7 @@ export function SettingsPanel({ settings, onClose, onSave, onExport, onImport }:
           <div className="settings-divider" />
 
           <div className="settings-group">
-            <div className="settings-label">Bonus quests</div>
+            <div className="settings-label">Bonus tasks</div>
             <div className="toggle-row">
               <span className="toggle-label">Keep after reset</span>
               <label className="toggle">

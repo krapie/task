@@ -524,8 +524,11 @@ export default function App() {
       {showSettings && (
         <SettingsPanel
           settings={settings}
+          username={username}
           onClose={() => setShowSettings(false)}
           onSave={handleSaveSettings}
+          onSignIn={() => { setShowSettings(false); setShowSignIn(true) }}
+          onSignOut={handleSignOut}
           onExport={handleExport}
           onImport={() => { setShowSettings(false); setShowImport(true) }}
         />
