@@ -153,6 +153,18 @@ export default function App() {
     loadDaily(slotDate)
   }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
 
+  // Refresh current slot data when page becomes visible (e.g. returning from another tab/app)
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible' || !activeSlotDate) return
+      const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+      loadedDatesRef.current.delete(slotDate)
+      loadDaily(slotDate)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
+
   // Check for slot rollover every minute
   useEffect(() => {
     const id = setInterval(() => {
