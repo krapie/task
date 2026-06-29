@@ -917,8 +917,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   .day-toggle-row { display: none; }
   .panel { width: 100%; border-left: none; border-top: 1px solid var(--kp-border); }
 
-  /* Hide section labels, footer, and auth from header on mobile */
-  .section-label { display: none; }
+  /* Hide footer and auth from header on mobile */
   .footer { display: none; }
   .auth-user { display: none; }
   .auth-btn { display: none; }
