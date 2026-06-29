@@ -922,10 +922,13 @@ a { color: var(--kp-fg); text-decoration: none; }
   .auth-user { display: none; }
   .auth-btn { display: none; }
 
-  /* Hide task action buttons on mobile — keep items clean */
+  /* Hide task action buttons on mobile by default; reveal on tap */
   .task-edit-btn { display: none; }
   .task-delete { display: none; }
   .task-reorder { display: none; }
+  .task-item.revealed .task-edit-btn { display: flex; opacity: 1; }
+  .task-item.revealed .task-delete { display: flex; opacity: 1; }
+  .task-item.revealed .task-reorder { display: flex; opacity: 1; }
 
   /* Unified add input on mobile */
   .desktop-add { display: none; }

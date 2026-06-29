@@ -278,12 +278,14 @@ export function QuestBoard({
 }: QuestBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [revealedId, setRevealedId] = useState<string | null>(null)
 
   const completedCount = templates.filter(t => t.completed).length + additions.filter(a => a.completed).length
   const totalCount = templates.length + additions.length
 
-  function startEdit(id: string) { setEditingId(id) }
+  function startEdit(id: string) { setEditingId(id); setRevealedId(null) }
   function cancelEdit() { setEditingId(null) }
+  function toggleReveal(id: string) { setRevealedId(prev => prev === id ? null : id) }
 
   return (
     <div>
@@ -315,7 +317,7 @@ export function QuestBoard({
               {templates.map((t, i) => {
                 const done = isActive ? t.completed : false
                 return (
-                  <div key={t.id} className="task-item">
+                  <div key={t.id} className={`task-item${revealedId === t.id ? ' revealed' : ''}`}>
                     {isActive ? (
                       <button
                         className={`task-checkbox${done ? ' checked' : ''}`}
@@ -334,7 +336,7 @@ export function QuestBoard({
                         onCancel={cancelEdit}
                       />
                     ) : (
-                      <span className={`task-text${done ? ' done' : ''}`}>{t.text}</span>
+                      <span className={`task-text${done ? ' done' : ''}`} onClick={() => toggleReveal(t.id)}>{t.text}</span>
                     )}
                     {editingId !== t.id && (
                       <>
@@ -387,7 +389,7 @@ export function QuestBoard({
           {additions.length > 0 ? (
             <div className="task-list">
               {additions.map(a => (
-                <div key={a.id} className="task-item">
+                <div key={a.id} className={`task-item${revealedId === a.id ? ' revealed' : ''}`}>
                   <button
                     className={`task-checkbox${a.completed ? ' checked' : ''}`}
                     onClick={() => onToggleAddition(a.id)}
@@ -402,7 +404,7 @@ export function QuestBoard({
                       onCancel={cancelEdit}
                     />
                   ) : (
-                    <span className={`task-text${a.completed ? ' done' : ''}`}>{a.text}</span>
+                    <span className={`task-text${a.completed ? ' done' : ''}`} onClick={() => toggleReveal(a.id)}>{a.text}</span>
                   )}
                   {editingId !== a.id && (
                     <>
