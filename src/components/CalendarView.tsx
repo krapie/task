@@ -7,41 +7,30 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 const MAX_LANES = 3
+// Vertical layout constants (px) — keep in sync with CSS .calendar-week row height
+const DAY_NUM_H = 28   // space reserved for the day number badge
+const LANE_H    = 22   // height of each event lane slot
 
 function pad(n: number) { return String(n).padStart(2, '0') }
-
-function dateStr(y: number, m: number, d: number) {
-  return `${y}-${pad(m)}-${pad(d)}`
-}
-
-function todayStr() {
-  const n = new Date()
-  return dateStr(n.getFullYear(), n.getMonth() + 1, n.getDate())
-}
-
-function dayOfWeek(s: string): number {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d).getDay()
-}
-
-function diffDays(a: string, b: string): number {
+function dateStr(y: number, m: number, d: number) { return `${y}-${pad(m)}-${pad(d)}` }
+function todayStr() { const n = new Date(); return dateStr(n.getFullYear(), n.getMonth() + 1, n.getDate()) }
+function dayOfWeek(s: string) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d).getDay() }
+function diffDays(a: string, b: string) {
   const [ay, am, ad] = a.split('-').map(Number)
   const [by, bm, bd] = b.split('-').map(Number)
   return Math.round((new Date(by, bm - 1, bd).getTime() - new Date(ay, am - 1, ad).getTime()) / 86400000)
 }
 
 function buildWeeks(year: number, month: number): string[][] {
-  const firstOfMonth = new Date(year, month - 1, 1)
-  const start = new Date(firstOfMonth)
-  start.setDate(1 - firstOfMonth.getDay())
-
+  const first = new Date(year, month - 1, 1)
+  const start = new Date(first)
+  start.setDate(1 - first.getDay())
   const weeks: string[][] = []
   for (let w = 0; w < 6; w++) {
     const week: string[] = []
     for (let d = 0; d < 7; d++) {
-      const cell = new Date(start)
-      cell.setDate(start.getDate() + w * 7 + d)
-      week.push(dateStr(cell.getFullYear(), cell.getMonth() + 1, cell.getDate()))
+      const c = new Date(start); c.setDate(start.getDate() + w * 7 + d)
+      week.push(dateStr(c.getFullYear(), c.getMonth() + 1, c.getDate()))
     }
     weeks.push(week)
   }
@@ -58,32 +47,25 @@ interface PositionedEvent {
 }
 
 function layoutWeek(weekDates: string[], events: CalendarEvent[]): PositionedEvent[] {
-  const weekStart = weekDates[0]
-  const weekEnd = weekDates[6]
-
-  const overlapping = events.filter(e => e.start_date <= weekEnd && e.end_date >= weekStart)
-  overlapping.sort((a, b) => {
-    const diff = diffDays(b.start_date, b.end_date) - diffDays(a.start_date, a.end_date)
-    return diff !== 0 ? diff : a.start_date.localeCompare(b.start_date)
-  })
+  const weekStart = weekDates[0], weekEnd = weekDates[6]
+  const overlapping = events
+    .filter(e => e.start_date <= weekEnd && e.end_date >= weekStart)
+    .sort((a, b) => {
+      const d = diffDays(b.start_date, b.end_date) - diffDays(a.start_date, a.end_date)
+      return d !== 0 ? d : a.start_date.localeCompare(b.start_date)
+    })
 
   const placed: PositionedEvent[] = []
-
   for (const event of overlapping) {
     const effStart = event.start_date < weekStart ? weekStart : event.start_date
-    const effEnd = event.end_date > weekEnd ? weekEnd : event.end_date
+    const effEnd   = event.end_date   > weekEnd   ? weekEnd   : event.end_date
     const colStart = dayOfWeek(effStart) + 1
-    const colSpan = dayOfWeek(effEnd) - dayOfWeek(effStart) + 1
-    const colEnd = colStart + colSpan - 1
-
+    const colSpan  = dayOfWeek(effEnd) - dayOfWeek(effStart) + 1
+    const colEnd   = colStart + colSpan - 1
     let lane = 0
-    while (placed.some(p => p.lane === lane && !(p.colStart + p.colSpan - 1 < colStart || p.colStart > colEnd))) {
-      lane++
-    }
-
+    while (placed.some(p => p.lane === lane && !(p.colStart + p.colSpan - 1 < colStart || p.colStart > colEnd))) lane++
     placed.push({ event, colStart, colSpan, isStart: event.start_date >= weekStart, isEnd: event.end_date <= weekEnd, lane })
   }
-
   return placed
 }
 
@@ -100,6 +82,7 @@ interface CalendarWeekProps {
 function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
   const positioned = useMemo(() => layoutWeek(weekDates, events), [weekDates, events])
 
+  // Count overflow per column (events with lane >= MAX_LANES)
   const overflowByCol: Record<number, number> = {}
   for (const pe of positioned) {
     if (pe.lane >= MAX_LANES) {
@@ -108,43 +91,32 @@ function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, on
       }
     }
   }
-
   const visibleEvents = positioned.filter(pe => pe.lane < MAX_LANES)
 
   return (
     <div className="calendar-week">
-      {/* Day number cells — explicit grid-row:1, grid-column:N so event bars can share the same grid */}
+      {/* Day number cells — grid-row: 1, background fills full cell height */}
       {weekDates.map((date, i) => {
         const col = i + 1
         const [, m] = date.split('-').map(Number)
-        const isToday = date === today
-        const isSelected = date === selectedDate
-        const overflow = overflowByCol[col]
         return (
           <div
             key={date}
             className={[
               'calendar-day-cell',
               m !== currentMonth ? 'other-month' : '',
-              isToday ? 'today' : '',
-              isSelected ? 'selected' : '',
+              date === today ? 'today' : '',
+              date === selectedDate ? 'selected' : '',
             ].filter(Boolean).join(' ')}
             style={{ gridRow: 1, gridColumn: col }}
             onClick={() => onDayClick(date)}
           >
             <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
-            {overflow != null && <span className="calendar-overflow-count">+{overflow}</span>}
           </div>
         )
       })}
 
-      {/*
-        Event area background — covers rows 2–5 with bg color + background-image column lines.
-        Must come before event bars in DOM so bars render on top (CSS Grid DOM-order stacking).
-      */}
-      <div className="cal-event-area" />
-
-      {/* Event bars — direct grid children so they span true grid columns */}
+      {/* Event bars — same grid-row: 1, overlaid on day cells via DOM order */}
       {visibleEvents.map(pe => (
         <div
           key={`${pe.event.id}-${pe.event.start_date}-${pe.colStart}`}
@@ -153,18 +125,35 @@ function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, on
             pe.isStart ? 'is-start' : 'is-continuation',
             pe.isEnd ? 'is-end' : '',
           ].filter(Boolean).join(' ')}
-          style={{ gridRow: pe.lane + 2, gridColumn: `${pe.colStart} / span ${pe.colSpan}` }}
+          style={{
+            gridRow: 1,
+            gridColumn: `${pe.colStart} / span ${pe.colSpan}`,
+            marginTop: `${DAY_NUM_H + pe.lane * LANE_H}px`,
+          }}
           onClick={e => { e.stopPropagation(); onEventClick(pe.event) }}
         >
           {pe.isStart && <span className="event-bar-title">{pe.event.title}</span>}
-          {pe.isStart && pe.event.time && pe.colSpan === 1 && (
-            <span className="event-bar-time">{pe.event.time}</span>
-          )}
-          {pe.isStart && pe.event.recurrence && (
-            <span className="event-bar-recurrence" aria-label="recurring">↻</span>
-          )}
+          {pe.isStart && pe.event.time && pe.colSpan === 1 && <span className="event-bar-time">{pe.event.time}</span>}
+          {pe.isStart && pe.event.recurrence && <span className="event-bar-recurrence" aria-label="recurring">↻</span>}
         </div>
       ))}
+
+      {/* Overflow counts — positioned at the lane after the last visible one */}
+      {weekDates.map((date, i) => {
+        const col = i + 1
+        const count = overflowByCol[col]
+        if (!count) return null
+        return (
+          <span
+            key={`overflow-${date}`}
+            className="calendar-overflow-count"
+            style={{ gridRow: 1, gridColumn: col, marginTop: `${DAY_NUM_H + MAX_LANES * LANE_H}px` }}
+            onClick={() => onDayClick(date)}
+          >
+            +{count}
+          </span>
+        )
+      })}
     </div>
   )
 }
@@ -202,9 +191,7 @@ export function CalendarView({ year, month, events, selectedDate, onPrevMonth, o
 
       <div className="calendar-grid">
         <div className="calendar-headers">
-          {DAY_HEADERS.map(h => (
-            <div key={h} className="calendar-day-header">{h}</div>
-          ))}
+          {DAY_HEADERS.map(h => <div key={h} className="calendar-day-header">{h}</div>)}
         </div>
         <div className="calendar-body">
           {weeks.map(weekDates => (

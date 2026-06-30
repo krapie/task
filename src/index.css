@@ -1046,19 +1046,20 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 
 /*
- * Each week is a flat 7-column CSS grid.
- * column-gap + background: border creates full-height column dividers.
- * row 1 = day numbers, rows 2–4 = event lanes, row 5 = bottom padding.
- * .cal-event-area spans rows 2–5 and draws its own column lines via
- * background-image so the event area matches the day-row column positions.
+ * Each week is a flat 7-column CSS grid with a single fixed-height row.
+ * Day cells (grid-row: 1) form the backdrop; event bars (also grid-row: 1)
+ * are overlaid on top via DOM order. column-gap + background: border creates
+ * full-height column dividers. marginTop on event bars positions them below
+ * the day number badge (DAY_NUM_H + lane * LANE_H, set via inline style in JSX).
  */
 .calendar-week {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: 30px 22px 22px 22px 6px;
+  grid-template-rows: 104px;
   column-gap: 1px;
   background: var(--kp-border);
   border-bottom: 1px solid var(--kp-border);
+  overflow: hidden;
 }
 .calendar-week:last-child { border-bottom: none; }
 
@@ -1066,8 +1067,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   background: var(--kp-bg);
   /* grid-row: 1 and grid-column set via inline style in JSX */
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
   padding: 4px 6px;
   cursor: pointer;
   transition: background var(--kp-dur-fast) var(--kp-ease);
@@ -1100,30 +1100,20 @@ a { color: var(--kp-fg); text-decoration: none; }
   outline-offset: 1px;
 }
 
+/* Overflow count — positioned as grid item; gridRow/gridColumn/marginTop via inline style */
 .calendar-overflow-count {
+  align-self: start;
+  display: flex;
+  align-items: center;
+  padding: 0 5px;
   font-size: 10px;
   color: var(--kp-fg-4);
-  margin-left: auto;
+  cursor: pointer;
 }
 
-/* Spans event rows 2–5, provides white bg + column lines matching day-number row */
-.cal-event-area {
-  grid-column: 1 / -1;
-  grid-row: 2 / -1;
-  background: var(--kp-bg);
-  background-image: repeating-linear-gradient(
-    90deg,
-    transparent calc(100% / 7 - 1px),
-    var(--kp-border) calc(100% / 7 - 1px),
-    var(--kp-border) calc(100% / 7),
-    transparent calc(100% / 7)
-  );
-  pointer-events: none;
-}
-
-/* Event bars are direct children of .calendar-week; render on top of .cal-event-area via DOM order */
+/* Event bars — same grid-row: 1 as day cells, overlaid via DOM order; marginTop via inline style */
 .event-bar {
-  align-self: center;
+  align-self: start;
   height: 20px;
   display: flex;
   align-items: center;
@@ -1306,7 +1296,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 /* Mobile calendar adjustments */
 @media (max-width: 600px) {
   .calendar-week {
-    grid-template-rows: 26px 18px 18px 18px 4px;
+    grid-template-rows: 88px;
   }
   .calendar-day-cell { padding: 3px 4px; }
   .calendar-day-num { width: 18px; height: 18px; font-size: 11px; }
