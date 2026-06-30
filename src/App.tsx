@@ -160,6 +160,7 @@ export default function App() {
   })
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null)
+  const [editingEventId, setEditingEventId] = useState<string | null>(null)
 
   // Derived: date for the currently selected slot
   const selectedSlotDate = activeSlotDate
@@ -768,8 +769,8 @@ export default function App() {
               const y = prev.month === 12 ? prev.year + 1 : prev.year
               return { year: y, month: m }
             })}
-            onDayClick={date => setSelectedCalendarDate(prev => prev === date ? null : date)}
-            onEventClick={event => setSelectedCalendarDate(event.start_date)}
+            onDayClick={date => { setSelectedCalendarDate(prev => prev === date ? null : date); setEditingEventId(null) }}
+            onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
         )}
       </main>
@@ -780,7 +781,8 @@ export default function App() {
         <EventPanel
           date={selectedCalendarDate}
           dayEvents={selectedDayEvents}
-          onClose={() => setSelectedCalendarDate(null)}
+          initialEditingId={editingEventId}
+          onClose={() => { setSelectedCalendarDate(null); setEditingEventId(null) }}
           onAdd={handleAddEvent}
           onEdit={handleEditEvent}
           onDelete={handleDeleteEvent}

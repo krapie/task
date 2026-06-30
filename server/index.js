@@ -218,7 +218,7 @@ app.post('/api/events', auth, (req, res) => {
   if (end_date < start_date) return res.status(400).json({ error: 'end_date before start_date' })
   const id = randomUUID()
   const now = Date.now()
-  db.prepare('INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, title.trim(), start_date, end_date, time || null, recurrence || null, now)
+  db.prepare('INSERT INTO events (id, title, start_date, end_date, time, recurrence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, title.trim(), start_date, end_date, time || null, recurrence || null, now)
   res.json({ id, title: title.trim(), start_date, end_date, time: time || null, recurrence: recurrence || null, created_at: now })
 })
 

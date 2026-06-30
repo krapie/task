@@ -3,7 +3,8 @@ import type { CalendarEvent, Recurrence } from '../types'
 
 interface EventPanelProps {
   date: string
-  dayEvents: CalendarEvent[]   // pre-expanded events for this day
+  dayEvents: CalendarEvent[]
+  initialEditingId?: string | null
   onClose: () => void
   onAdd: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
   onEdit: (id: string, data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
@@ -140,9 +141,9 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   )
 }
 
-export function EventPanel({ date, dayEvents, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
+export function EventPanel({ date, dayEvents, initialEditingId, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(initialEditingId ?? null)
 
   const sorted = [...dayEvents].sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
 

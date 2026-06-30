@@ -30,7 +30,6 @@ function diffDays(a: string, b: string): number {
   return Math.round((new Date(by, bm - 1, bd).getTime() - new Date(ay, am - 1, ad).getTime()) / 86400000)
 }
 
-// Returns 6 weeks × 7 days (always 42 cells)
 function buildWeeks(year: number, month: number): string[][] {
   const firstOfMonth = new Date(year, month - 1, 1)
   const start = new Date(firstOfMonth)
@@ -51,10 +50,10 @@ function buildWeeks(year: number, month: number): string[][] {
 
 interface PositionedEvent {
   event: CalendarEvent
-  colStart: number  // 1–7 (Sun=1)
+  colStart: number
   colSpan: number
-  isStart: boolean  // event starts within this week
-  isEnd: boolean    // event ends within this week
+  isStart: boolean
+  isEnd: boolean
   lane: number
 }
 
@@ -82,14 +81,7 @@ function layoutWeek(weekDates: string[], events: CalendarEvent[]): PositionedEve
       lane++
     }
 
-    placed.push({
-      event,
-      colStart,
-      colSpan,
-      isStart: event.start_date >= weekStart,
-      isEnd: event.end_date <= weekEnd,
-      lane,
-    })
+    placed.push({ event, colStart, colSpan, isStart: event.start_date >= weekStart, isEnd: event.end_date <= weekEnd, lane })
   }
 
   return placed
@@ -121,55 +113,58 @@ function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, on
 
   return (
     <div className="calendar-week">
-      <div className="calendar-week-days">
-        {weekDates.map((date, i) => {
-          const col = i + 1
-          const [, m] = date.split('-').map(Number)
-          const isToday = date === today
-          const isSelected = date === selectedDate
-          const overflow = overflowByCol[col]
-          return (
-            <div
-              key={date}
-              className={[
-                'calendar-day-cell',
-                m !== currentMonth ? 'other-month' : '',
-                isToday ? 'today' : '',
-                isSelected ? 'selected' : '',
-              ].filter(Boolean).join(' ')}
-              onClick={() => onDayClick(date)}
-            >
-              <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
-              {overflow != null && (
-                <span className="calendar-overflow-count">+{overflow}</span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="calendar-week-events">
-        {visibleEvents.map(pe => (
+      {/* Day number cells — explicit grid-row:1, grid-column:N so event bars can share the same grid */}
+      {weekDates.map((date, i) => {
+        const col = i + 1
+        const [, m] = date.split('-').map(Number)
+        const isToday = date === today
+        const isSelected = date === selectedDate
+        const overflow = overflowByCol[col]
+        return (
           <div
-            key={`${pe.event.id}-${pe.event.start_date}-${pe.colStart}`}
+            key={date}
             className={[
-              'event-bar',
-              pe.isStart ? 'is-start' : 'is-continuation',
-              pe.isEnd ? 'is-end' : '',
+              'calendar-day-cell',
+              m !== currentMonth ? 'other-month' : '',
+              isToday ? 'today' : '',
+              isSelected ? 'selected' : '',
             ].filter(Boolean).join(' ')}
-            style={{ gridColumn: `${pe.colStart} / span ${pe.colSpan}`, gridRow: pe.lane + 1 }}
-            onClick={e => { e.stopPropagation(); onEventClick(pe.event) }}
+            style={{ gridRow: 1, gridColumn: col }}
+            onClick={() => onDayClick(date)}
           >
-            {pe.isStart && <span className="event-bar-title">{pe.event.title}</span>}
-            {pe.isStart && pe.event.time && pe.colSpan === 1 && (
-              <span className="event-bar-time">{pe.event.time}</span>
-            )}
-            {pe.isStart && pe.event.recurrence && (
-              <span className="event-bar-recurrence" aria-label="recurring">↻</span>
-            )}
+            <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
+            {overflow != null && <span className="calendar-overflow-count">+{overflow}</span>}
           </div>
-        ))}
-      </div>
+        )
+      })}
+
+      {/*
+        Event area background — covers rows 2–5 with bg color + background-image column lines.
+        Must come before event bars in DOM so bars render on top (CSS Grid DOM-order stacking).
+      */}
+      <div className="cal-event-area" />
+
+      {/* Event bars — direct grid children so they span true grid columns */}
+      {visibleEvents.map(pe => (
+        <div
+          key={`${pe.event.id}-${pe.event.start_date}-${pe.colStart}`}
+          className={[
+            'event-bar',
+            pe.isStart ? 'is-start' : 'is-continuation',
+            pe.isEnd ? 'is-end' : '',
+          ].filter(Boolean).join(' ')}
+          style={{ gridRow: pe.lane + 2, gridColumn: `${pe.colStart} / span ${pe.colSpan}` }}
+          onClick={e => { e.stopPropagation(); onEventClick(pe.event) }}
+        >
+          {pe.isStart && <span className="event-bar-title">{pe.event.title}</span>}
+          {pe.isStart && pe.event.time && pe.colSpan === 1 && (
+            <span className="event-bar-time">{pe.event.time}</span>
+          )}
+          {pe.isStart && pe.event.recurrence && (
+            <span className="event-bar-recurrence" aria-label="recurring">↻</span>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
