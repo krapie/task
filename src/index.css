@@ -1085,11 +1085,13 @@ a { color: var(--kp-fg); text-decoration: none; }
   align-items: center;
   gap: 3px;
   background: var(--kp-bg-muted);
+  border-left: 2px solid var(--kp-fg-3);
   border-radius: var(--kp-radius-sm);
-  padding: 1px var(--kp-space-1);
+  padding: 2px var(--kp-space-1);
   font-size: 11px;
   overflow: hidden;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .event-chip-time {
@@ -1102,7 +1104,9 @@ a { color: var(--kp-fg); text-decoration: none; }
 .event-chip-title {
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--kp-fg-1);
+  color: var(--kp-fg);
+  min-width: 0;
+  flex: 1;
 }
 
 .event-chip-overflow {
@@ -1234,7 +1238,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 @media (max-width: 600px) {
   .calendar-cell { min-height: 72px; padding: var(--kp-space-1); }
   .calendar-day-num { width: 18px; height: 18px; font-size: 11px; }
-  .event-chip { font-size: 10px; padding: 1px 3px; }
+  .event-chip { font-size: 10px; padding: 1px 3px 1px 3px; }
   .event-chip-time { display: none; }
 }
 

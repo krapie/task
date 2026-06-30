@@ -200,6 +200,11 @@ export default function App() {
     loadDaily(slotDate)
   }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
 
+  // Reload events when switching to calendar view
+  useEffect(() => {
+    if (view === 'calendar') loadAllEvents()
+  }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Refresh current slot data when page becomes visible
   useEffect(() => {
     function onVisibilityChange() {
