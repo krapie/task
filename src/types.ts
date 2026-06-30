@@ -38,4 +38,21 @@ export interface DailyData {
   slot: Slot
   templates: TemplateWithState[]
   additions: Addition[]
+  eventCompletions: string[]
+}
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  start_date: string
+  end_date: string
+  time: string | null
+  created_at: number
+}
+
+export interface DailyEvent {
+  id: string
+  title: string
+  time: string | null
+  completed: boolean
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Header } from './components/Header'
 import { Footer } from './components/Footer'
 import { DayTabs } from './components/DayTabs'
@@ -6,12 +6,15 @@ import { QuestBoard } from './components/QuestBoard'
 import { SettingsPanel, downloadExport } from './components/SettingsPanel'
 import { SignInModal } from './components/SignInModal'
 import { ImportModal } from './components/ImportModal'
+import { CalendarView } from './components/CalendarView'
+import { EventPanel } from './components/EventPanel'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate } from './lib/slots'
-import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData } from './types'
+import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent } from './types'
 
 type Theme = 'light' | 'dark'
+type View = 'board' | 'calendar'
 
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem('task_theme') as Theme | null
@@ -22,6 +25,7 @@ function getInitialTheme(): Theme {
 interface SlotDailyData {
   completions: string[]
   additions: Addition[]
+  eventCompletions: string[]
 }
 
 export default function App() {
@@ -44,7 +48,6 @@ export default function App() {
     mon: [], tue: [], wed: [], thu: [], fri: [], weekend: [],
   })
 
-  // Daily data keyed by slotDate
   const [dailyData, setDailyData] = useState<Record<string, SlotDailyData>>({})
   const loadedDatesRef = useRef<Set<string>>(new Set())
 
@@ -53,11 +56,43 @@ export default function App() {
   const [showSignIn, setShowSignIn] = useState(false)
   const [showImport, setShowImport] = useState(false)
 
+  // Calendar state
+  const [view, setView] = useState<View>('board')
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date()
+    return { year: now.getFullYear(), month: now.getMonth() + 1 }
+  })
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null)
+
   // Derived: date for the currently selected slot
   const selectedSlotDate = activeSlotDate
     ? getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
     : ''
-  const selectedDailyData: SlotDailyData = dailyData[selectedSlotDate] ?? { completions: [], additions: [] }
+  const selectedDailyData: SlotDailyData = dailyData[selectedSlotDate] ?? { completions: [], additions: [], eventCompletions: [] }
+
+  // Derived: calendar events for selected slot date (for board view)
+  const selectedEvents: DailyEvent[] = useMemo(() => {
+    if (!selectedSlotDate) return []
+    return calendarEvents
+      .filter(e => e.start_date <= selectedSlotDate && e.end_date >= selectedSlotDate)
+      .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
+      .map(e => ({
+        id: e.id,
+        title: e.title,
+        time: e.time,
+        completed: selectedDailyData.eventCompletions.includes(e.id),
+      }))
+  }, [calendarEvents, selectedSlotDate, selectedDailyData.eventCompletions])
+
+  // Derived: events filtered for current calendar month
+  const monthEvents = useMemo(() => {
+    const y = calendarMonth.year
+    const m = String(calendarMonth.month).padStart(2, '0')
+    const monthStart = `${y}-${m}-01`
+    const monthEnd = `${y}-${m}-31`
+    return calendarEvents.filter(e => e.start_date <= monthEnd && e.end_date >= monthStart)
+  }, [calendarEvents, calendarMonth])
 
   // Verify token on mount
   useEffect(() => {
@@ -101,6 +136,15 @@ export default function App() {
     }
   }, [isAuth])
 
+  const loadAllEvents = useCallback(async () => {
+    if (isAuth) {
+      const events = await api.events.getAll().catch(() => [])
+      setCalendarEvents(events)
+    } else {
+      setCalendarEvents(storage.getEvents())
+    }
+  }, [isAuth])
+
   const loadDaily = useCallback(async (slotDate: string) => {
     if (!slotDate || loadedDatesRef.current.has(slotDate)) return
     loadedDatesRef.current.add(slotDate)
@@ -109,13 +153,12 @@ export default function App() {
       if (!d) return
       const serverCompletions = d.templates.filter(t => t.completed).map(t => t.id)
       const serverAdditions = d.additions
+      const serverEventCompletions = d.eventCompletions ?? []
       setDailyData(prev => {
         const existing = prev[slotDate]
         if (!existing) {
-          return { ...prev, [slotDate]: { completions: serverCompletions, additions: serverAdditions } }
+          return { ...prev, [slotDate]: { completions: serverCompletions, additions: serverAdditions, eventCompletions: serverEventCompletions } }
         }
-        // Merge: server is authoritative for completions; preserve any locally-added
-        // additions not yet reflected in this (possibly stale) GET response
         const serverIds = new Set(serverAdditions.map(a => a.id))
         const localOnly = existing.additions.filter(a => !serverIds.has(a.id) && !a.id.startsWith('temp-'))
         return {
@@ -123,14 +166,16 @@ export default function App() {
           [slotDate]: {
             completions: serverCompletions,
             additions: [...serverAdditions, ...localOnly],
+            eventCompletions: serverEventCompletions,
           },
         }
       })
     } else {
       const d = storage.getDaily(slotDate)
+      const eventCompletions = storage.getEventCompletionsForDate(slotDate)
       setDailyData(prev => {
         if (prev[slotDate]) return prev
-        return { ...prev, [slotDate]: d }
+        return { ...prev, [slotDate]: { ...d, eventCompletions } }
       })
     }
   }, [isAuth])
@@ -143,6 +188,7 @@ export default function App() {
       const { slotDate } = refreshSlot(s)
       loadTemplates()
       loadDaily(slotDate)
+      loadAllEvents()
     })
   }, [isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -153,7 +199,7 @@ export default function App() {
     loadDaily(slotDate)
   }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
 
-  // Refresh current slot data when page becomes visible (e.g. returning from another tab/app)
+  // Refresh current slot data when page becomes visible
   useEffect(() => {
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible' || !activeSlotDate) return
@@ -319,7 +365,7 @@ export default function App() {
     }
   }
 
-  // Daily handlers — completions always for active slot date
+  // Daily handlers
   async function handleToggleTemplate(id: string) {
     const slotDate = activeSlotDate
     const current = dailyData[slotDate]?.completions ?? []
@@ -327,7 +373,7 @@ export default function App() {
     const next = done ? current.filter(c => c !== id) : [...current, id]
     setDailyData(prev => ({
       ...prev,
-      [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [] }), completions: next },
+      [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), completions: next },
     }))
     if (isAuth) {
       await api.daily.toggleTemplate(id, slotDate, !done).catch(console.error)
@@ -337,7 +383,7 @@ export default function App() {
     }
   }
 
-  // Bonus task handlers — use selected slot's date
+  // Bonus task handlers
   async function handleAddAddition(text: string) {
     const slotDate = selectedSlotDate
     if (isAuth) {
@@ -346,7 +392,7 @@ export default function App() {
       setDailyData(prev => ({
         ...prev,
         [slotDate]: {
-          ...(prev[slotDate] ?? { completions: [], additions: [] }),
+          ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
           additions: [...(prev[slotDate]?.additions ?? []), tempAddition],
         },
       }))
@@ -355,7 +401,7 @@ export default function App() {
         setDailyData(prev => ({
           ...prev,
           [slotDate]: {
-            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
             additions: (prev[slotDate]?.additions ?? []).map(item => item.id === tempId ? a : item),
           },
         }))
@@ -363,7 +409,7 @@ export default function App() {
         setDailyData(prev => ({
           ...prev,
           [slotDate]: {
-            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
             additions: (prev[slotDate]?.additions ?? []).filter(item => item.id !== tempId),
           },
         }))
@@ -373,7 +419,7 @@ export default function App() {
       setDailyData(prev => ({
         ...prev,
         [slotDate]: {
-          ...(prev[slotDate] ?? { completions: [], additions: [] }),
+          ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
           additions: [...(prev[slotDate]?.additions ?? []), a],
         },
       }))
@@ -390,7 +436,7 @@ export default function App() {
     setDailyData(prev => ({
       ...prev,
       [slotDate]: {
-        ...(prev[slotDate] ?? { completions: [], additions: [] }),
+        ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
         additions: (prev[slotDate]?.additions ?? []).filter(a => a.id !== id),
       },
     }))
@@ -407,7 +453,7 @@ export default function App() {
       setDailyData(prev => ({
         ...prev,
         [slotDate]: {
-          ...(prev[slotDate] ?? { completions: [], additions: [] }),
+          ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
           additions: (prev[slotDate]?.additions ?? []).map(a => a.id === id ? { ...a, text } : a),
         },
       }))
@@ -416,7 +462,7 @@ export default function App() {
         setDailyData(prev => ({
           ...prev,
           [slotDate]: {
-            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
             additions: (prev[slotDate]?.additions ?? []).map(item => item.id === id ? a : item),
           },
         }))
@@ -424,7 +470,7 @@ export default function App() {
         setDailyData(prev => ({
           ...prev,
           [slotDate]: {
-            ...(prev[slotDate] ?? { completions: [], additions: [] }),
+            ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
             additions: (prev[slotDate]?.additions ?? []).map(a => a.id === id ? { ...a, text: original } : a),
           },
         }))
@@ -433,7 +479,7 @@ export default function App() {
       setDailyData(prev => ({
         ...prev,
         [slotDate]: {
-          ...(prev[slotDate] ?? { completions: [], additions: [] }),
+          ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
           additions: (prev[slotDate]?.additions ?? []).map(a => a.id === id ? { ...a, text } : a),
         },
       }))
@@ -450,7 +496,7 @@ export default function App() {
     setDailyData(prev => ({
       ...prev,
       [slotDate]: {
-        ...(prev[slotDate] ?? { completions: [], additions: [] }),
+        ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }),
         additions: (prev[slotDate]?.additions ?? []).map(x =>
           x.id === id ? { ...x, completed: !x.completed } : x
         ),
@@ -464,6 +510,67 @@ export default function App() {
         ...d,
         additions: d.additions.map(x => x.id === id ? { ...x, completed: !x.completed } : x),
       })
+    }
+  }
+
+  // Event handlers
+  async function handleAddEvent(data: { title: string; start_date: string; end_date: string; time?: string }) {
+    if (isAuth) {
+      const event = await api.events.create(data)
+      setCalendarEvents(prev => [...prev, event])
+    } else {
+      const event: CalendarEvent = {
+        id: crypto.randomUUID(),
+        title: data.title,
+        start_date: data.start_date,
+        end_date: data.end_date,
+        time: data.time || null,
+        created_at: Date.now(),
+      }
+      const next = [...storage.getEvents(), event]
+      storage.setEvents(next)
+      setCalendarEvents(next)
+    }
+  }
+
+  async function handleEditEvent(id: string, data: { title: string; start_date: string; end_date: string; time?: string }) {
+    if (isAuth) {
+      const event = await api.events.update(id, data)
+      setCalendarEvents(prev => prev.map(e => e.id === id ? event : e))
+    } else {
+      setCalendarEvents(prev => {
+        const next = prev.map(e => e.id === id
+          ? { ...e, title: data.title, start_date: data.start_date, end_date: data.end_date, time: data.time || null }
+          : e)
+        storage.setEvents(next)
+        return next
+      })
+    }
+  }
+
+  async function handleDeleteEvent(id: string) {
+    if (isAuth) {
+      await api.events.remove(id)
+    } else {
+      const next = storage.getEvents().filter(e => e.id !== id)
+      storage.setEvents(next)
+    }
+    setCalendarEvents(prev => prev.filter(e => e.id !== id))
+  }
+
+  async function handleToggleEvent(eventId: string) {
+    const slotDate = selectedSlotDate
+    const current = dailyData[slotDate]?.eventCompletions ?? []
+    const done = current.includes(eventId)
+    const next = done ? current.filter(id => id !== eventId) : [...current, eventId]
+    setDailyData(prev => ({
+      ...prev,
+      [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), eventCompletions: next },
+    }))
+    if (isAuth) {
+      await api.events.toggle(eventId, slotDate, !done).catch(console.error)
+    } else {
+      storage.toggleEventCompletion(eventId, slotDate, !done)
     }
   }
 
@@ -498,6 +605,8 @@ export default function App() {
     <div className="app">
       <Header
         username={username}
+        view={view}
+        onToggleView={() => setView(v => v === 'board' ? 'calendar' : 'board')}
         onSignIn={() => setShowSignIn(true)}
         onSignOut={handleSignOut}
         onSettings={() => setShowSettings(true)}
@@ -506,32 +615,67 @@ export default function App() {
       />
 
       <main className="app-main">
-        <DayTabs
-          selected={selectedSlot}
-          active={activeSlot}
-          onChange={setSelectedSlot}
-        />
-        <QuestBoard
-          slot={selectedSlot}
-          slotDate={selectedSlotDate}
-          isActive={selectedSlot === activeSlot}
-          templates={selectedTemplates}
-          additions={selectedDailyData.additions}
-          rotateHour={settings.rotateHour}
-          rotateMinute={settings.rotateMinute}
-          onToggleTemplate={handleToggleTemplate}
-          onAddTemplate={handleAddTemplate}
-          onDeleteTemplate={handleDeleteTemplate}
-          onMoveTemplate={handleMoveTemplate}
-          onAddAddition={handleAddAddition}
-          onDeleteAddition={handleDeleteAddition}
-          onEditAddition={handleEditAddition}
-          onToggleAddition={handleToggleAddition}
-          onEditTemplate={handleEditTemplate}
-        />
+        {view === 'board' ? (
+          <>
+            <DayTabs
+              selected={selectedSlot}
+              active={activeSlot}
+              onChange={setSelectedSlot}
+            />
+            <QuestBoard
+              slot={selectedSlot}
+              slotDate={selectedSlotDate}
+              isActive={selectedSlot === activeSlot}
+              templates={selectedTemplates}
+              additions={selectedDailyData.additions}
+              calendarEvents={selectedEvents}
+              rotateHour={settings.rotateHour}
+              rotateMinute={settings.rotateMinute}
+              onToggleTemplate={handleToggleTemplate}
+              onAddTemplate={handleAddTemplate}
+              onDeleteTemplate={handleDeleteTemplate}
+              onMoveTemplate={handleMoveTemplate}
+              onAddAddition={handleAddAddition}
+              onDeleteAddition={handleDeleteAddition}
+              onEditAddition={handleEditAddition}
+              onToggleAddition={handleToggleAddition}
+              onEditTemplate={handleEditTemplate}
+              onToggleEvent={handleToggleEvent}
+            />
+          </>
+        ) : (
+          <CalendarView
+            year={calendarMonth.year}
+            month={calendarMonth.month}
+            events={monthEvents}
+            selectedDate={selectedCalendarDate}
+            onPrevMonth={() => setCalendarMonth(prev => {
+              const m = prev.month === 1 ? 12 : prev.month - 1
+              const y = prev.month === 1 ? prev.year - 1 : prev.year
+              return { year: y, month: m }
+            })}
+            onNextMonth={() => setCalendarMonth(prev => {
+              const m = prev.month === 12 ? 1 : prev.month + 1
+              const y = prev.month === 12 ? prev.year + 1 : prev.year
+              return { year: y, month: m }
+            })}
+            onDayClick={date => setSelectedCalendarDate(prev => prev === date ? null : date)}
+          />
+        )}
       </main>
 
       <Footer />
+
+      {view === 'calendar' && selectedCalendarDate && (
+        <EventPanel
+          date={selectedCalendarDate}
+          events={calendarEvents}
+          onClose={() => setSelectedCalendarDate(null)}
+          onAdd={handleAddEvent}
+          onEdit={handleEditEvent}
+          onDelete={handleDeleteEvent}
+        />
+      )}
 
       {showSettings && (
         <SettingsPanel

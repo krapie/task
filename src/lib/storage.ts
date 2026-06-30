@@ -1,9 +1,11 @@
-import type { Slot, Template, Addition, Settings, ExportData } from '../types'
+import type { Slot, Template, Addition, Settings, ExportData, CalendarEvent, DailyEvent } from '../types'
 
 const KEYS = {
   TEMPLATES: 'task_templates',
   DAILY: 'task_daily',
   SETTINGS: 'task_settings',
+  EVENTS: 'calendar_events',
+  EVENT_COMPLETIONS: 'calendar_event_completions',
 }
 
 type StoredTemplates = Record<Slot, Template[]>
@@ -46,6 +48,35 @@ export const storage = {
     const all = load<StoredDaily>(KEYS.DAILY, {})
     all[slotDate] = data
     save(KEYS.DAILY, all)
+  },
+
+  getEvents: (): CalendarEvent[] => load<CalendarEvent[]>(KEYS.EVENTS, []),
+
+  setEvents: (events: CalendarEvent[]): void => save(KEYS.EVENTS, events),
+
+  getEventCompletionsForDate: (slotDate: string): string[] => {
+    const all = load<Record<string, string[]>>(KEYS.EVENT_COMPLETIONS, {})
+    return all[slotDate] ?? []
+  },
+
+  toggleEventCompletion: (eventId: string, slotDate: string, completed: boolean): void => {
+    const all = load<Record<string, string[]>>(KEYS.EVENT_COMPLETIONS, {})
+    const existing = all[slotDate] ?? []
+    if (completed && !existing.includes(eventId)) {
+      all[slotDate] = [...existing, eventId]
+    } else if (!completed) {
+      all[slotDate] = existing.filter(id => id !== eventId)
+    }
+    save(KEYS.EVENT_COMPLETIONS, all)
+  },
+
+  getEventsForDate: (slotDate: string): DailyEvent[] => {
+    const events = storage.getEvents()
+    const completions = new Set(storage.getEventCompletionsForDate(slotDate))
+    return events
+      .filter(e => e.start_date <= slotDate && e.end_date >= slotDate)
+      .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
+      .map(e => ({ id: e.id, title: e.title, time: e.time, completed: completions.has(e.id) }))
   },
 
   export: (): ExportData => ({

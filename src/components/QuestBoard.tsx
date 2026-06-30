@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { TemplateWithState, Addition, Slot } from '../types'
+import type { TemplateWithState, Addition, Slot, DailyEvent } from '../types'
 import { formatDayLabel, getNextReset, SLOTS, SLOT_LABELS } from '../lib/slots'
 
 interface QuestBoardProps {
@@ -15,10 +15,12 @@ interface QuestBoardProps {
   onDeleteTemplate: (id: string) => void
   onEditTemplate: (id: string, text: string) => void
   onMoveTemplate: (id: string, dir: -1 | 1) => void
+  calendarEvents: DailyEvent[]
   onAddAddition: (text: string) => void
   onDeleteAddition: (id: string) => void
   onEditAddition: (id: string, text: string) => void
   onToggleAddition: (id: string) => void
+  onToggleEvent: (id: string) => void
 }
 
 function useCountdown(rotateHour: number, rotateMinute: number) {
@@ -267,6 +269,7 @@ export function QuestBoard({
   rotateHour,
   rotateMinute,
   onToggleTemplate,
+  calendarEvents,
   onAddTemplate,
   onDeleteTemplate,
   onEditTemplate,
@@ -275,13 +278,14 @@ export function QuestBoard({
   onDeleteAddition,
   onEditAddition,
   onToggleAddition,
+  onToggleEvent,
 }: QuestBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [revealedId, setRevealedId] = useState<string | null>(null)
 
-  const completedCount = templates.filter(t => t.completed).length + additions.filter(a => a.completed).length
-  const totalCount = templates.length + additions.length
+  const completedCount = templates.filter(t => t.completed).length + additions.filter(a => a.completed).length + calendarEvents.filter(e => e.completed).length
+  const totalCount = templates.length + additions.length + calendarEvents.length
 
   function startEdit(id: string) { setEditingId(id); setRevealedId(null) }
   function cancelEdit() { setEditingId(null) }
@@ -420,8 +424,30 @@ export function QuestBoard({
               ))}
             </div>
           ) : (
-            <div className="empty-state">
-              {isActive ? 'No bonus tasks for today.' : `No bonus tasks for ${SLOT_LABELS[slot]}.`}
+            calendarEvents.length === 0 && (
+              <div className="empty-state">
+                {isActive ? 'No bonus tasks for today.' : `No bonus tasks for ${SLOT_LABELS[slot]}.`}
+              </div>
+            )
+          )}
+          {calendarEvents.length > 0 && (
+            <div className={`task-list${additions.length > 0 ? ' calendar-events-list' : ''}`}>
+              {calendarEvents.map(e => (
+                <div key={e.id} className="task-item">
+                  <button
+                    className={`task-checkbox${e.completed ? ' checked' : ''}`}
+                    onClick={() => onToggleEvent(e.id)}
+                    aria-label={e.completed ? 'Mark incomplete' : 'Mark complete'}
+                  >
+                    <CheckIcon />
+                  </button>
+                  <svg className="event-task-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+                  </svg>
+                  <span className={`task-text${e.completed ? ' done' : ''}`}>{e.title}</span>
+                  {e.time && <span className="event-time-badge">{e.time}</span>}
+                </div>
+              ))}
             </div>
           )}
           <div className="desktop-add"><AddInput

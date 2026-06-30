@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent } from '../types'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
@@ -49,6 +49,16 @@ export const api = {
       req<void>('POST', '/daily/toggle', { type: 'template', id: templateId, slotDate, completed }),
     toggleAddition: (additionId: string, completed: boolean) =>
       req<void>('POST', '/daily/toggle', { type: 'addition', id: additionId, completed }),
+  },
+  events: {
+    getAll: () => req<CalendarEvent[]>('GET', '/events'),
+    create: (data: { title: string; start_date: string; end_date: string; time?: string }) =>
+      req<CalendarEvent>('POST', '/events', data),
+    update: (id: string, data: { title: string; start_date: string; end_date: string; time?: string }) =>
+      req<CalendarEvent>('PUT', `/events/${id}`, data),
+    remove: (id: string) => req<void>('DELETE', `/events/${id}`),
+    toggle: (id: string, slot_date: string, completed: boolean) =>
+      req<void>('POST', `/events/${id}/toggle`, { slot_date, completed }),
   },
   settings: {
     get: () => req<Settings>('GET', '/settings'),

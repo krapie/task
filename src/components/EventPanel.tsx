@@ -1,0 +1,198 @@
+import { useState } from 'react'
+import type { CalendarEvent } from '../types'
+
+interface EventPanelProps {
+  date: string
+  events: CalendarEvent[]
+  onClose: () => void
+  onAdd: (data: { title: string; start_date: string; end_date: string; time?: string }) => void
+  onEdit: (id: string, data: { title: string; start_date: string; end_date: string; time?: string }) => void
+  onDelete: (id: string) => void
+}
+
+function formatDisplayDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  })
+}
+
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+    </svg>
+  )
+}
+
+interface EventFormProps {
+  defaultDate: string
+  initial?: CalendarEvent
+  onSave: (data: { title: string; start_date: string; end_date: string; time?: string }) => void
+  onCancel: () => void
+}
+
+function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [startDate, setStartDate] = useState(initial?.start_date ?? defaultDate)
+  const [endDate, setEndDate] = useState(initial?.end_date ?? defaultDate)
+  const [time, setTime] = useState(initial?.time ?? '')
+  const [multiDay, setMultiDay] = useState(initial ? initial.start_date !== initial.end_date : false)
+
+  function submit() {
+    const t = title.trim()
+    if (!t) return
+    onSave({
+      title: t,
+      start_date: startDate,
+      end_date: multiDay ? endDate : startDate,
+      time: time || undefined,
+    })
+  }
+
+  return (
+    <div className="event-form">
+      <input
+        className="add-task-input"
+        placeholder="Event title"
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && submit()}
+        autoFocus
+      />
+      <div className="event-form-row">
+        <label className="event-form-label">Date</label>
+        <input
+          type="date"
+          className="event-date-input"
+          value={startDate}
+          onChange={e => { setStartDate(e.target.value); if (!multiDay) setEndDate(e.target.value) }}
+        />
+      </div>
+      <div className="event-form-row">
+        <label className="event-form-label">Time (optional)</label>
+        <input
+          type="time"
+          className="event-date-input"
+          value={time}
+          onChange={e => setTime(e.target.value)}
+        />
+      </div>
+      <div className="event-form-row">
+        <label className="toggle-label" style={{ cursor: 'pointer', userSelect: 'none' }}>
+          <input
+            type="checkbox"
+            style={{ marginRight: 6 }}
+            checked={multiDay}
+            onChange={e => setMultiDay(e.target.checked)}
+          />
+          Multi-day event
+        </label>
+      </div>
+      {multiDay && (
+        <div className="event-form-row">
+          <label className="event-form-label">End date</label>
+          <input
+            type="date"
+            className="event-date-input"
+            value={endDate}
+            min={startDate}
+            onChange={e => setEndDate(e.target.value)}
+          />
+        </div>
+      )}
+      <div className="event-form-actions">
+        <button className="add-task-btn" type="button" onClick={submit}>Save</button>
+        <button className="settings-action-btn" type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+export function EventPanel({ date, events, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
+  const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  const dayEvents = events
+    .filter(e => e.start_date <= date && e.end_date >= date)
+    .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
+
+  return (
+    <>
+      <div className="panel-overlay" onClick={onClose} />
+      <aside className="panel">
+        <div className="panel-header">
+          <span className="panel-title" style={{ fontSize: 'var(--kp-text-sm)' }}>{formatDisplayDate(date)}</span>
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="panel-body">
+          {dayEvents.length === 0 && !showForm && (
+            <div className="empty-state">No events for this day.</div>
+          )}
+
+          {dayEvents.length > 0 && (
+            <div className="event-list">
+              {dayEvents.map(event =>
+                editingId === event.id ? (
+                  <EventForm
+                    key={event.id}
+                    defaultDate={date}
+                    initial={event}
+                    onSave={data => { onEdit(event.id, data); setEditingId(null) }}
+                    onCancel={() => setEditingId(null)}
+                  />
+                ) : (
+                  <div key={event.id} className="event-item">
+                    <div className="event-item-main">
+                      {event.time && <span className="event-item-time">{event.time}</span>}
+                      <span className="event-item-title">{event.title}</span>
+                      {event.start_date !== event.end_date && (
+                        <span className="event-item-range">{event.start_date} – {event.end_date}</span>
+                      )}
+                    </div>
+                    <div className="event-item-actions">
+                      <button className="task-edit-btn" onClick={() => setEditingId(event.id)} aria-label="Edit">
+                        <PencilIcon />
+                      </button>
+                      <button className="task-delete" onClick={() => onDelete(event.id)} aria-label="Delete">
+                        <TrashIcon />
+                      </button>
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          {showForm ? (
+            <EventForm
+              defaultDate={date}
+              onSave={data => { onAdd(data); setShowForm(false) }}
+              onCancel={() => setShowForm(false)}
+            />
+          ) : (
+            <button className="settings-action-btn" onClick={() => setShowForm(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Add event
+            </button>
+          )}
+        </div>
+      </aside>
+    </>
+  )
+}

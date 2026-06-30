@@ -43,6 +43,19 @@ db.exec(`
   INSERT OR IGNORE INTO settings VALUES ('rotateHour', '6');
   INSERT OR IGNORE INTO settings VALUES ('rotateMinute', '0');
   INSERT OR IGNORE INTO settings VALUES ('keepBonus', 'false');
+  CREATE TABLE IF NOT EXISTS events (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    time TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS event_completions (
+    event_id TEXT NOT NULL,
+    slot_date TEXT NOT NULL,
+    PRIMARY KEY (event_id, slot_date)
+  );
 `)
 
 const app = express()
@@ -141,11 +154,16 @@ app.get('/api/daily/:slotDate', auth, (req, res) => {
     'SELECT * FROM daily_additions WHERE slot_date = ? ORDER BY created_at'
   ).all(slotDate).map(r => ({ ...r, completed: r.completed === 1 }))
 
+  const eventCompletions = db.prepare(
+    'SELECT event_id FROM event_completions WHERE slot_date = ?'
+  ).all(slotDate).map(r => r.event_id)
+
   res.json({
     slotDate,
     slot,
     templates: templates.map(t => ({ ...t, completed: completedIds.has(t.id) })),
     additions,
+    eventCompletions,
   })
 })
 
@@ -181,6 +199,47 @@ app.post('/api/daily/toggle', auth, (req, res) => {
     }
   } else {
     db.prepare('UPDATE daily_additions SET completed = ? WHERE id = ?').run(completed ? 1 : 0, id)
+  }
+  res.json({ ok: true })
+})
+
+// Events
+app.get('/api/events', auth, (_req, res) => {
+  const rows = db.prepare('SELECT * FROM events ORDER BY start_date, time').all()
+  res.json(rows)
+})
+
+app.post('/api/events', auth, (req, res) => {
+  const { title, start_date, end_date, time } = req.body ?? {}
+  if (!title?.trim() || !start_date || !end_date) return res.status(400).json({ error: 'Missing fields' })
+  if (end_date < start_date) return res.status(400).json({ error: 'end_date before start_date' })
+  const id = randomUUID()
+  const now = Date.now()
+  db.prepare('INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)').run(id, title.trim(), start_date, end_date, time || null, now)
+  res.json({ id, title: title.trim(), start_date, end_date, time: time || null, created_at: now })
+})
+
+app.put('/api/events/:id', auth, (req, res) => {
+  const { title, start_date, end_date, time } = req.body ?? {}
+  if (!title?.trim() || !start_date || !end_date) return res.status(400).json({ error: 'Missing fields' })
+  db.prepare('UPDATE events SET title = ?, start_date = ?, end_date = ?, time = ? WHERE id = ?')
+    .run(title.trim(), start_date, end_date, time || null, req.params.id)
+  res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id))
+})
+
+app.delete('/api/events/:id', auth, (req, res) => {
+  db.prepare('DELETE FROM events WHERE id = ?').run(req.params.id)
+  db.prepare('DELETE FROM event_completions WHERE event_id = ?').run(req.params.id)
+  res.json({ ok: true })
+})
+
+app.post('/api/events/:id/toggle', auth, (req, res) => {
+  const { slot_date, completed } = req.body ?? {}
+  if (!slot_date) return res.status(400).json({ error: 'Missing slot_date' })
+  if (completed) {
+    db.prepare('INSERT OR IGNORE INTO event_completions VALUES (?, ?)').run(req.params.id, slot_date)
+  } else {
+    db.prepare('DELETE FROM event_completions WHERE event_id = ? AND slot_date = ?').run(req.params.id, slot_date)
   }
   res.json({ ok: true })
 })
