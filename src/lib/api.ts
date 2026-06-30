@@ -49,6 +49,8 @@ export const api = {
       req<void>('POST', '/daily/toggle', { type: 'template', id: templateId, slotDate, completed }),
     toggleAddition: (additionId: string, completed: boolean) =>
       req<void>('POST', '/daily/toggle', { type: 'addition', id: additionId, completed }),
+    getAdditionsRange: (from: string, to: string) =>
+      req<Addition[]>('GET', `/daily/additions/range?from=${from}&to=${to}`),
   },
   events: {
     getAll: () => req<CalendarEvent[]>('GET', '/events'),

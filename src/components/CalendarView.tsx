@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { CalendarEvent } from '../types'
+import type { CalendarEvent, Addition } from '../types'
 
 const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = [
@@ -37,8 +37,17 @@ function buildWeeks(year: number, month: number): string[][] {
   return weeks
 }
 
-interface PositionedEvent {
-  event: CalendarEvent
+type CalendarItem =
+  | { kind: 'event'; event: CalendarEvent }
+  | { kind: 'addition'; addition: Addition }
+
+function itemId(item: CalendarItem)    { return item.kind === 'event' ? item.event.id         : item.addition.id }
+function itemStart(item: CalendarItem) { return item.kind === 'event' ? item.event.start_date  : item.addition.slot_date }
+function itemEnd(item: CalendarItem)   { return item.kind === 'event' ? item.event.end_date    : item.addition.slot_date }
+function itemTitle(item: CalendarItem) { return item.kind === 'event' ? item.event.title       : item.addition.text }
+
+interface PositionedItem {
+  item: CalendarItem
   colStart: number
   colSpan: number
   isStart: boolean
@@ -46,25 +55,26 @@ interface PositionedEvent {
   lane: number
 }
 
-function layoutWeek(weekDates: string[], events: CalendarEvent[]): PositionedEvent[] {
+function layoutWeek(weekDates: string[], items: CalendarItem[]): PositionedItem[] {
   const weekStart = weekDates[0], weekEnd = weekDates[6]
-  const overlapping = events
-    .filter(e => e.start_date <= weekEnd && e.end_date >= weekStart)
+  const overlapping = items
+    .filter(i => itemStart(i) <= weekEnd && itemEnd(i) >= weekStart)
     .sort((a, b) => {
-      const d = diffDays(b.start_date, b.end_date) - diffDays(a.start_date, a.end_date)
-      return d !== 0 ? d : a.start_date.localeCompare(b.start_date)
+      const da = diffDays(itemStart(a), itemEnd(a))
+      const db_ = diffDays(itemStart(b), itemEnd(b))
+      return da !== db_ ? db_ - da : itemStart(a).localeCompare(itemStart(b))
     })
 
-  const placed: PositionedEvent[] = []
-  for (const event of overlapping) {
-    const effStart = event.start_date < weekStart ? weekStart : event.start_date
-    const effEnd   = event.end_date   > weekEnd   ? weekEnd   : event.end_date
+  const placed: PositionedItem[] = []
+  for (const item of overlapping) {
+    const effStart = itemStart(item) < weekStart ? weekStart : itemStart(item)
+    const effEnd   = itemEnd(item)   > weekEnd   ? weekEnd   : itemEnd(item)
     const colStart = dayOfWeek(effStart) + 1
     const colSpan  = dayOfWeek(effEnd) - dayOfWeek(effStart) + 1
     const colEnd   = colStart + colSpan - 1
     let lane = 0
     while (placed.some(p => p.lane === lane && !(p.colStart + p.colSpan - 1 < colStart || p.colStart > colEnd))) lane++
-    placed.push({ event, colStart, colSpan, isStart: event.start_date >= weekStart, isEnd: event.end_date <= weekEnd, lane })
+    placed.push({ item, colStart, colSpan, isStart: itemStart(item) >= weekStart, isEnd: itemEnd(item) <= weekEnd, lane })
   }
   return placed
 }
@@ -72,6 +82,7 @@ function layoutWeek(weekDates: string[], events: CalendarEvent[]): PositionedEve
 interface CalendarWeekProps {
   weekDates: string[]
   events: CalendarEvent[]
+  additions: Addition[]
   today: string
   selectedDate: string | null
   currentMonth: number
@@ -79,10 +90,14 @@ interface CalendarWeekProps {
   onEventClick: (event: CalendarEvent) => void
 }
 
-function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
-  const positioned = useMemo(() => layoutWeek(weekDates, events), [weekDates, events])
+function CalendarWeek({ weekDates, events, additions, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
+  const items = useMemo<CalendarItem[]>(() => [
+    ...events.map(e => ({ kind: 'event' as const, event: e })),
+    ...additions.map(a => ({ kind: 'addition' as const, addition: a })),
+  ], [events, additions])
+  const positioned = useMemo(() => layoutWeek(weekDates, items), [weekDates, items])
 
-  // Count overflow per column (events with lane >= MAX_LANES)
+  // Count overflow per column (items with lane >= MAX_LANES)
   const overflowByCol: Record<number, number> = {}
   for (const pe of positioned) {
     if (pe.lane >= MAX_LANES) {
@@ -91,7 +106,7 @@ function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, on
       }
     }
   }
-  const visibleEvents = positioned.filter(pe => pe.lane < MAX_LANES)
+  const visibleItems = positioned.filter(pe => pe.lane < MAX_LANES)
 
   return (
     <div className="calendar-week">
@@ -116,27 +131,39 @@ function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, on
         )
       })}
 
-      {/* Event bars — same grid-row: 1, overlaid on day cells via DOM order */}
-      {visibleEvents.map(pe => (
-        <div
-          key={`${pe.event.id}-${pe.event.start_date}-${pe.colStart}`}
-          className={[
-            'event-bar',
-            pe.isStart ? 'is-start' : 'is-continuation',
-            pe.isEnd ? 'is-end' : '',
-          ].filter(Boolean).join(' ')}
-          style={{
-            gridRow: 1,
-            gridColumn: `${pe.colStart} / span ${pe.colSpan}`,
-            marginTop: `${DAY_NUM_H + pe.lane * LANE_H}px`,
-          }}
-          onClick={e => { e.stopPropagation(); onEventClick(pe.event) }}
-        >
-          {pe.isStart && <span className="event-bar-title">{pe.event.title}</span>}
-          {pe.isStart && pe.event.time && pe.colSpan === 1 && <span className="event-bar-time">{pe.event.time}</span>}
-          {pe.isStart && pe.event.recurrence && <span className="event-bar-recurrence" aria-label="recurring">↻</span>}
-        </div>
-      ))}
+      {/* Event and addition bars — same grid-row: 1, overlaid on day cells via DOM order */}
+      {visibleItems.map(pe => {
+        const { item } = pe
+        return (
+          <div
+            key={`${itemId(item)}-${itemStart(item)}-${pe.colStart}`}
+            className={[
+              'event-bar',
+              item.kind === 'addition' ? 'is-addition' : '',
+              pe.isStart ? 'is-start' : 'is-continuation',
+              pe.isEnd ? 'is-end' : '',
+            ].filter(Boolean).join(' ')}
+            style={{
+              gridRow: 1,
+              gridColumn: `${pe.colStart} / span ${pe.colSpan}`,
+              marginTop: `${DAY_NUM_H + pe.lane * LANE_H}px`,
+            }}
+            onClick={e => {
+              e.stopPropagation()
+              if (item.kind === 'addition') onDayClick(item.addition.slot_date)
+              else onEventClick(item.event)
+            }}
+          >
+            {pe.isStart && <span className="event-bar-title">{itemTitle(item)}</span>}
+            {pe.isStart && item.kind === 'event' && item.event.time && pe.colSpan === 1 && (
+              <span className="event-bar-time">{item.event.time}</span>
+            )}
+            {pe.isStart && item.kind === 'event' && item.event.recurrence && (
+              <span className="event-bar-recurrence" aria-label="recurring">↻</span>
+            )}
+          </div>
+        )
+      })}
 
       {/* Overflow counts — positioned at the lane after the last visible one */}
       {weekDates.map((date, i) => {
@@ -162,6 +189,7 @@ interface CalendarViewProps {
   year: number
   month: number
   events: CalendarEvent[]
+  additions: Addition[]
   selectedDate: string | null
   onPrevMonth: () => void
   onNextMonth: () => void
@@ -169,7 +197,7 @@ interface CalendarViewProps {
   onEventClick: (event: CalendarEvent) => void
 }
 
-export function CalendarView({ year, month, events, selectedDate, onPrevMonth, onNextMonth, onDayClick, onEventClick }: CalendarViewProps) {
+export function CalendarView({ year, month, events, additions, selectedDate, onPrevMonth, onNextMonth, onDayClick, onEventClick }: CalendarViewProps) {
   const today = todayStr()
   const weeks = useMemo(() => buildWeeks(year, month), [year, month])
 
@@ -199,6 +227,7 @@ export function CalendarView({ year, month, events, selectedDate, onPrevMonth, o
               key={weekDates[0]}
               weekDates={weekDates}
               events={events}
+              additions={additions}
               today={today}
               selectedDate={selectedDate}
               currentMonth={month}

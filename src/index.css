@@ -1130,6 +1130,17 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .event-bar:hover { opacity: 1; }
 
+.event-bar.is-addition {
+  background: transparent;
+  color: var(--kp-fg-2);
+  border: 1px dashed var(--kp-fg-3);
+  opacity: 1;
+}
+.event-bar.is-addition:hover {
+  border-color: var(--kp-fg);
+  color: var(--kp-fg);
+}
+
 .event-bar.is-start {
   border-top-left-radius: var(--kp-radius-sm);
   border-bottom-left-radius: var(--kp-radius-sm);

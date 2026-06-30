@@ -50,6 +50,15 @@ export const storage = {
     save(KEYS.DAILY, all)
   },
 
+  getAdditionsForRange: (from: string, to: string): Addition[] => {
+    const all = load<StoredDaily>(KEYS.DAILY, {})
+    const result: Addition[] = []
+    for (const [date, entry] of Object.entries(all)) {
+      if (date >= from && date <= to) result.push(...entry.additions)
+    }
+    return result
+  },
+
   getEvents: (): CalendarEvent[] => load<CalendarEvent[]>(KEYS.EVENTS, []),
 
   setEvents: (events: CalendarEvent[]): void => save(KEYS.EVENTS, events),

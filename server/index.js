@@ -206,6 +206,16 @@ app.post('/api/daily/toggle', auth, (req, res) => {
   res.json({ ok: true })
 })
 
+// Additions range query (for calendar view)
+app.get('/api/daily/additions/range', auth, (req, res) => {
+  const { from, to } = req.query
+  if (!from || !to) return res.status(400).json({ error: 'Missing from/to' })
+  const rows = db.prepare(
+    'SELECT * FROM daily_additions WHERE slot_date >= ? AND slot_date <= ? ORDER BY slot_date, created_at'
+  ).all(from, to)
+  res.json(rows.map(r => ({ ...r, completed: r.completed === 1 })))
+})
+
 // Events
 app.get('/api/events', auth, (_req, res) => {
   const rows = db.prepare('SELECT * FROM events ORDER BY start_date, time').all()

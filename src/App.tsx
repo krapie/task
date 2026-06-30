@@ -159,6 +159,7 @@ export default function App() {
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
   })
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [calendarAdditions, setCalendarAdditions] = useState<Addition[]>([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
 
@@ -186,6 +187,12 @@ export default function App() {
     const { start, end } = calendarViewRange(calendarMonth.year, calendarMonth.month)
     return expandForView(calendarEvents, start, end)
   }, [calendarEvents, calendarMonth])
+
+  // Derived: bonus task additions visible in the current calendar month view
+  const monthAdditions = useMemo(() => {
+    const { start, end } = calendarViewRange(calendarMonth.year, calendarMonth.month)
+    return calendarAdditions.filter(a => a.slot_date >= start && a.slot_date <= end)
+  }, [calendarAdditions, calendarMonth])
 
   // Derived: events for the selected calendar date (pre-expanded for EventPanel)
   const selectedDayEvents = useMemo(() => {
@@ -249,6 +256,16 @@ export default function App() {
     }
   }, [isAuth])
 
+  const loadCalendarAdditions = useCallback(async (year: number, month: number) => {
+    const { start, end } = calendarViewRange(year, month)
+    if (isAuth) {
+      const additions = await api.daily.getAdditionsRange(start, end).catch(() => [])
+      setCalendarAdditions(additions)
+    } else {
+      setCalendarAdditions(storage.getAdditionsForRange(start, end))
+    }
+  }, [isAuth])
+
   const loadDaily = useCallback(async (slotDate: string) => {
     if (!slotDate || loadedDatesRef.current.has(slotDate)) return
     loadedDatesRef.current.add(slotDate)
@@ -303,10 +320,13 @@ export default function App() {
     loadDaily(slotDate)
   }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
 
-  // Reload events when switching to calendar view
+  // Reload events and additions when switching to or navigating within calendar view
   useEffect(() => {
-    if (view === 'calendar') loadAllEvents()
-  }, [view]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (view === 'calendar') {
+      loadAllEvents()
+      loadCalendarAdditions(calendarMonth.year, calendarMonth.month)
+    }
+  }, [view, calendarMonth]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh current slot data when page becomes visible
   useEffect(() => {
@@ -758,6 +778,7 @@ export default function App() {
             year={calendarMonth.year}
             month={calendarMonth.month}
             events={monthEvents}
+            additions={monthAdditions}
             selectedDate={selectedCalendarDate}
             onPrevMonth={() => setCalendarMonth(prev => {
               const m = prev.month === 1 ? 12 : prev.month - 1
