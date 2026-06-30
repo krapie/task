@@ -71,11 +71,12 @@ export default function App() {
     : ''
   const selectedDailyData: SlotDailyData = dailyData[selectedSlotDate] ?? { completions: [], additions: [], eventCompletions: [] }
 
-  // Derived: calendar events for selected slot date (for board view)
+  // Derived: single-day calendar events for selected slot date (for board view)
+  // Multi-day events are excluded — they span ranges and don't belong to a single task day
   const selectedEvents: DailyEvent[] = useMemo(() => {
     if (!selectedSlotDate) return []
     return calendarEvents
-      .filter(e => e.start_date <= selectedSlotDate && e.end_date >= selectedSlotDate)
+      .filter(e => e.start_date === e.end_date && e.start_date === selectedSlotDate)
       .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
       .map(e => ({
         id: e.id,

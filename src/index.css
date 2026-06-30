@@ -1232,18 +1232,9 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 /* Mobile calendar adjustments */
 @media (max-width: 600px) {
-  .calendar-cell { min-height: 60px; padding: var(--kp-space-1); }
+  .calendar-cell { min-height: 72px; padding: var(--kp-space-1); }
   .calendar-day-num { width: 18px; height: 18px; font-size: 11px; }
-  .event-chip { display: none; }
-  .event-chip-overflow { display: none; }
-  .calendar-cell.has-events .calendar-day-num::after {
-    content: '';
-    display: block;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--kp-fg-3);
-    margin: 1px auto 0;
-  }
+  .event-chip { font-size: 10px; padding: 1px 3px; }
+  .event-chip-time { display: none; }
 }
 
