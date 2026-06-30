@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence } from '../types'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
@@ -52,9 +52,9 @@ export const api = {
   },
   events: {
     getAll: () => req<CalendarEvent[]>('GET', '/events'),
-    create: (data: { title: string; start_date: string; end_date: string; time?: string }) =>
+    create: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) =>
       req<CalendarEvent>('POST', '/events', data),
-    update: (id: string, data: { title: string; start_date: string; end_date: string; time?: string }) =>
+    update: (id: string, data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) =>
       req<CalendarEvent>('PUT', `/events/${id}`, data),
     remove: (id: string) => req<void>('DELETE', `/events/${id}`),
     toggle: (id: string, slot_date: string, completed: boolean) =>

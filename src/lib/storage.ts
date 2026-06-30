@@ -73,8 +73,17 @@ export const storage = {
   getEventsForDate: (slotDate: string): DailyEvent[] => {
     const events = storage.getEvents()
     const completions = new Set(storage.getEventCompletionsForDate(slotDate))
-    return events
-      .filter(e => e.start_date <= slotDate && e.end_date >= slotDate)
+    const [, currM, currD] = slotDate.split('-').map(Number)
+    const currDow = new Date(slotDate).getDay()
+    const matched = events.filter(e => {
+      if (!e.recurrence) return e.start_date === slotDate && e.end_date === slotDate
+      const [, origM, origD] = e.start_date.split('-').map(Number)
+      if (e.recurrence === 'yearly') return origM === currM && origD === currD
+      if (e.recurrence === 'monthly') return origD === currD
+      if (e.recurrence === 'weekly') return new Date(e.start_date).getDay() === currDow
+      return false
+    })
+    return matched
       .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
       .map(e => ({ id: e.id, title: e.title, time: e.time, completed: completions.has(e.id) }))
   },

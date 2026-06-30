@@ -41,12 +41,15 @@ export interface DailyData {
   eventCompletions: string[]
 }
 
+export type Recurrence = 'weekly' | 'monthly' | 'yearly'
+
 export interface CalendarEvent {
   id: string
   title: string
   start_date: string
   end_date: string
   time: string | null
+  recurrence: Recurrence | null
   created_at: number
 }
 

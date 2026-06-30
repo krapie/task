@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import type { CalendarEvent } from '../types'
+import type { CalendarEvent, Recurrence } from '../types'
 
 interface EventPanelProps {
   date: string
-  events: CalendarEvent[]
+  dayEvents: CalendarEvent[]   // pre-expanded events for this day
   onClose: () => void
-  onAdd: (data: { title: string; start_date: string; end_date: string; time?: string }) => void
-  onEdit: (id: string, data: { title: string; start_date: string; end_date: string; time?: string }) => void
+  onAdd: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
+  onEdit: (id: string, data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
   onDelete: (id: string) => void
 }
 
@@ -33,10 +33,16 @@ function TrashIcon() {
   )
 }
 
+const RECURRENCE_LABELS: Record<Recurrence, string> = {
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+  yearly: 'Yearly',
+}
+
 interface EventFormProps {
   defaultDate: string
   initial?: CalendarEvent
-  onSave: (data: { title: string; start_date: string; end_date: string; time?: string }) => void
+  onSave: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
   onCancel: () => void
 }
 
@@ -46,6 +52,7 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   const [endDate, setEndDate] = useState(initial?.end_date ?? defaultDate)
   const [time, setTime] = useState(initial?.time ?? '')
   const [multiDay, setMultiDay] = useState(initial ? initial.start_date !== initial.end_date : false)
+  const [recurrence, setRecurrence] = useState<Recurrence | ''>(initial?.recurrence ?? '')
 
   function submit() {
     const t = title.trim()
@@ -55,6 +62,7 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
       start_date: startDate,
       end_date: multiDay ? endDate : startDate,
       time: time || undefined,
+      recurrence: recurrence || undefined,
     })
   }
 
@@ -87,17 +95,32 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
         />
       </div>
       <div className="event-form-row">
-        <label className="toggle-label" style={{ cursor: 'pointer', userSelect: 'none' }}>
-          <input
-            type="checkbox"
-            style={{ marginRight: 6 }}
-            checked={multiDay}
-            onChange={e => setMultiDay(e.target.checked)}
-          />
-          Multi-day event
-        </label>
+        <label className="event-form-label">Repeat</label>
+        <select
+          className="event-date-input"
+          value={recurrence}
+          onChange={e => setRecurrence(e.target.value as Recurrence | '')}
+        >
+          <option value="">None</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
       </div>
-      {multiDay && (
+      {!recurrence && (
+        <div className="event-form-row">
+          <label className="toggle-label" style={{ cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              style={{ marginRight: 6 }}
+              checked={multiDay}
+              onChange={e => setMultiDay(e.target.checked)}
+            />
+            Multi-day event
+          </label>
+        </div>
+      )}
+      {!recurrence && multiDay && (
         <div className="event-form-row">
           <label className="event-form-label">End date</label>
           <input
@@ -117,13 +140,11 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   )
 }
 
-export function EventPanel({ date, events, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
+export function EventPanel({ date, dayEvents, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
 
-  const dayEvents = events
-    .filter(e => e.start_date <= date && e.end_date >= date)
-    .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
+  const sorted = [...dayEvents].sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
 
   return (
     <>
@@ -139,13 +160,13 @@ export function EventPanel({ date, events, onClose, onAdd, onEdit, onDelete }: E
         </div>
 
         <div className="panel-body">
-          {dayEvents.length === 0 && !showForm && (
+          {sorted.length === 0 && !showForm && (
             <div className="empty-state">No events for this day.</div>
           )}
 
-          {dayEvents.length > 0 && (
+          {sorted.length > 0 && (
             <div className="event-list">
-              {dayEvents.map(event =>
+              {sorted.map(event =>
                 editingId === event.id ? (
                   <EventForm
                     key={event.id}
@@ -158,8 +179,15 @@ export function EventPanel({ date, events, onClose, onAdd, onEdit, onDelete }: E
                   <div key={event.id} className="event-item">
                     <div className="event-item-main">
                       {event.time && <span className="event-item-time">{event.time}</span>}
-                      <span className="event-item-title">{event.title}</span>
-                      {event.start_date !== event.end_date && (
+                      <div className="event-item-title-row">
+                        <span className="event-item-title">{event.title}</span>
+                        {event.recurrence && (
+                          <span className="event-item-recurrence" title={RECURRENCE_LABELS[event.recurrence]}>
+                            ↻ {RECURRENCE_LABELS[event.recurrence]}
+                          </span>
+                        )}
+                      </div>
+                      {event.start_date !== event.end_date && !event.recurrence && (
                         <span className="event-item-range">{event.start_date} – {event.end_date}</span>
                       )}
                     </div>

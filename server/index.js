@@ -49,6 +49,7 @@ db.exec(`
     start_date TEXT NOT NULL,
     end_date TEXT NOT NULL,
     time TEXT,
+    recurrence TEXT,
     created_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS event_completions (
@@ -57,6 +58,8 @@ db.exec(`
     PRIMARY KEY (event_id, slot_date)
   );
 `)
+
+try { db.exec('ALTER TABLE events ADD COLUMN recurrence TEXT') } catch { /* already exists */ }
 
 const app = express()
 const distPath = join(__dirname, '../dist')
@@ -210,20 +213,20 @@ app.get('/api/events', auth, (_req, res) => {
 })
 
 app.post('/api/events', auth, (req, res) => {
-  const { title, start_date, end_date, time } = req.body ?? {}
+  const { title, start_date, end_date, time, recurrence } = req.body ?? {}
   if (!title?.trim() || !start_date || !end_date) return res.status(400).json({ error: 'Missing fields' })
   if (end_date < start_date) return res.status(400).json({ error: 'end_date before start_date' })
   const id = randomUUID()
   const now = Date.now()
-  db.prepare('INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)').run(id, title.trim(), start_date, end_date, time || null, now)
-  res.json({ id, title: title.trim(), start_date, end_date, time: time || null, created_at: now })
+  db.prepare('INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, title.trim(), start_date, end_date, time || null, recurrence || null, now)
+  res.json({ id, title: title.trim(), start_date, end_date, time: time || null, recurrence: recurrence || null, created_at: now })
 })
 
 app.put('/api/events/:id', auth, (req, res) => {
-  const { title, start_date, end_date, time } = req.body ?? {}
+  const { title, start_date, end_date, time, recurrence } = req.body ?? {}
   if (!title?.trim() || !start_date || !end_date) return res.status(400).json({ error: 'Missing fields' })
-  db.prepare('UPDATE events SET title = ?, start_date = ?, end_date = ?, time = ? WHERE id = ?')
-    .run(title.trim(), start_date, end_date, time || null, req.params.id)
+  db.prepare('UPDATE events SET title = ?, start_date = ?, end_date = ?, time = ?, recurrence = ? WHERE id = ?')
+    .run(title.trim(), start_date, end_date, time || null, recurrence || null, req.params.id)
   res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id))
 })
 

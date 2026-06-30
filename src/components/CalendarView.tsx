@@ -6,11 +6,12 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
+const MAX_LANES = 3
 
-function padDate(n: number) { return String(n).padStart(2, '0') }
+function pad(n: number) { return String(n).padStart(2, '0') }
 
 function dateStr(y: number, m: number, d: number) {
-  return `${y}-${padDate(m)}-${padDate(d)}`
+  return `${y}-${pad(m)}-${pad(d)}`
 }
 
 function todayStr() {
@@ -18,34 +19,159 @@ function todayStr() {
   return dateStr(n.getFullYear(), n.getMonth() + 1, n.getDate())
 }
 
-interface Cell {
-  date: string
-  day: number
-  currentMonth: boolean
+function dayOfWeek(s: string): number {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d).getDay()
 }
 
-function buildCells(year: number, month: number): Cell[] {
-  const firstDay = new Date(year, month - 1, 1).getDay()
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const daysInPrev = new Date(year, month - 1, 0).getDate()
-  const cells: Cell[] = []
+function diffDays(a: string, b: string): number {
+  const [ay, am, ad] = a.split('-').map(Number)
+  const [by, bm, bd] = b.split('-').map(Number)
+  return Math.round((new Date(by, bm - 1, bd).getTime() - new Date(ay, am - 1, ad).getTime()) / 86400000)
+}
 
-  for (let i = firstDay - 1; i >= 0; i--) {
-    const d = daysInPrev - i
-    const pm = month === 1 ? 12 : month - 1
-    const py = month === 1 ? year - 1 : year
-    cells.push({ date: dateStr(py, pm, d), day: d, currentMonth: false })
+// Returns 6 weeks × 7 days (always 42 cells)
+function buildWeeks(year: number, month: number): string[][] {
+  const firstOfMonth = new Date(year, month - 1, 1)
+  const start = new Date(firstOfMonth)
+  start.setDate(1 - firstOfMonth.getDay())
+
+  const weeks: string[][] = []
+  for (let w = 0; w < 6; w++) {
+    const week: string[] = []
+    for (let d = 0; d < 7; d++) {
+      const cell = new Date(start)
+      cell.setDate(start.getDate() + w * 7 + d)
+      week.push(dateStr(cell.getFullYear(), cell.getMonth() + 1, cell.getDate()))
+    }
+    weeks.push(week)
   }
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push({ date: dateStr(year, month, d), day: d, currentMonth: true })
+  return weeks
+}
+
+interface PositionedEvent {
+  event: CalendarEvent
+  colStart: number  // 1–7 (Sun=1)
+  colSpan: number
+  isStart: boolean  // event starts within this week
+  isEnd: boolean    // event ends within this week
+  lane: number
+}
+
+function layoutWeek(weekDates: string[], events: CalendarEvent[]): PositionedEvent[] {
+  const weekStart = weekDates[0]
+  const weekEnd = weekDates[6]
+
+  const overlapping = events.filter(e => e.start_date <= weekEnd && e.end_date >= weekStart)
+  overlapping.sort((a, b) => {
+    const diff = diffDays(b.start_date, b.end_date) - diffDays(a.start_date, a.end_date)
+    return diff !== 0 ? diff : a.start_date.localeCompare(b.start_date)
+  })
+
+  const placed: PositionedEvent[] = []
+
+  for (const event of overlapping) {
+    const effStart = event.start_date < weekStart ? weekStart : event.start_date
+    const effEnd = event.end_date > weekEnd ? weekEnd : event.end_date
+    const colStart = dayOfWeek(effStart) + 1
+    const colSpan = dayOfWeek(effEnd) - dayOfWeek(effStart) + 1
+    const colEnd = colStart + colSpan - 1
+
+    let lane = 0
+    while (placed.some(p => p.lane === lane && !(p.colStart + p.colSpan - 1 < colStart || p.colStart > colEnd))) {
+      lane++
+    }
+
+    placed.push({
+      event,
+      colStart,
+      colSpan,
+      isStart: event.start_date >= weekStart,
+      isEnd: event.end_date <= weekEnd,
+      lane,
+    })
   }
-  const remaining = 42 - cells.length
-  const nm = month === 12 ? 1 : month + 1
-  const ny = month === 12 ? year + 1 : year
-  for (let d = 1; d <= remaining; d++) {
-    cells.push({ date: dateStr(ny, nm, d), day: d, currentMonth: false })
+
+  return placed
+}
+
+interface CalendarWeekProps {
+  weekDates: string[]
+  events: CalendarEvent[]
+  today: string
+  selectedDate: string | null
+  currentMonth: number
+  onDayClick: (date: string) => void
+  onEventClick: (event: CalendarEvent) => void
+}
+
+function CalendarWeek({ weekDates, events, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
+  const positioned = useMemo(() => layoutWeek(weekDates, events), [weekDates, events])
+
+  const overflowByCol: Record<number, number> = {}
+  for (const pe of positioned) {
+    if (pe.lane >= MAX_LANES) {
+      for (let c = pe.colStart; c < pe.colStart + pe.colSpan; c++) {
+        overflowByCol[c] = (overflowByCol[c] ?? 0) + 1
+      }
+    }
   }
-  return cells
+
+  const visibleEvents = positioned.filter(pe => pe.lane < MAX_LANES)
+
+  return (
+    <div className="calendar-week">
+      <div className="calendar-week-days">
+        {weekDates.map((date, i) => {
+          const col = i + 1
+          const [, m] = date.split('-').map(Number)
+          const isToday = date === today
+          const isSelected = date === selectedDate
+          const overflow = overflowByCol[col]
+          return (
+            <div
+              key={date}
+              className={[
+                'calendar-day-cell',
+                m !== currentMonth ? 'other-month' : '',
+                isToday ? 'today' : '',
+                isSelected ? 'selected' : '',
+              ].filter(Boolean).join(' ')}
+              onClick={() => onDayClick(date)}
+            >
+              <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
+              {overflow != null && (
+                <span className="calendar-overflow-count">+{overflow}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="calendar-week-events">
+        {visibleEvents.map(pe => (
+          <div
+            key={`${pe.event.id}-${pe.event.start_date}-${pe.colStart}`}
+            className={[
+              'event-bar',
+              pe.isStart ? 'is-start' : 'is-continuation',
+              pe.isEnd ? 'is-end' : '',
+            ].filter(Boolean).join(' ')}
+            style={{ gridColumn: `${pe.colStart} / span ${pe.colSpan}`, gridRow: pe.lane + 1 }}
+            onClick={e => { e.stopPropagation(); onEventClick(pe.event) }}
+          >
+            {pe.isStart && <span className="event-bar-title">{pe.event.title}</span>}
+            {pe.isStart && pe.event.time && pe.colSpan === 1 && (
+              <span className="event-bar-time">{pe.event.time}</span>
+            )}
+            {pe.isStart && pe.event.recurrence && (
+              <span className="event-bar-recurrence" aria-label="recurring">↻</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 interface CalendarViewProps {
@@ -56,24 +182,12 @@ interface CalendarViewProps {
   onPrevMonth: () => void
   onNextMonth: () => void
   onDayClick: (date: string) => void
+  onEventClick: (event: CalendarEvent) => void
 }
 
-export function CalendarView({ year, month, events, selectedDate, onPrevMonth, onNextMonth, onDayClick }: CalendarViewProps) {
+export function CalendarView({ year, month, events, selectedDate, onPrevMonth, onNextMonth, onDayClick, onEventClick }: CalendarViewProps) {
   const today = todayStr()
-  const cells = useMemo(() => buildCells(year, month), [year, month])
-
-  const eventsByDate = useMemo(() => {
-    const map: Record<string, CalendarEvent[]> = {}
-    for (const e of events) {
-      for (const cell of cells) {
-        if (cell.date >= e.start_date && cell.date <= e.end_date) {
-          if (!map[cell.date]) map[cell.date] = []
-          map[cell.date].push(e)
-        }
-      }
-    }
-    return map
-  }, [events, cells])
+  const weeks = useMemo(() => buildWeeks(year, month), [year, month])
 
   return (
     <div className="calendar-view">
@@ -92,43 +206,25 @@ export function CalendarView({ year, month, events, selectedDate, onPrevMonth, o
       </div>
 
       <div className="calendar-grid">
-        {DAY_HEADERS.map(h => (
-          <div key={h} className="calendar-day-header">{h}</div>
-        ))}
-        {cells.map(cell => {
-          const dayEvents = eventsByDate[cell.date] ?? []
-          const visible = dayEvents.slice(0, 2)
-          const overflow = dayEvents.length - visible.length
-          const isToday = cell.date === today
-          const isSelected = cell.date === selectedDate
-
-          return (
-            <div
-              key={cell.date}
-              className={[
-                'calendar-cell',
-                cell.currentMonth ? '' : 'other-month',
-                isToday ? 'today' : '',
-                isSelected ? 'selected' : '',
-                dayEvents.length > 0 ? 'has-events' : '',
-              ].filter(Boolean).join(' ')}
-              onClick={() => onDayClick(cell.date)}
-            >
-              <span className="calendar-day-num">{cell.day}</span>
-              <div className="calendar-events">
-                {visible.map(e => (
-                  <div key={e.id} className="event-chip">
-                    {e.time && <span className="event-chip-time">{e.time}</span>}
-                    <span className="event-chip-title">{e.title}</span>
-                  </div>
-                ))}
-                {overflow > 0 && (
-                  <div className="event-chip-overflow">+{overflow} more</div>
-                )}
-              </div>
-            </div>
-          )
-        })}
+        <div className="calendar-headers">
+          {DAY_HEADERS.map(h => (
+            <div key={h} className="calendar-day-header">{h}</div>
+          ))}
+        </div>
+        <div className="calendar-body">
+          {weeks.map(weekDates => (
+            <CalendarWeek
+              key={weekDates[0]}
+              weekDates={weekDates}
+              events={events}
+              today={today}
+              selectedDate={selectedDate}
+              currentMonth={month}
+              onDayClick={onDayClick}
+              onEventClick={onEventClick}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
