@@ -1304,6 +1304,99 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-4);
 }
 
+/* ── Calendar event modal ───────────────────────────────────────── */
+
+.cal-modal {
+  max-width: 420px;
+  max-height: min(600px, 90vh);
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.cal-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-modal-empty {
+  padding: var(--kp-space-5);
+}
+
+.cal-event-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cal-event-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--kp-space-3);
+  padding: var(--kp-space-3) var(--kp-space-5);
+  border-bottom: 1px solid var(--kp-border);
+  transition: background var(--kp-dur-fast) var(--kp-ease);
+}
+
+.cal-event-item-focused {
+  background: var(--kp-hover-bg);
+}
+
+.cal-event-item-editing {
+  padding: var(--kp-space-4) var(--kp-space-5);
+  display: block;
+}
+
+.cal-event-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cal-event-detail-top {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cal-event-title {
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg);
+  font-weight: 500;
+}
+
+.cal-event-detail-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cal-event-actions {
+  display: flex;
+  gap: var(--kp-space-1);
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.cal-modal-add {
+  padding: var(--kp-space-4) var(--kp-space-5);
+}
+
+.cal-modal-add-form {
+  padding: var(--kp-space-4) var(--kp-space-5);
+  border-top: 1px solid var(--kp-border);
+}
+
 /* Mobile calendar adjustments */
 @media (max-width: 600px) {
   .calendar-week {

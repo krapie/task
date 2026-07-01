@@ -802,7 +802,7 @@ export default function App() {
         <EventPanel
           date={selectedCalendarDate}
           dayEvents={selectedDayEvents}
-          initialEditingId={editingEventId}
+          focusEventId={editingEventId}
           onClose={() => { setSelectedCalendarDate(null); setEditingEventId(null) }}
           onAdd={handleAddEvent}
           onEdit={handleEditEvent}

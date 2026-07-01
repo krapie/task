@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CalendarEvent, Recurrence } from '../types'
 
 interface EventPanelProps {
   date: string
   dayEvents: CalendarEvent[]
-  initialEditingId?: string | null
+  focusEventId?: string | null
   onClose: () => void
   onAdd: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
   onEdit: (id: string, data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
@@ -141,18 +141,30 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   )
 }
 
-export function EventPanel({ date, dayEvents, initialEditingId, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
+export function EventPanel({ date, dayEvents, focusEventId, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(initialEditingId ?? null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const focusRef = useRef<HTMLDivElement>(null)
 
   const sorted = [...dayEvents].sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
 
+  useEffect(() => {
+    if (focusEventId && focusRef.current) {
+      focusRef.current.scrollIntoView({ block: 'nearest' })
+    }
+  }, [focusEventId])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
-    <>
-      <div className="panel-overlay" onClick={onClose} />
-      <aside className="panel">
-        <div className="panel-header">
-          <span className="panel-title" style={{ fontSize: 'var(--kp-text-sm)' }}>{formatDisplayDate(date)}</span>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal cal-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header cal-modal-header">
+          <span className="modal-title">{formatDisplayDate(date)}</span>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -160,39 +172,45 @@ export function EventPanel({ date, dayEvents, initialEditingId, onClose, onAdd, 
           </button>
         </div>
 
-        <div className="panel-body">
+        <div className="cal-modal-body">
           {sorted.length === 0 && !showForm && (
-            <div className="empty-state">No events for this day.</div>
+            <div className="empty-state cal-modal-empty">No events for this day.</div>
           )}
 
           {sorted.length > 0 && (
-            <div className="event-list">
-              {sorted.map(event =>
-                editingId === event.id ? (
-                  <EventForm
-                    key={event.id}
-                    defaultDate={date}
-                    initial={event}
-                    onSave={data => { onEdit(event.id, data); setEditingId(null) }}
-                    onCancel={() => setEditingId(null)}
-                  />
+            <div className="cal-event-list">
+              {sorted.map(event => {
+                const isFocused = event.id === focusEventId
+                return editingId === event.id ? (
+                  <div key={event.id} className="cal-event-item cal-event-item-editing">
+                    <EventForm
+                      defaultDate={date}
+                      initial={event}
+                      onSave={data => { onEdit(event.id, data); setEditingId(null) }}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  </div>
                 ) : (
-                  <div key={event.id} className="event-item">
-                    <div className="event-item-main">
-                      {event.time && <span className="event-item-time">{event.time}</span>}
-                      <div className="event-item-title-row">
-                        <span className="event-item-title">{event.title}</span>
+                  <div
+                    key={event.id}
+                    ref={isFocused ? focusRef : null}
+                    className={['cal-event-item', isFocused ? 'cal-event-item-focused' : ''].filter(Boolean).join(' ')}
+                  >
+                    <div className="cal-event-detail">
+                      <div className="cal-event-detail-top">
+                        {event.time && <span className="event-item-time">{event.time}</span>}
+                        <span className="cal-event-title">{event.title}</span>
+                      </div>
+                      <div className="cal-event-detail-meta">
                         {event.recurrence && (
-                          <span className="event-item-recurrence" title={RECURRENCE_LABELS[event.recurrence]}>
-                            ↻ {RECURRENCE_LABELS[event.recurrence]}
-                          </span>
+                          <span className="event-item-recurrence">↻ {RECURRENCE_LABELS[event.recurrence]}</span>
+                        )}
+                        {event.start_date !== event.end_date && !event.recurrence && (
+                          <span className="event-item-range">{event.start_date} – {event.end_date}</span>
                         )}
                       </div>
-                      {event.start_date !== event.end_date && !event.recurrence && (
-                        <span className="event-item-range">{event.start_date} – {event.end_date}</span>
-                      )}
                     </div>
-                    <div className="event-item-actions">
+                    <div className="cal-event-actions">
                       <button className="task-edit-btn" onClick={() => setEditingId(event.id)} aria-label="Edit">
                         <PencilIcon />
                       </button>
@@ -202,26 +220,30 @@ export function EventPanel({ date, dayEvents, initialEditingId, onClose, onAdd, 
                     </div>
                   </div>
                 )
-              )}
+              })}
             </div>
           )}
 
           {showForm ? (
-            <EventForm
-              defaultDate={date}
-              onSave={data => { onAdd(data); setShowForm(false) }}
-              onCancel={() => setShowForm(false)}
-            />
+            <div className="cal-modal-add-form">
+              <EventForm
+                defaultDate={date}
+                onSave={data => { onAdd(data); setShowForm(false) }}
+                onCancel={() => setShowForm(false)}
+              />
+            </div>
           ) : (
-            <button className="settings-action-btn" onClick={() => setShowForm(true)}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Add event
-            </button>
+            <div className="cal-modal-add">
+              <button className="settings-action-btn" onClick={() => setShowForm(true)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                Add event
+              </button>
+            </div>
           )}
         </div>
-      </aside>
-    </>
+      </div>
+    </div>
   )
 }
