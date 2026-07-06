@@ -131,6 +131,7 @@ export const api = {
       if (params?.limit) q.set('limit', String(params.limit))
       return req<MailItem[]>('GET', `/mail/items?${q}`)
     },
+    getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
     sync: (account_id?: string) => req<{ synced: number }>('POST', '/mail/sync', account_id ? { account_id } : {}),
   },

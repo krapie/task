@@ -121,6 +121,7 @@ export function MailInbox({ isAuth }: MailInboxProps) {
   const [showAddForm, setShowAddForm] = useState(false)
   const [activeAccount, setActiveAccount] = useState<string | null>(null)
   const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
+  const [bodyLoading, setBodyLoading] = useState(false)
 
   const loadAccounts = useCallback(async () => {
     const accts = await api.mail.getAccounts().catch(() => [])
@@ -163,9 +164,18 @@ export function MailInbox({ isAuth }: MailInboxProps) {
     if (activeAccount === id) setActiveAccount(null)
   }
 
-  function handleItemClick(item: MailItem) {
+  async function handleItemClick(item: MailItem) {
     setSelectedItem(item)
     handleMarkRead(item)
+    if (item.body === undefined) {
+      setBodyLoading(true)
+      const full = await api.mail.getItem(item.id).catch(() => null)
+      if (full) {
+        setSelectedItem(prev => prev?.id === item.id ? { ...prev, body: full.body } : prev)
+        setItems(prev => prev.map(m => m.id === item.id ? { ...m, body: full.body } : m))
+      }
+      setBodyLoading(false)
+    }
   }
 
   const unreadCount = items.filter(m => !m.read).length
@@ -318,7 +328,9 @@ export function MailInbox({ isAuth }: MailInboxProps) {
             <span>{new Date(selectedItem.received_at).toLocaleString()}</span>
           </div>
           <div className="mail-detail-body">
-            {selectedItem.snippet || '(no preview available)'}
+            {bodyLoading
+              ? 'Loading…'
+              : (selectedItem.body ?? selectedItem.snippet ?? '(no content)')}
           </div>
         </div>
       )}

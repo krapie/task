@@ -81,4 +81,5 @@ export interface MailItem {
   received_at: string
   read: boolean
   snippet: string | null
+  body?: string | null
 }

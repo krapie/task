@@ -478,6 +478,7 @@ app.get('/api/mail/accounts', auth, mailProxy)
 app.post('/api/mail/accounts', auth, mailProxy)
 app.delete('/api/mail/accounts/:id', auth, mailProxy)
 app.get('/api/mail/items', auth, mailProxy)
+app.get('/api/mail/items/:id', auth, mailProxy)
 app.post('/api/mail/items/:id/read', auth, mailProxy)
 app.post('/api/mail/sync', auth, mailProxy)
 
