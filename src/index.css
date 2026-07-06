@@ -1753,12 +1753,27 @@ a { color: var(--kp-fg); text-decoration: none; }
 .mail-form-row .mail-form-field { flex: 1; }
 
 .mail-toggle {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  background: var(--kp-surface);
   font-size: 13px;
   color: var(--kp-text-secondary);
   cursor: pointer;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.mail-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--kp-text-primary);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .mail-form-actions {

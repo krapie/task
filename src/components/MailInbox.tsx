@@ -58,7 +58,7 @@ function AddAccountForm({ onAdd, onCancel }: AddAccountFormProps) {
       {error && <p className="mail-error">{error}</p>}
       <div className="mail-form-field">
         <label>Label</label>
-        <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Gmail" required />
+        <input type="text" value={label} onChange={e => setLabel(e.target.value)} placeholder="Gmail" required />
       </div>
       <div className="mail-form-field">
         <label>Email address</label>
@@ -66,7 +66,7 @@ function AddAccountForm({ onAdd, onCancel }: AddAccountFormProps) {
       </div>
       <div className="mail-form-field">
         <label>IMAP host</label>
-        <input value={host} onChange={e => setHost(e.target.value)} placeholder="imap.gmail.com" required />
+        <input type="text" value={host} onChange={e => setHost(e.target.value)} placeholder="imap.gmail.com" required />
       </div>
       <div className="mail-form-row">
         <div className="mail-form-field">
@@ -83,7 +83,7 @@ function AddAccountForm({ onAdd, onCancel }: AddAccountFormProps) {
       </div>
       <div className="mail-form-field">
         <label>Username</label>
-        <input value={username} onChange={e => setUsername(e.target.value)} placeholder="you@gmail.com" required />
+        <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="you@gmail.com" required />
       </div>
       <div className="mail-form-field">
         <label>Password / App password</label>
