@@ -458,7 +458,7 @@ app.post('/api/import', auth, async (req, res) => {
 // ── Mail proxy (forwards to mail-bridge) ────────────────────────────
 async function mailProxy(req, res) {
   try {
-    const url = `${MAIL_BRIDGE_URL}/internal${req.path.replace('/api/mail', '')}`
+    const url = `${MAIL_BRIDGE_URL}/internal${req.url.replace('/api/mail', '')}`
     const upstream = await fetch(url, {
       method: req.method,
       headers: {
