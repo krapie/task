@@ -1720,6 +1720,31 @@ a { color: var(--kp-fg); text-decoration: none; }
   font-weight: 500;
 }
 
+.mail-form-field input[type="text"],
+.mail-form-field input[type="email"],
+.mail-form-field input[type="password"],
+.mail-form-field input[type="number"] {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  background: var(--kp-surface);
+  color: var(--kp-text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--kp-dur-fast) var(--kp-ease);
+  box-sizing: border-box;
+}
+
+.mail-form-field input:focus {
+  border-color: var(--kp-border-strong);
+}
+
+.mail-form-field input::placeholder {
+  color: var(--kp-text-muted);
+}
+
 .mail-form-row {
   display: flex;
   gap: 12px;
