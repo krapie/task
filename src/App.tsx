@@ -795,7 +795,7 @@ export default function App() {
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
         ) : (
-          <MailInbox />
+          <MailInbox isAuth={isAuth} />
         )}
       </main>
 

@@ -99,7 +99,20 @@ function AddAccountForm({ onAdd, onCancel }: AddAccountFormProps) {
   )
 }
 
-export function MailInbox() {
+interface MailInboxProps {
+  isAuth: boolean
+}
+
+export function MailInbox({ isAuth }: MailInboxProps) {
+  if (!isAuth) {
+    return (
+      <div className="mail-inbox">
+        <div className="mail-empty" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          Sign in to view mail
+        </div>
+      </div>
+    )
+  }
   const [panel, setPanel] = useState<Panel>('inbox')
   const [accounts, setAccounts] = useState<MailAccount[]>([])
   const [items, setItems] = useState<MailItem[]>([])
