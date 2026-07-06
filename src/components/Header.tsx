@@ -1,7 +1,9 @@
+type View = 'board' | 'calendar' | 'mail'
+
 interface HeaderProps {
   username: string | null
-  view: 'board' | 'calendar'
-  onToggleView: () => void
+  view: View
+  onSetView: (v: View) => void
   onSignIn: () => void
   onSignOut: () => void
   onSettings: () => void
@@ -9,7 +11,7 @@ interface HeaderProps {
   onToggleTheme: () => void
 }
 
-export function Header({ username, view, onToggleView, onSignIn, onSignOut, onSettings, theme, onToggleTheme }: HeaderProps) {
+export function Header({ username, view, onSetView, onSignIn, onSignOut, onSettings, theme, onToggleTheme }: HeaderProps) {
   return (
     <header className="header">
       <div className="header-inner">
@@ -24,16 +26,35 @@ export function Header({ username, view, onToggleView, onSignIn, onSignOut, onSe
           ) : (
             <button className="auth-btn" onClick={onSignIn}>Sign in</button>
           )}
-          <button className="icon-btn" onClick={onToggleView} aria-label={view === 'board' ? 'Calendar view' : 'Board view'}>
-            {view === 'board' ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-              </svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-              </svg>
-            )}
+          {/* Board view */}
+          <button
+            className={`icon-btn${view === 'board' ? ' icon-btn-active' : ''}`}
+            onClick={() => onSetView('board')}
+            aria-label="Board view"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+            </svg>
+          </button>
+          {/* Calendar view */}
+          <button
+            className={`icon-btn${view === 'calendar' ? ' icon-btn-active' : ''}`}
+            onClick={() => onSetView('calendar')}
+            aria-label="Calendar view"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+          </button>
+          {/* Mail view */}
+          <button
+            className={`icon-btn${view === 'mail' ? ' icon-btn-active' : ''}`}
+            onClick={() => onSetView('mail')}
+            aria-label="Mail view"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+            </svg>
           </button>
           <button className="icon-btn" onClick={onSettings} aria-label="Settings">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

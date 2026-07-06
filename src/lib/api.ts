@@ -1,14 +1,34 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem } from '../types'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
 }
 
-function headers(): Record<string, string> {
-  const token = getToken()
+function setToken(token: string) {
+  localStorage.setItem('task_token', token)
+}
+
+function clearToken() {
+  localStorage.removeItem('task_token')
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+    if (!res.ok) return null
+    const { token } = await res.json()
+    setToken(token)
+    return token
+  } catch {
+    return null
+  }
+}
+
+function headers(token?: string | null): Record<string, string> {
+  const t = token ?? getToken()
   return {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
   }
 }
 
@@ -16,8 +36,30 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   const res = await fetch(`/api${path}`, {
     method,
     headers: headers(),
+    credentials: 'include',
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
+
+  if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh') {
+    const newToken = await refreshAccessToken()
+    if (!newToken) {
+      clearToken()
+      window.location.reload()
+      throw new Error('Session expired')
+    }
+    const retry = await fetch(`/api${path}`, {
+      method,
+      headers: headers(newToken),
+      credentials: 'include',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    if (!retry.ok) {
+      const err = await retry.json().catch(() => ({ error: retry.statusText }))
+      throw new Error((err as { error?: string }).error ?? retry.statusText)
+    }
+    return retry.json() as Promise<T>
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error((err as { error?: string }).error ?? res.statusText)
@@ -27,9 +69,17 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 export const api = {
   auth: {
-    login: (username: string, password: string) =>
-      req<{ token: string }>('POST', '/auth/login', { username, password }),
+    login: async (username: string, password: string) => {
+      const data = await req<{ token: string }>('POST', '/auth/login', { username, password })
+      setToken(data.token)
+      return data
+    },
     me: () => req<{ username: string }>('GET', '/auth/me'),
+    logout: async () => {
+      await req<void>('POST', '/auth/logout')
+      clearToken()
+    },
+    refresh: () => refreshAccessToken(),
   },
   templates: {
     getAll: () => req<Record<Slot, Template[]>>('GET', '/templates'),
@@ -69,4 +119,19 @@ export const api = {
   export: () => req<ExportData>('GET', '/export'),
   import: (data: ExportData, mode: 'merge' | 'replace') =>
     req<void>('POST', '/import', { data, mode }),
+  mail: {
+    getAccounts: () => req<MailAccount[]>('GET', '/mail/accounts'),
+    addAccount: (data: Omit<MailAccount, 'id' | 'last_synced'>) =>
+      req<MailAccount>('POST', '/mail/accounts', data),
+    removeAccount: (id: string) => req<void>('DELETE', `/mail/accounts/${id}`),
+    getItems: (params?: { account_id?: string; unread?: boolean; limit?: number }) => {
+      const q = new URLSearchParams()
+      if (params?.account_id) q.set('account_id', params.account_id)
+      if (params?.unread !== undefined) q.set('unread', String(params.unread))
+      if (params?.limit) q.set('limit', String(params.limit))
+      return req<MailItem[]>('GET', `/mail/items?${q}`)
+    },
+    markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
+    sync: (account_id?: string) => req<{ synced: number }>('POST', '/mail/sync', account_id ? { account_id } : {}),
+  },
 }

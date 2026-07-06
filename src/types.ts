@@ -59,3 +59,26 @@ export interface DailyEvent {
   time: string | null
   completed: boolean
 }
+
+export interface MailAccount {
+  id: string
+  label: string
+  email: string
+  host: string
+  port: number
+  tls: boolean
+  username: string
+  last_synced: string | null
+}
+
+export interface MailItem {
+  id: string
+  account_id: string
+  message_id: string
+  subject: string
+  from_address: string
+  from_name: string | null
+  received_at: string
+  read: boolean
+  snippet: string | null
+}

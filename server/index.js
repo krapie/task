@@ -1,70 +1,110 @@
 import express from 'express'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
-import Database from 'better-sqlite3'
+import cookieParser from 'cookie-parser'
+import pg from 'pg'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { randomUUID } from 'crypto'
+import { randomUUID, createHash } from 'crypto'
+import fetch from 'node-fetch'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
-const DB_PATH = process.env.DB_PATH || join(__dirname, '../task.db')
-const TASK_USERNAME = process.env.TASK_USERNAME || 'kevinprk'
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me'
+const TASK_USERNAME = process.env.TASK_USERNAME || 'admin'
 const TASK_PASSWORD = process.env.TASK_PASSWORD || ''
+const MAIL_BRIDGE_URL = process.env.MAIL_BRIDGE_URL || 'http://localhost:3001'
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
 
-const db = new Database(DB_PATH)
-db.pragma('journal_mode = WAL')
+const pool = new pg.Pool({ connectionString: process.env.POSTGRES_URL })
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS templates (
-    id TEXT PRIMARY KEY,
-    slot TEXT NOT NULL,
-    text TEXT NOT NULL,
-    position INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS daily_additions (
-    id TEXT PRIMARY KEY,
-    slot_date TEXT NOT NULL,
-    text TEXT NOT NULL,
-    completed INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS template_completions (
-    template_id TEXT NOT NULL,
-    slot_date TEXT NOT NULL,
-    PRIMARY KEY (template_id, slot_date)
-  );
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  );
-  INSERT OR IGNORE INTO settings VALUES ('rotateHour', '6');
-  INSERT OR IGNORE INTO settings VALUES ('rotateMinute', '0');
-  INSERT OR IGNORE INTO settings VALUES ('keepBonus', 'false');
-  CREATE TABLE IF NOT EXISTS events (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    start_date TEXT NOT NULL,
-    end_date TEXT NOT NULL,
-    time TEXT,
-    recurrence TEXT,
-    created_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS event_completions (
-    event_id TEXT NOT NULL,
-    slot_date TEXT NOT NULL,
-    PRIMARY KEY (event_id, slot_date)
-  );
-`)
-
-try { db.exec('ALTER TABLE events ADD COLUMN recurrence TEXT') } catch { /* already exists */ }
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS templates (
+      id TEXT PRIMARY KEY,
+      slot TEXT NOT NULL,
+      text TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at BIGINT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS daily_additions (
+      id TEXT PRIMARY KEY,
+      slot_date TEXT NOT NULL,
+      text TEXT NOT NULL,
+      completed BOOLEAN NOT NULL DEFAULT false,
+      created_at BIGINT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS template_completions (
+      template_id TEXT NOT NULL,
+      slot_date TEXT NOT NULL,
+      PRIMARY KEY (template_id, slot_date)
+    );
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      time TEXT,
+      recurrence TEXT,
+      created_at BIGINT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS event_completions (
+      event_id TEXT NOT NULL,
+      slot_date TEXT NOT NULL,
+      PRIMARY KEY (event_id, slot_date)
+    );
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      token_hash TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id SERIAL PRIMARY KEY,
+      event TEXT NOT NULL,
+      ip TEXT,
+      user_agent TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `)
+  await pool.query(`
+    INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('rotateMinute', '0') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('keepBonus', 'false') ON CONFLICT DO NOTHING;
+  `)
+}
 
 const app = express()
-const distPath = join(__dirname, '../dist')
-app.use(express.static(distPath))
 app.use(express.json())
+app.use(cookieParser())
+
+// Rate limiting (simple in-memory, sufficient for single-user personal server)
+const loginAttempts = new Map()
+function rateLimit(req, res, next) {
+  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown'
+  const now = Date.now()
+  const window = 60_000
+  const max = 10
+  const attempts = (loginAttempts.get(ip) || []).filter(t => now - t < window)
+  if (attempts.length >= max) return res.status(429).json({ error: 'Too many attempts' })
+  loginAttempts.set(ip, [...attempts, now])
+  next()
+}
+setInterval(() => {
+  const now = Date.now()
+  for (const [ip, times] of loginAttempts) {
+    const fresh = times.filter(t => now - t < 60_000)
+    if (fresh.length === 0) loginAttempts.delete(ip)
+    else loginAttempts.set(ip, fresh)
+  }
+}, 60_000)
+
+async function audit(event, req) {
+  const ip = req.ip || req.headers['x-forwarded-for'] || null
+  const ua = req.headers['user-agent'] || null
+  await pool.query('INSERT INTO audit_log (event, ip, user_agent) VALUES ($1, $2, $3)', [event, ip, ua]).catch(() => {})
+}
 
 function auth(req, res, next) {
   const header = req.headers.authorization
@@ -77,29 +117,73 @@ function auth(req, res, next) {
   }
 }
 
-// Auth
-app.post('/api/auth/login', async (req, res) => {
+// ── Health ──────────────────────────────────────────────────────────
+app.get('/api/health', (_req, res) => res.json({ ok: true }))
+
+// ── Auth ────────────────────────────────────────────────────────────
+app.post('/api/auth/login', rateLimit, async (req, res) => {
   const { username, password } = req.body ?? {}
   if (!username || !password) return res.status(400).json({ error: 'Missing credentials' })
-  if (username !== TASK_USERNAME) return res.status(401).json({ error: 'Invalid credentials' })
+  if (username !== TASK_USERNAME) {
+    await audit('login_fail', req)
+    return res.status(401).json({ error: 'Invalid credentials' })
+  }
   if (!TASK_PASSWORD) return res.status(503).json({ error: 'TASK_PASSWORD not set' })
-
   const valid = TASK_PASSWORD.startsWith('$2')
     ? await bcrypt.compare(password, TASK_PASSWORD)
     : password === TASK_PASSWORD
-
-  if (!valid) return res.status(401).json({ error: 'Invalid credentials' })
-  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '30d' })
+  if (!valid) {
+    await audit('login_fail', req)
+    return res.status(401).json({ error: 'Invalid credentials' })
+  }
+  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '15m' })
+  const refreshToken = jwt.sign({ username }, JWT_REFRESH_SECRET, { expiresIn: '30d' })
+  const hash = createHash('sha256').update(refreshToken).digest('hex')
+  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  await pool.query(
+    'INSERT INTO refresh_tokens (token_hash, username, expires_at) VALUES ($1, $2, $3) ON CONFLICT (token_hash) DO NOTHING',
+    [hash, username, expires]
+  )
+  await audit('login_success', req)
+  res.cookie('refresh_token', refreshToken, { httpOnly: true, secure: true, sameSite: 'strict', expires })
   res.json({ token })
+})
+
+app.post('/api/auth/refresh', async (req, res) => {
+  const refreshToken = req.cookies?.refresh_token
+  if (!refreshToken) return res.status(401).json({ error: 'No refresh token' })
+  try {
+    const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET)
+    const hash = createHash('sha256').update(refreshToken).digest('hex')
+    const { rows } = await pool.query(
+      'SELECT * FROM refresh_tokens WHERE token_hash = $1 AND expires_at > NOW()',
+      [hash]
+    )
+    if (!rows.length) return res.status(401).json({ error: 'Invalid refresh token' })
+    const token = jwt.sign({ username: payload.username }, JWT_SECRET, { expiresIn: '15m' })
+    res.json({ token })
+  } catch {
+    res.status(401).json({ error: 'Invalid refresh token' })
+  }
+})
+
+app.post('/api/auth/logout', async (req, res) => {
+  const refreshToken = req.cookies?.refresh_token
+  if (refreshToken) {
+    const hash = createHash('sha256').update(refreshToken).digest('hex')
+    await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [hash])
+  }
+  res.clearCookie('refresh_token')
+  res.json({ ok: true })
 })
 
 app.get('/api/auth/me', auth, (req, res) => {
   res.json({ username: req.user.username })
 })
 
-// Templates
-app.get('/api/templates', auth, (_req, res) => {
-  const rows = db.prepare('SELECT * FROM templates ORDER BY slot, position').all()
+// ── Templates ───────────────────────────────────────────────────────
+app.get('/api/templates', auth, async (_req, res) => {
+  const { rows } = await pool.query('SELECT * FROM templates ORDER BY slot, position')
   const grouped = { mon: [], tue: [], wed: [], thu: [], fri: [], weekend: [] }
   for (const row of rows) {
     if (Object.prototype.hasOwnProperty.call(grouped, row.slot)) grouped[row.slot].push(row)
@@ -107,159 +191,177 @@ app.get('/api/templates', auth, (_req, res) => {
   res.json(grouped)
 })
 
-app.post('/api/templates', auth, (req, res) => {
+app.post('/api/templates', auth, async (req, res) => {
   const { slot, text } = req.body ?? {}
   const VALID = ['mon', 'tue', 'wed', 'thu', 'fri', 'weekend']
   if (!VALID.includes(slot) || !text?.trim()) return res.status(400).json({ error: 'Invalid slot or text' })
-  const { m } = db.prepare('SELECT MAX(position) as m FROM templates WHERE slot = ?').get(slot)
+  const { rows: [{ m }] } = await pool.query('SELECT MAX(position) as m FROM templates WHERE slot = $1', [slot])
   const position = (m ?? -1) + 1
   const id = randomUUID()
   const now = Date.now()
-  db.prepare('INSERT INTO templates VALUES (?, ?, ?, ?, ?)').run(id, slot, text.trim(), position, now)
+  await pool.query('INSERT INTO templates VALUES ($1, $2, $3, $4, $5)', [id, slot, text.trim(), position, now])
   res.json({ id, slot, text: text.trim(), position, created_at: now })
 })
 
-app.put('/api/templates/reorder', auth, (req, res) => {
+app.put('/api/templates/reorder', auth, async (req, res) => {
   const { slot, ids } = req.body ?? {}
   if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be array' })
-  const update = db.prepare('UPDATE templates SET position = ? WHERE id = ? AND slot = ?')
-  db.transaction(() => { ids.forEach((id, i) => update.run(i, id, slot)) })()
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    for (let i = 0; i < ids.length; i++) {
+      await client.query('UPDATE templates SET position = $1 WHERE id = $2 AND slot = $3', [i, ids[i], slot])
+    }
+    await client.query('COMMIT')
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
   res.json({ ok: true })
 })
 
-app.put('/api/templates/:id', auth, (req, res) => {
+app.put('/api/templates/:id', auth, async (req, res) => {
   const { text } = req.body ?? {}
   if (!text?.trim()) return res.status(400).json({ error: 'Text required' })
-  db.prepare('UPDATE templates SET text = ? WHERE id = ?').run(text.trim(), req.params.id)
-  res.json(db.prepare('SELECT * FROM templates WHERE id = ?').get(req.params.id))
+  await pool.query('UPDATE templates SET text = $1 WHERE id = $2', [text.trim(), req.params.id])
+  const { rows: [row] } = await pool.query('SELECT * FROM templates WHERE id = $1', [req.params.id])
+  res.json(row)
 })
 
-app.delete('/api/templates/:id', auth, (req, res) => {
-  db.prepare('DELETE FROM templates WHERE id = ?').run(req.params.id)
-  db.prepare('DELETE FROM template_completions WHERE template_id = ?').run(req.params.id)
+app.delete('/api/templates/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM templates WHERE id = $1', [req.params.id])
+  await pool.query('DELETE FROM template_completions WHERE template_id = $1', [req.params.id])
   res.json({ ok: true })
 })
 
-// Daily
+// ── Daily ───────────────────────────────────────────────────────────
 const DAY_TO_SLOT = ['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend']
 
-app.get('/api/daily/:slotDate', auth, (req, res) => {
+app.get('/api/daily/:slotDate', auth, async (req, res) => {
   const { slotDate } = req.params
   if (!/^\d{4}-\d{2}-\d{2}$/.test(slotDate)) return res.status(400).json({ error: 'Invalid date' })
   const [y, m, d] = slotDate.split('-').map(Number)
   const slot = DAY_TO_SLOT[new Date(y, m - 1, d).getDay()]
-  const templates = db.prepare('SELECT * FROM templates WHERE slot = ? ORDER BY position').all(slot)
-  const completedIds = new Set(
-    db.prepare('SELECT template_id FROM template_completions WHERE slot_date = ?')
-      .all(slotDate).map(r => r.template_id)
+  const { rows: templates } = await pool.query('SELECT * FROM templates WHERE slot = $1 ORDER BY position', [slot])
+  const { rows: completionRows } = await pool.query(
+    'SELECT template_id FROM template_completions WHERE slot_date = $1', [slotDate]
   )
-  const additions = db.prepare(
-    'SELECT * FROM daily_additions WHERE slot_date = ? ORDER BY created_at'
-  ).all(slotDate).map(r => ({ ...r, completed: r.completed === 1 }))
-
-  const eventCompletions = db.prepare(
-    'SELECT event_id FROM event_completions WHERE slot_date = ?'
-  ).all(slotDate).map(r => r.event_id)
-
+  const completedIds = new Set(completionRows.map(r => r.template_id))
+  const { rows: additions } = await pool.query(
+    'SELECT * FROM daily_additions WHERE slot_date = $1 ORDER BY created_at', [slotDate]
+  )
+  const { rows: ecRows } = await pool.query(
+    'SELECT event_id FROM event_completions WHERE slot_date = $1', [slotDate]
+  )
   res.json({
     slotDate,
     slot,
     templates: templates.map(t => ({ ...t, completed: completedIds.has(t.id) })),
     additions,
-    eventCompletions,
+    eventCompletions: ecRows.map(r => r.event_id),
   })
 })
 
-app.post('/api/daily/additions', auth, (req, res) => {
+app.post('/api/daily/additions', auth, async (req, res) => {
   const { slotDate, text } = req.body ?? {}
   if (!slotDate || !text?.trim()) return res.status(400).json({ error: 'Missing fields' })
   const id = randomUUID()
   const now = Date.now()
-  db.prepare('INSERT INTO daily_additions VALUES (?, ?, ?, 0, ?)').run(id, slotDate, text.trim(), now)
+  await pool.query('INSERT INTO daily_additions VALUES ($1, $2, $3, false, $4)', [id, slotDate, text.trim(), now])
   res.json({ id, slot_date: slotDate, text: text.trim(), completed: false, created_at: now })
 })
 
-app.put('/api/daily/additions/:id', auth, (req, res) => {
+app.put('/api/daily/additions/:id', auth, async (req, res) => {
   const { text } = req.body ?? {}
   if (!text?.trim()) return res.status(400).json({ error: 'Text required' })
-  db.prepare('UPDATE daily_additions SET text = ? WHERE id = ?').run(text.trim(), req.params.id)
-  const row = db.prepare('SELECT * FROM daily_additions WHERE id = ?').get(req.params.id)
-  res.json({ ...row, completed: row.completed === 1 })
+  await pool.query('UPDATE daily_additions SET text = $1 WHERE id = $2', [text.trim(), req.params.id])
+  const { rows: [row] } = await pool.query('SELECT * FROM daily_additions WHERE id = $1', [req.params.id])
+  res.json(row)
 })
 
-app.delete('/api/daily/additions/:id', auth, (req, res) => {
-  db.prepare('DELETE FROM daily_additions WHERE id = ?').run(req.params.id)
+app.delete('/api/daily/additions/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM daily_additions WHERE id = $1', [req.params.id])
   res.json({ ok: true })
 })
 
-app.post('/api/daily/toggle', auth, (req, res) => {
+app.post('/api/daily/toggle', auth, async (req, res) => {
   const { type, id, slotDate, completed } = req.body ?? {}
   if (type === 'template') {
     if (completed) {
-      db.prepare('INSERT OR IGNORE INTO template_completions VALUES (?, ?)').run(id, slotDate)
+      await pool.query(
+        'INSERT INTO template_completions VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, slotDate]
+      )
     } else {
-      db.prepare('DELETE FROM template_completions WHERE template_id = ? AND slot_date = ?').run(id, slotDate)
+      await pool.query('DELETE FROM template_completions WHERE template_id = $1 AND slot_date = $2', [id, slotDate])
     }
   } else {
-    db.prepare('UPDATE daily_additions SET completed = ? WHERE id = ?').run(completed ? 1 : 0, id)
+    await pool.query('UPDATE daily_additions SET completed = $1 WHERE id = $2', [completed, id])
   }
   res.json({ ok: true })
 })
 
-// Additions range query (for calendar view)
-app.get('/api/daily/additions/range', auth, (req, res) => {
+app.get('/api/daily/additions/range', auth, async (req, res) => {
   const { from, to } = req.query
   if (!from || !to) return res.status(400).json({ error: 'Missing from/to' })
-  const rows = db.prepare(
-    'SELECT * FROM daily_additions WHERE slot_date >= ? AND slot_date <= ? ORDER BY slot_date, created_at'
-  ).all(from, to)
-  res.json(rows.map(r => ({ ...r, completed: r.completed === 1 })))
-})
-
-// Events
-app.get('/api/events', auth, (_req, res) => {
-  const rows = db.prepare('SELECT * FROM events ORDER BY start_date, time').all()
+  const { rows } = await pool.query(
+    'SELECT * FROM daily_additions WHERE slot_date >= $1 AND slot_date <= $2 ORDER BY slot_date, created_at',
+    [from, to]
+  )
   res.json(rows)
 })
 
-app.post('/api/events', auth, (req, res) => {
+// ── Events ──────────────────────────────────────────────────────────
+app.get('/api/events', auth, async (_req, res) => {
+  const { rows } = await pool.query('SELECT * FROM events ORDER BY start_date, time')
+  res.json(rows)
+})
+
+app.post('/api/events', auth, async (req, res) => {
   const { title, start_date, end_date, time, recurrence } = req.body ?? {}
   if (!title?.trim() || !start_date || !end_date) return res.status(400).json({ error: 'Missing fields' })
   if (end_date < start_date) return res.status(400).json({ error: 'end_date before start_date' })
   const id = randomUUID()
   const now = Date.now()
-  db.prepare('INSERT INTO events (id, title, start_date, end_date, time, recurrence, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, title.trim(), start_date, end_date, time || null, recurrence || null, now)
+  await pool.query(
+    'INSERT INTO events (id, title, start_date, end_date, time, recurrence, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    [id, title.trim(), start_date, end_date, time || null, recurrence || null, now]
+  )
   res.json({ id, title: title.trim(), start_date, end_date, time: time || null, recurrence: recurrence || null, created_at: now })
 })
 
-app.put('/api/events/:id', auth, (req, res) => {
+app.put('/api/events/:id', auth, async (req, res) => {
   const { title, start_date, end_date, time, recurrence } = req.body ?? {}
   if (!title?.trim() || !start_date || !end_date) return res.status(400).json({ error: 'Missing fields' })
-  db.prepare('UPDATE events SET title = ?, start_date = ?, end_date = ?, time = ?, recurrence = ? WHERE id = ?')
-    .run(title.trim(), start_date, end_date, time || null, recurrence || null, req.params.id)
-  res.json(db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id))
+  await pool.query(
+    'UPDATE events SET title=$1, start_date=$2, end_date=$3, time=$4, recurrence=$5 WHERE id=$6',
+    [title.trim(), start_date, end_date, time || null, recurrence || null, req.params.id]
+  )
+  const { rows: [row] } = await pool.query('SELECT * FROM events WHERE id = $1', [req.params.id])
+  res.json(row)
 })
 
-app.delete('/api/events/:id', auth, (req, res) => {
-  db.prepare('DELETE FROM events WHERE id = ?').run(req.params.id)
-  db.prepare('DELETE FROM event_completions WHERE event_id = ?').run(req.params.id)
+app.delete('/api/events/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM events WHERE id = $1', [req.params.id])
+  await pool.query('DELETE FROM event_completions WHERE event_id = $1', [req.params.id])
   res.json({ ok: true })
 })
 
-app.post('/api/events/:id/toggle', auth, (req, res) => {
+app.post('/api/events/:id/toggle', auth, async (req, res) => {
   const { slot_date, completed } = req.body ?? {}
   if (!slot_date) return res.status(400).json({ error: 'Missing slot_date' })
   if (completed) {
-    db.prepare('INSERT OR IGNORE INTO event_completions VALUES (?, ?)').run(req.params.id, slot_date)
+    await pool.query('INSERT INTO event_completions VALUES ($1, $2) ON CONFLICT DO NOTHING', [req.params.id, slot_date])
   } else {
-    db.prepare('DELETE FROM event_completions WHERE event_id = ? AND slot_date = ?').run(req.params.id, slot_date)
+    await pool.query('DELETE FROM event_completions WHERE event_id = $1 AND slot_date = $2', [req.params.id, slot_date])
   }
   res.json({ ok: true })
 })
 
-// Settings
-app.get('/api/settings', auth, (_req, res) => {
-  const rows = db.prepare('SELECT * FROM settings').all()
+// ── Settings ─────────────────────────────────────────────────────────
+app.get('/api/settings', auth, async (_req, res) => {
+  const { rows } = await pool.query('SELECT * FROM settings')
   const s = Object.fromEntries(rows.map(r => [r.key, r.value]))
   res.json({
     rotateHour: parseInt(s.rotateHour ?? '6'),
@@ -268,15 +370,23 @@ app.get('/api/settings', auth, (_req, res) => {
   })
 })
 
-app.put('/api/settings', auth, (req, res) => {
+app.put('/api/settings', auth, async (req, res) => {
   const { rotateHour, rotateMinute, keepBonus } = req.body ?? {}
-  const upsert = db.prepare('INSERT OR REPLACE INTO settings VALUES (?, ?)')
-  db.transaction(() => {
-    if (rotateHour !== undefined) upsert.run('rotateHour', String(rotateHour))
-    if (rotateMinute !== undefined) upsert.run('rotateMinute', String(rotateMinute))
-    if (keepBonus !== undefined) upsert.run('keepBonus', String(keepBonus))
-  })()
-  const rows = db.prepare('SELECT * FROM settings').all()
+  const upsert = 'INSERT INTO settings VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    if (rotateHour !== undefined) await client.query(upsert, ['rotateHour', String(rotateHour)])
+    if (rotateMinute !== undefined) await client.query(upsert, ['rotateMinute', String(rotateMinute)])
+    if (keepBonus !== undefined) await client.query(upsert, ['keepBonus', String(keepBonus)])
+    await client.query('COMMIT')
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
+  const { rows } = await pool.query('SELECT * FROM settings')
   const s = Object.fromEntries(rows.map(r => [r.key, r.value]))
   res.json({
     rotateHour: parseInt(s.rotateHour),
@@ -285,14 +395,14 @@ app.put('/api/settings', auth, (req, res) => {
   })
 })
 
-// Export / Import
-app.get('/api/export', auth, (_req, res) => {
-  const rows = db.prepare('SELECT * FROM templates ORDER BY slot, position').all()
+// ── Export / Import ──────────────────────────────────────────────────
+app.get('/api/export', auth, async (_req, res) => {
+  const { rows: tRows } = await pool.query('SELECT * FROM templates ORDER BY slot, position')
   const grouped = { mon: [], tue: [], wed: [], thu: [], fri: [], weekend: [] }
-  for (const t of rows) {
+  for (const t of tRows) {
     if (Object.prototype.hasOwnProperty.call(grouped, t.slot)) grouped[t.slot].push(t)
   }
-  const sRows = db.prepare('SELECT * FROM settings').all()
+  const { rows: sRows } = await pool.query('SELECT * FROM settings')
   const s = Object.fromEntries(sRows.map(r => [r.key, r.value]))
   res.json({
     version: 1,
@@ -306,39 +416,74 @@ app.get('/api/export', auth, (_req, res) => {
   })
 })
 
-app.post('/api/import', auth, (req, res) => {
+app.post('/api/import', auth, async (req, res) => {
   const { data, mode } = req.body ?? {}
   if (!data?.templates) return res.status(400).json({ error: 'Invalid data' })
   const VALID = ['mon', 'tue', 'wed', 'thu', 'fri', 'weekend']
-  const insert = db.prepare('INSERT OR IGNORE INTO templates VALUES (?, ?, ?, ?, ?)')
-  db.transaction(() => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
     if (mode === 'replace') {
-      db.prepare('DELETE FROM templates').run()
-      db.prepare('DELETE FROM template_completions').run()
+      await client.query('DELETE FROM templates')
+      await client.query('DELETE FROM template_completions')
     }
     for (const slot of VALID) {
-      const items = data.templates[slot] ?? []
-      for (const t of items) {
+      for (const t of data.templates[slot] ?? []) {
         if (mode === 'merge') {
-          const exists = db.prepare('SELECT id FROM templates WHERE slot = ? AND text = ?').get(slot, t.text)
-          if (exists) continue
+          const { rows } = await client.query('SELECT id FROM templates WHERE slot = $1 AND text = $2', [slot, t.text])
+          if (rows.length) continue
         }
-        insert.run(t.id || randomUUID(), slot, t.text, t.position ?? 0, t.created_at ?? Date.now())
+        await client.query(
+          'INSERT INTO templates VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',
+          [t.id || randomUUID(), slot, t.text, t.position ?? 0, t.created_at ?? Date.now()]
+        )
       }
     }
     if (data.settings) {
-      const upsert = db.prepare('INSERT OR REPLACE INTO settings VALUES (?, ?)')
-      if (data.settings.rotateHour !== undefined) upsert.run('rotateHour', String(data.settings.rotateHour))
-      if (data.settings.rotateMinute !== undefined) upsert.run('rotateMinute', String(data.settings.rotateMinute))
-      if (data.settings.keepBonus !== undefined) upsert.run('keepBonus', String(data.settings.keepBonus))
+      const upsert = 'INSERT INTO settings VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'
+      if (data.settings.rotateHour !== undefined) await client.query(upsert, ['rotateHour', String(data.settings.rotateHour)])
+      if (data.settings.rotateMinute !== undefined) await client.query(upsert, ['rotateMinute', String(data.settings.rotateMinute)])
+      if (data.settings.keepBonus !== undefined) await client.query(upsert, ['keepBonus', String(data.settings.keepBonus)])
     }
-  })()
+    await client.query('COMMIT')
+  } catch (e) {
+    await client.query('ROLLBACK')
+    throw e
+  } finally {
+    client.release()
+  }
   res.json({ ok: true })
 })
 
-// SPA fallback
-app.get('*', (_req, res) => {
-  res.sendFile(join(distPath, 'index.html'))
-})
+// ── Mail proxy (forwards to mail-bridge) ────────────────────────────
+async function mailProxy(req, res) {
+  try {
+    const url = `${MAIL_BRIDGE_URL}/internal${req.path.replace('/api/mail', '')}`
+    const upstream = await fetch(url, {
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Key': INTERNAL_API_KEY,
+      },
+      body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? JSON.stringify(req.body) : undefined,
+    })
+    const body = await upstream.json().catch(() => ({}))
+    res.status(upstream.status).json(body)
+  } catch {
+    res.status(503).json({ error: 'mail-bridge unavailable' })
+  }
+}
 
-app.listen(PORT, () => console.log(`task server :${PORT}`))
+app.get('/api/mail/accounts', auth, mailProxy)
+app.post('/api/mail/accounts', auth, mailProxy)
+app.delete('/api/mail/accounts/:id', auth, mailProxy)
+app.get('/api/mail/items', auth, mailProxy)
+app.post('/api/mail/items/:id/read', auth, mailProxy)
+app.post('/api/mail/sync', auth, mailProxy)
+
+initDb().then(() => {
+  app.listen(PORT, () => console.log(`task-api :${PORT}`))
+}).catch(err => {
+  console.error('DB init failed:', err)
+  process.exit(1)
+})

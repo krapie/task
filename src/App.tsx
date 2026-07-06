@@ -8,13 +8,14 @@ import { SignInModal } from './components/SignInModal'
 import { ImportModal } from './components/ImportModal'
 import { CalendarView } from './components/CalendarView'
 import { EventPanel } from './components/EventPanel'
+import { MailInbox } from './components/MailInbox'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'board' | 'calendar'
+type View = 'board' | 'calendar' | 'mail'
 
 function pad(n: number) { return String(n).padStart(2, '0') }
 
@@ -736,7 +737,7 @@ export default function App() {
       <Header
         username={username}
         view={view}
-        onToggleView={() => setView(v => v === 'board' ? 'calendar' : 'board')}
+        onSetView={setView}
         onSignIn={() => setShowSignIn(true)}
         onSignOut={handleSignOut}
         onSettings={() => setShowSettings(true)}
@@ -744,7 +745,7 @@ export default function App() {
         onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
       />
 
-      <main className="app-main">
+      <main className={`app-main${view === 'mail' ? ' app-main-mail' : ''}`}>
         {view === 'board' ? (
           <>
             <DayTabs
@@ -773,7 +774,7 @@ export default function App() {
               onToggleEvent={handleToggleEvent}
             />
           </>
-        ) : (
+        ) : view === 'calendar' ? (
           <CalendarView
             year={calendarMonth.year}
             month={calendarMonth.month}
@@ -793,6 +794,8 @@ export default function App() {
             onDayClick={date => { setSelectedCalendarDate(prev => prev === date ? null : date); setEditingEventId(null) }}
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
+        ) : (
+          <MailInbox />
         )}
       </main>
 
