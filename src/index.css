@@ -1197,12 +1197,10 @@ a { color: var(--kp-fg); text-decoration: none; }
 /* ── Calendar view ─────────────────────────────────────────────── */
 
 .calendar-view {
-  padding: var(--kp-space-4) var(--kp-space-5);
+  padding: var(--kp-space-4) 0;
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  max-width: 940px;
-  width: 100%;
 }
 
 .calendar-nav {
