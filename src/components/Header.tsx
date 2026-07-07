@@ -19,10 +19,7 @@ export function Header({ username, view, onSetView, onSignIn, onSignOut, onSetti
         <span className="header-title">Task</span>
         <div className="header-actions">
           {username ? (
-            <>
-              <span className="auth-user">{username}</span>
-              <button className="auth-btn" onClick={onSignOut}>Sign out</button>
-            </>
+            <span className="auth-user">{username}</span>
           ) : (
             <button className="auth-btn" onClick={onSignIn}>Sign in</button>
           )}

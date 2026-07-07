@@ -189,6 +189,7 @@ export function MailInbox({ isAuth, isDark }: MailInboxProps) {
   const [activeAccount, setActiveAccount] = useState<string | null>(null)
   const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const loadAccounts = useCallback(async () => {
     const accts = await api.mail.getAccounts().catch(() => [])
@@ -271,11 +272,15 @@ export function MailInbox({ isAuth, isDark }: MailInboxProps) {
 
   return (
     <div className="mail-inbox">
-      <div className="mail-sidebar">
+      {/* Backdrop — closes sidebar on mobile when tapping outside */}
+      {sidebarOpen && (
+        <div className="mail-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
+      )}
+      <div className={`mail-sidebar${sidebarOpen ? ' mail-sidebar-open' : ''}`}>
         <div className="mail-nav">
           <button
             className={`mail-nav-item${panel === 'inbox' ? ' mail-nav-active' : ''}`}
-            onClick={() => { setPanel('inbox'); setSelectedItem(null) }}
+            onClick={() => { setPanel('inbox'); setSelectedItem(null); setSidebarOpen(false) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="m9 3.75-6 6.75h4.5l1.5 7.5 3-11.25L15 21l1.5-7.5H21L15 3.75 12 12l-3-8.25Z" />
@@ -285,7 +290,7 @@ export function MailInbox({ isAuth, isDark }: MailInboxProps) {
           </button>
           <button
             className={`mail-nav-item${panel === 'accounts' ? ' mail-nav-active' : ''}`}
-            onClick={() => { setPanel('accounts'); setSelectedItem(null) }}
+            onClick={() => { setPanel('accounts'); setSelectedItem(null); setSidebarOpen(false) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -298,13 +303,13 @@ export function MailInbox({ isAuth, isDark }: MailInboxProps) {
           <div className="mail-account-filter">
             <button
               className={`mail-filter-btn${activeAccount === null ? ' mail-filter-active' : ''}`}
-              onClick={() => setActiveAccount(null)}
+              onClick={() => { setActiveAccount(null); setSidebarOpen(false) }}
             >All</button>
             {accounts.map(a => (
               <button
                 key={a.id}
                 className={`mail-filter-btn${activeAccount === a.id ? ' mail-filter-active' : ''}`}
-                onClick={() => setActiveAccount(a.id)}
+                onClick={() => { setActiveAccount(a.id); setSidebarOpen(false) }}
               >{a.label}</button>
             ))}
           </div>
@@ -316,6 +321,11 @@ export function MailInbox({ isAuth, isDark }: MailInboxProps) {
         {panel === 'inbox' ? (
           <>
             <div className="mail-toolbar">
+              <button className="icon-btn mail-menu-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Menu">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+              </button>
               <span className="mail-toolbar-title">
                 {activeAccount ? accounts.find(a => a.id === activeAccount)?.label : 'All inboxes'}
               </span>
