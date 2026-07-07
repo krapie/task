@@ -192,6 +192,25 @@ export default function App() {
       }))
   }, [calendarEvents, selectedSlotDate, selectedDailyData.eventCompletions])
 
+  // Derived: upcoming events for the next 7 days from selected slot (board view 3rd column)
+  const upcomingAgenda = useMemo(() => {
+    if (!selectedSlotDate) return []
+    const result: { date: string; label: string; events: { id: string; title: string; time?: string }[] }[] = []
+    for (let i = 0; i < 7; i++) {
+      const dateStr = addDays(selectedSlotDate, i)
+      const dayEvents = expandForDate(calendarEvents, dateStr)
+        .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
+        .map(e => ({ id: e.id, title: e.title, time: e.time }))
+      if (dayEvents.length > 0) {
+        const [y, m, d] = dateStr.split('-').map(Number)
+        const dt = new Date(y, m - 1, d)
+        const label = i === 0 ? 'Today' : dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+        result.push({ date: dateStr, label, events: dayEvents })
+      }
+    }
+    return result
+  }, [calendarEvents, selectedSlotDate])
+
   // Derived: events expanded for the full 6-week calendar view (includes recurring occurrences)
   const monthEvents = useMemo(() => {
     const { start, end } = calendarViewRange(calendarMonth.year, calendarMonth.month)
@@ -840,6 +859,8 @@ export default function App() {
 
             {/* Board content */}
             <div className="board-content">
+              <div className="board-inner">
+              <div className="board-tasks">
               <QuestBoard
               slot={selectedSlot}
               slotDate={selectedSlotDate}
@@ -860,6 +881,28 @@ export default function App() {
               onEditTemplate={handleEditTemplate}
               onToggleEvent={handleToggleEvent}
             />
+              </div>
+
+              {/* Upcoming events — 3rd column */}
+              <div className="board-upcoming">
+                <div className="section-label">Upcoming</div>
+                <div style={{ borderTop: '1px solid var(--kp-border)' }}>
+                  {upcomingAgenda.length === 0 ? (
+                    <div className="board-upcoming-empty">No upcoming events</div>
+                  ) : upcomingAgenda.map(group => (
+                    <div key={group.date} className="board-upcoming-group">
+                      <div className="board-upcoming-date-label">{group.label}</div>
+                      {group.events.map(e => (
+                        <div key={e.id} className="board-upcoming-event">
+                          {e.time && <span className="board-upcoming-time">{e.time}</span>}
+                          <span className="board-upcoming-title">{e.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              </div>
             </div>
             <div className="board-footer">
               <span className="board-footer-label">π  kevinprk.com</span>

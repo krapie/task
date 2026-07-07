@@ -470,16 +470,73 @@ a { color: var(--kp-fg); text-decoration: none; }
   margin-bottom: 12px;
 }
 
+.board-inner {
+  display: flex;
+  gap: 32px;
+  align-items: start;
+}
+
+.board-tasks {
+  flex: 1;
+  min-width: 0;
+}
+
 .task-board {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 32px;
-  max-width: 900px;
   align-items: start;
 }
 
 .task-section {
   margin-bottom: 0;
+}
+
+.board-upcoming {
+  width: 220px;
+  flex-shrink: 0;
+}
+
+.board-upcoming-empty {
+  padding: 11px 0;
+  font-size: 13px;
+  color: var(--kp-fg-4);
+}
+
+.board-upcoming-group {
+  margin-bottom: 20px;
+}
+.board-upcoming-group:last-child { margin-bottom: 0; }
+
+.board-upcoming-date-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--kp-fg-4);
+  padding: 10px 0 8px;
+}
+
+.board-upcoming-event {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--kp-border);
+}
+
+.board-upcoming-time {
+  font-family: var(--kp-font-mono);
+  font-size: 12px;
+  color: var(--kp-fg-3);
+  flex-shrink: 0;
+}
+
+.board-upcoming-title {
+  font-size: 14px;
+  color: var(--kp-fg-1);
+  flex: 1;
+  line-height: 1.4;
 }
 
 /* Task Items */
@@ -1140,10 +1197,12 @@ a { color: var(--kp-fg); text-decoration: none; }
 /* ── Calendar view ─────────────────────────────────────────────── */
 
 .calendar-view {
-  padding: var(--kp-space-4) 0;
+  padding: var(--kp-space-4) var(--kp-space-5);
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  max-width: 940px;
+  width: 100%;
 }
 
 .calendar-nav {

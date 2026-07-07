@@ -191,7 +191,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   const [showFlagged, setShowFlagged] = useState(false)
   const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const loadAccounts = useCallback(async () => {
     const accts = await api.mail.getAccounts().catch(() => [])
