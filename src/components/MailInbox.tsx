@@ -14,12 +14,20 @@ function formatDate(iso: string) {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-function buildSrcdoc(html: string): string {
+function buildSrcdoc(html: string, isDark: boolean): string {
+  const darkCss = isDark ? `
+  html {
+    filter: invert(100%) hue-rotate(180deg);
+    background: #ffffff;
+  }
+  img, video, iframe, svg {
+    filter: invert(100%) hue-rotate(180deg);
+  }` : ''
+
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="color-scheme" content="light dark">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' *; img-src https: data: cid:; font-src *;">
 <style>
   * { box-sizing: border-box; }
@@ -34,17 +42,7 @@ function buildSrcdoc(html: string): string {
   img { max-width: 100%; height: auto; }
   table { max-width: 100%; }
   pre, code { white-space: pre-wrap; word-break: break-all; }
-
-  /* Dark mode: invert the whole email, then counter-invert images back to normal */
-  @media (prefers-color-scheme: dark) {
-    html {
-      filter: invert(100%) hue-rotate(180deg);
-      background: #ffffff;
-    }
-    img, video, iframe, svg {
-      filter: invert(100%) hue-rotate(180deg);
-    }
-  }
+  ${darkCss}
 </style>
 </head>
 <body>${html}</body>
@@ -165,9 +163,10 @@ function AddAccountForm({ onAdd, onCancel }: AddAccountFormProps) {
 
 interface MailInboxProps {
   isAuth: boolean
+  isDark: boolean
 }
 
-export function MailInbox({ isAuth }: MailInboxProps) {
+export function MailInbox({ isAuth, isDark }: MailInboxProps) {
   if (!isAuth) {
     return (
       <div className="mail-inbox">
@@ -400,7 +399,7 @@ export function MailInbox({ isAuth }: MailInboxProps) {
             {bodyLoading ? (
               <div className="mail-empty">Loading…</div>
             ) : selectedItem.html_body ? (
-              <AutoIframe srcdoc={buildSrcdoc(selectedItem.html_body)} />
+              <AutoIframe srcdoc={buildSrcdoc(selectedItem.html_body, isDark)} />
             ) : selectedItem.body ? (
               <pre className="mail-detail-plain">{selectedItem.body}</pre>
             ) : (
