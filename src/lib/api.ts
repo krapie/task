@@ -142,6 +142,6 @@ export const api = {
     getFlagged: () => req<NewsItem[]>('GET', '/news/flagged'),
     flag: (item: Pick<NewsItem, 'link' | 'title' | 'author' | 'published' | 'preview'>) =>
       req<{ flagged: boolean }>('POST', '/news/flag', item),
-    unflag: (link: string) => req<{ flagged: boolean }>('DELETE', `/news/flag/${encodeURIComponent(link)}`),
+    unflag: (link: string) => req<{ flagged: boolean }>('POST', '/news/unflag', { link }),
   },
 }

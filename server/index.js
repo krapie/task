@@ -510,8 +510,10 @@ app.post('/api/news/flag', auth, async (req, res) => {
   res.json({ flagged: true })
 })
 
-app.delete('/api/news/flag/:link', auth, async (req, res) => {
-  await pool.query('UPDATE news_saved SET flagged = false WHERE link = $1', [decodeURIComponent(req.params.link)])
+app.post('/api/news/unflag', auth, async (req, res) => {
+  const { link } = req.body
+  if (!link) return res.status(400).json({ error: 'link required' })
+  await pool.query('UPDATE news_saved SET flagged = false WHERE link = $1', [link])
   res.json({ flagged: false })
 })
 
@@ -532,7 +534,7 @@ function parseAtom(xml) {
     const link = /<link[^>]*rel='alternate'[^>]*href='([^']*)'/.exec(b)?.[1] ?? ''
     const published = /<published>(.*?)<\/published>/.exec(b)?.[1] ?? ''
     const author = /<name>(.*?)<\/name>/.exec(b)?.[1] ?? ''
-    if (title && link) items.push({ title, link, published, author, preview: null })
+    if (title && link && !title.startsWith('Show GN:')) items.push({ title, link, published, author, preview: null })
   }
   return items
 }
