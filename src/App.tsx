@@ -200,7 +200,7 @@ export default function App() {
       const dateStr = addDays(selectedSlotDate, i)
       const dayEvents = expandForDate(calendarEvents, dateStr)
         .sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
-        .map(e => ({ id: e.id, title: e.title, time: e.time }))
+        .map(e => ({ id: e.id, title: e.title, time: e.time ?? undefined }))
       if (dayEvents.length > 0) {
         const [y, m, d] = dateStr.split('-').map(Number)
         const dt = new Date(y, m - 1, d)
