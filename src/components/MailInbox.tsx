@@ -15,10 +15,13 @@ function formatDate(iso: string) {
 }
 
 function buildSrcdoc(html: string, isDark: boolean): string {
+  // App dark bg is #0a0a0a. invert(#0a0a0a) = #f5f5f5, so use that as
+  // the pre-inversion background so post-inversion matches the app exactly.
+  const bg = isDark ? '#f5f5f5' : '#ffffff'
   const darkCss = isDark ? `
   html {
     filter: invert(100%) hue-rotate(180deg);
-    background: #ffffff;
+    background: ${bg};
   }
   img, video, iframe, svg {
     filter: invert(100%) hue-rotate(180deg);
@@ -35,7 +38,7 @@ function buildSrcdoc(html: string, isDark: boolean): string {
     margin: 0; padding: 16px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 14px; line-height: 1.6;
-    color: #1a1a1a; background: #ffffff;
+    color: #1a1a1a; background: ${bg};
     word-break: break-word; overflow-wrap: break-word;
   }
   a { color: #0066cc; }
