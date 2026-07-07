@@ -739,7 +739,6 @@ export default function App() {
         view={view}
         onSetView={setView}
         onSignIn={() => setShowSignIn(true)}
-        onSignOut={handleSignOut}
         onSettings={() => setShowSettings(true)}
         theme={theme}
         onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
