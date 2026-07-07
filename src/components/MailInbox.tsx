@@ -205,10 +205,30 @@ export function MailInbox({ isAuth, isDark }: MailInboxProps) {
     setLoading(false)
   }, [activeAccount])
 
+  // Initial load
   useEffect(() => {
     loadAccounts()
     loadItems()
   }, [loadAccounts, loadItems])
+
+  // Auto-sync on tab open (MailInbox mounts each time mail tab is selected)
+  useEffect(() => {
+    setSyncing(true)
+    api.mail.sync().catch(console.error).finally(async () => {
+      await loadItems()
+      await loadAccounts()
+      setSyncing(false)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Periodic refresh from DB every 3 minutes (picks up background poller results)
+  useEffect(() => {
+    const id = setInterval(async () => {
+      await loadItems()
+      await loadAccounts()
+    }, 3 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [loadItems, loadAccounts])
 
   async function handleSync() {
     setSyncing(true)
