@@ -82,4 +82,5 @@ export interface MailItem {
   read: boolean
   snippet: string | null
   body?: string | null
+  html_body?: string | null
 }

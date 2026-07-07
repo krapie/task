@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
 import type { MailAccount, MailItem } from '../types'
 
@@ -12,6 +12,58 @@ function formatDate(iso: string) {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+}
+
+function buildSrcdoc(html: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:; font-src 'none';">
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px; line-height: 1.6;
+    color: #1a1a1a; background: #ffffff;
+    word-break: break-word; overflow-wrap: break-word;
+  }
+  a { color: #0066cc; }
+  img { max-width: 100%; height: auto; }
+  table { max-width: 100%; }
+  pre, code { white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>${html}</body>
+</html>`
+}
+
+// Auto-resize iframe to its content height
+function AutoIframe({ srcdoc }: { srcdoc: string }) {
+  const ref = useRef<HTMLIFrameElement>(null)
+
+  function onLoad() {
+    const iframe = ref.current
+    if (!iframe) return
+    try {
+      const height = iframe.contentDocument?.documentElement?.scrollHeight
+      if (height) iframe.style.height = `${height}px`
+    } catch {
+      // cross-origin or sandboxed — leave height as-is
+    }
+  }
+
+  return (
+    <iframe
+      ref={ref}
+      srcDoc={srcdoc}
+      sandbox="allow-popups"
+      title="Email content"
+      onLoad={onLoad}
+      style={{ width: '100%', minHeight: '200px', border: 'none', display: 'block' }}
+    />
+  )
 }
 
 interface AddAccountFormProps {
@@ -113,6 +165,7 @@ export function MailInbox({ isAuth }: MailInboxProps) {
       </div>
     )
   }
+
   const [panel, setPanel] = useState<Panel>('inbox')
   const [accounts, setAccounts] = useState<MailAccount[]>([])
   const [items, setItems] = useState<MailItem[]>([])
@@ -155,7 +208,7 @@ export function MailInbox({ isAuth }: MailInboxProps) {
     if (item.read) return
     await api.mail.markRead(item.id).catch(console.error)
     setItems(prev => prev.map(m => m.id === item.id ? { ...m, read: true } : m))
-    if (selectedItem?.id === item.id) setSelectedItem({ ...item, read: true })
+    if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, read: true } : prev)
   }
 
   async function handleDeleteAccount(id: string) {
@@ -167,18 +220,20 @@ export function MailInbox({ isAuth }: MailInboxProps) {
   async function handleItemClick(item: MailItem) {
     setSelectedItem(item)
     handleMarkRead(item)
-    if (item.body === undefined) {
+    if (item.html_body === undefined && item.body === undefined) {
       setBodyLoading(true)
       const full = await api.mail.getItem(item.id).catch(() => null)
       if (full) {
-        setSelectedItem(prev => prev?.id === item.id ? { ...prev, body: full.body } : prev)
-        setItems(prev => prev.map(m => m.id === item.id ? { ...m, body: full.body } : m))
+        const patch = { body: full.body, html_body: full.html_body }
+        setSelectedItem(prev => prev?.id === item.id ? { ...prev, ...patch } : prev)
+        setItems(prev => prev.map(m => m.id === item.id ? { ...m, ...patch } : m))
       }
       setBodyLoading(false)
     }
   }
 
   const unreadCount = items.filter(m => !m.read).length
+  const showDetail = selectedItem !== null && panel === 'inbox'
 
   return (
     <div className="mail-inbox">
@@ -186,7 +241,7 @@ export function MailInbox({ isAuth }: MailInboxProps) {
         <div className="mail-nav">
           <button
             className={`mail-nav-item${panel === 'inbox' ? ' mail-nav-active' : ''}`}
-            onClick={() => setPanel('inbox')}
+            onClick={() => { setPanel('inbox'); setSelectedItem(null) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="m9 3.75-6 6.75h4.5l1.5 7.5 3-11.25L15 21l1.5-7.5H21L15 3.75 12 12l-3-8.25Z" />
@@ -196,7 +251,7 @@ export function MailInbox({ isAuth }: MailInboxProps) {
           </button>
           <button
             className={`mail-nav-item${panel === 'accounts' ? ' mail-nav-active' : ''}`}
-            onClick={() => setPanel('accounts')}
+            onClick={() => { setPanel('accounts'); setSelectedItem(null) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -222,7 +277,8 @@ export function MailInbox({ isAuth }: MailInboxProps) {
         )}
       </div>
 
-      <div className="mail-main">
+      {/* List pane — hidden when detail is open */}
+      <div className={`mail-main${showDetail ? ' mail-main-hidden' : ''}`}>
         {panel === 'inbox' ? (
           <>
             <div className="mail-toolbar">
@@ -231,7 +287,7 @@ export function MailInbox({ isAuth }: MailInboxProps) {
               </span>
               <button className="icon-btn" onClick={handleSync} disabled={syncing} aria-label="Sync">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                  style={{ transform: syncing ? 'rotate(360deg)' : undefined, transition: syncing ? 'transform 1s linear' : undefined }}>
+                  style={{ animation: syncing ? 'mail-spin 1s linear infinite' : undefined }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
                 </svg>
               </button>
@@ -313,12 +369,13 @@ export function MailInbox({ isAuth }: MailInboxProps) {
         )}
       </div>
 
-      {selectedItem && panel === 'inbox' && (
+      {/* Full-width detail pane — replaces list when open */}
+      {showDetail && selectedItem && (
         <div className="mail-detail">
           <div className="mail-detail-header">
-            <button className="icon-btn" onClick={() => setSelectedItem(null)} aria-label="Close">
+            <button className="icon-btn" onClick={() => setSelectedItem(null)} aria-label="Back to inbox">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
               </svg>
             </button>
             <h3 className="mail-detail-subject">{selectedItem.subject}</h3>
@@ -328,9 +385,15 @@ export function MailInbox({ isAuth }: MailInboxProps) {
             <span>{new Date(selectedItem.received_at).toLocaleString()}</span>
           </div>
           <div className="mail-detail-body">
-            {bodyLoading
-              ? 'Loading…'
-              : (selectedItem.body ?? selectedItem.snippet ?? '(no content)')}
+            {bodyLoading ? (
+              <div className="mail-empty">Loading…</div>
+            ) : selectedItem.html_body ? (
+              <AutoIframe srcdoc={buildSrcdoc(selectedItem.html_body)} />
+            ) : selectedItem.body ? (
+              <pre className="mail-detail-plain">{selectedItem.body}</pre>
+            ) : (
+              <div className="mail-empty">(no content)</div>
+            )}
           </div>
         </div>
       )}

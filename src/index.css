@@ -1628,11 +1628,13 @@ a { color: var(--kp-fg); text-decoration: none; }
   font-size: 13px;
 }
 
-/* Mail detail pane */
+/* List pane hides when detail is open */
+.mail-main-hidden { display: none; }
+
+/* Mail detail pane — full width (takes over mail-main area) */
 .mail-detail {
-  width: 360px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--kp-border);
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1641,13 +1643,14 @@ a { color: var(--kp-fg); text-decoration: none; }
 .mail-detail-header {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--kp-border);
+  flex-shrink: 0;
 }
 
 .mail-detail-subject {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--kp-fg);
   flex: 1;
@@ -1658,21 +1661,34 @@ a { color: var(--kp-fg); text-decoration: none; }
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 16px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--kp-border);
   font-size: 12px;
   color: var(--kp-fg-3);
+  flex-shrink: 0;
 }
 
 .mail-detail-body {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  /* no padding — iframe handles its own padding */
+}
+
+/* Plain text fallback */
+.mail-detail-plain {
+  margin: 0;
+  padding: 20px;
+  font-family: inherit;
   font-size: 13px;
   color: var(--kp-fg-2);
-  line-height: 1.6;
+  line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+@keyframes mail-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 /* Accounts panel */
