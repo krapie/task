@@ -357,17 +357,47 @@ export default function App() {
     }
   }, [view, calendarMonth]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refresh current slot data when page becomes visible
+  // Sync all board data: templates + daily + events
+  const [boardSyncing, setBoardSyncing] = useState(false)
+  const syncBoardData = useCallback(async () => {
+    if (!activeSlotDate) return
+    setBoardSyncing(true)
+    const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+    loadedDatesRef.current.delete(slotDate)
+    await Promise.all([loadTemplates(), loadAllEvents(), loadDaily(slotDate)])
+    setBoardSyncing(false)
+  }, [activeSlotDate, selectedSlot, activeSlot, loadTemplates, loadAllEvents, loadDaily])
+
+  // Refresh all data when the browser tab/window becomes visible again
   useEffect(() => {
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible' || !activeSlotDate) return
       const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
       loadedDatesRef.current.delete(slotDate)
+      loadTemplates()
+      loadAllEvents()
       loadDaily(slotDate)
+      if (view === 'calendar') {
+        loadCalendarAdditions(calendarMonth.year, calendarMonth.month)
+      }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
-  }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
+  }, [selectedSlot, activeSlot, activeSlotDate, view, calendarMonth, loadTemplates, loadAllEvents, loadDaily, loadCalendarAdditions])
+
+  // Periodic auto-refresh every 5 minutes (when authenticated)
+  useEffect(() => {
+    if (!isAuth) return
+    const id = setInterval(() => {
+      if (!activeSlotDate) return
+      const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+      loadedDatesRef.current.delete(slotDate)
+      loadTemplates()
+      loadAllEvents()
+      loadDaily(slotDate)
+    }, 5 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [isAuth, activeSlotDate, selectedSlot, activeSlot, loadTemplates, loadAllEvents, loadDaily])
 
   // Check for slot rollover every minute
   useEffect(() => {
@@ -855,6 +885,18 @@ export default function App() {
                 active={activeSlot}
                 onChange={setSelectedSlot}
               />
+              <button
+                className="icon-btn"
+                onClick={syncBoardData}
+                disabled={boardSyncing}
+                aria-label="Sync"
+                title="Sync"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+                  style={{ animation: boardSyncing ? 'mail-spin 1s linear infinite' : undefined }}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                </svg>
+              </button>
             </div>
 
             {/* Board content */}

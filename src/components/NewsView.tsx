@@ -101,6 +101,21 @@ export function NewsView() {
 
   useEffect(() => { load() }, [load])
 
+  // Refresh when browser tab becomes visible
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === 'visible') load()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [load])
+
+  // Auto-refresh every 10 minutes
+  useEffect(() => {
+    const id = setInterval(load, 10 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [load])
+
   // Keep flaggedItems in sync with flag state changes on feed items
   const setItemsWithSync: React.Dispatch<React.SetStateAction<NewsItem[]>> = (update) => {
     setItems(prev => {
