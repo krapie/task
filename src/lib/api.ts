@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem } from '../types'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
@@ -134,5 +134,8 @@ export const api = {
     getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
     sync: (account_id?: string) => req<{ synced: number }>('POST', '/mail/sync', account_id ? { account_id } : {}),
+  },
+  news: {
+    getItems: () => req<NewsItem[]>('GET', '/news'),
   },
 }

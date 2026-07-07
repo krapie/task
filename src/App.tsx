@@ -9,13 +9,14 @@ import { ImportModal } from './components/ImportModal'
 import { CalendarView } from './components/CalendarView'
 import { EventPanel } from './components/EventPanel'
 import { MailInbox } from './components/MailInbox'
+import { NewsView } from './components/NewsView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'board' | 'calendar' | 'mail'
+type View = 'board' | 'calendar' | 'mail' | 'news'
 
 function pad(n: number) { return String(n).padStart(2, '0') }
 
@@ -750,7 +751,7 @@ export default function App() {
         mailUnread={mailUnread}
       />
 
-      <main className={`app-main${view === 'mail' ? ' app-main-mail' : ''}`}>
+      <main className={`app-main${view === 'mail' || view === 'news' ? ' app-main-mail' : ''}`}>
         {view === 'board' ? (
           <>
             <DayTabs
@@ -799,8 +800,10 @@ export default function App() {
             onDayClick={date => { setSelectedCalendarDate(prev => prev === date ? null : date); setEditingEventId(null) }}
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
-        ) : (
+        ) : view === 'mail' ? (
           <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} />
+        ) : (
+          <NewsView />
         )}
       </main>
 

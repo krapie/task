@@ -482,6 +482,44 @@ app.get('/api/mail/items/:id', auth, mailProxy)
 app.post('/api/mail/items/:id/read', auth, mailProxy)
 app.post('/api/mail/sync', auth, mailProxy)
 
+// News — GeekNews Atom feed proxy with 5-min cache
+const GEEKNEWS_FEED = 'https://news.hada.io/rss/news'
+let newsCache = null
+let newsCacheAt = 0
+
+function parseAtom(xml) {
+  const items = []
+  const re = /<entry>([\s\S]*?)<\/entry>/g
+  let m
+  while ((m = re.exec(xml)) !== null) {
+    const b = m[1]
+    const title = (/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(b)?.[1] ?? '').trim()
+    const link = /<link[^>]*rel='alternate'[^>]*href='([^']*)'/.exec(b)?.[1] ?? ''
+    const published = /<published>(.*?)<\/published>/.exec(b)?.[1] ?? ''
+    const author = /<name>(.*?)<\/name>/.exec(b)?.[1] ?? ''
+    if (title && link) items.push({ title, link, published, author })
+  }
+  return items
+}
+
+app.get('/api/news', async (req, res) => {
+  const now = Date.now()
+  if (newsCache && now - newsCacheAt < 5 * 60 * 1000) return res.json(newsCache)
+  try {
+    const r = await fetch(GEEKNEWS_FEED, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; task-app/1.0)' },
+    })
+    if (!r.ok) return res.status(502).json({ error: 'feed unavailable' })
+    const xml = await r.text()
+    const items = parseAtom(xml)
+    newsCache = items
+    newsCacheAt = now
+    res.json(items)
+  } catch {
+    res.status(502).json({ error: 'feed unavailable' })
+  }
+})
+
 initDb().then(() => {
   app.listen(PORT, () => console.log(`task-api :${PORT}`))
 }).catch(err => {

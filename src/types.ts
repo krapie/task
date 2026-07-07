@@ -84,3 +84,10 @@ export interface MailItem {
   body?: string | null
   html_body?: string | null
 }
+
+export interface NewsItem {
+  title: string
+  link: string
+  published: string
+  author: string
+}
