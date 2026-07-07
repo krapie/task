@@ -19,7 +19,7 @@ function buildSrcdoc(html: string): string {
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: cid:; font-src 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' *; img-src https: data: cid:; font-src *;">
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -58,7 +58,7 @@ function AutoIframe({ srcdoc }: { srcdoc: string }) {
     <iframe
       ref={ref}
       srcDoc={srcdoc}
-      sandbox="allow-popups"
+      sandbox="allow-popups allow-same-origin"
       title="Email content"
       onLoad={onLoad}
       style={{ width: '100%', minHeight: '200px', border: 'none', display: 'block' }}
