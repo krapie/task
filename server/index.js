@@ -524,13 +524,20 @@ let newsCacheAt = 0
 
 const GN_UA = 'Mozilla/5.0 (compatible; task-app/1.0)'
 
+function decodeEntities(s) {
+  return s
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+}
+
 function parseAtom(xml) {
   const items = []
   const re = /<entry>([\s\S]*?)<\/entry>/g
   let m
   while ((m = re.exec(xml)) !== null) {
     const b = m[1]
-    const title = (/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(b)?.[1] ?? '').trim()
+    const title = decodeEntities((/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/.exec(b)?.[1] ?? '').trim())
     const link = /<link[^>]*rel='alternate'[^>]*href='([^']*)'/.exec(b)?.[1] ?? ''
     const published = /<published>(.*?)<\/published>/.exec(b)?.[1] ?? ''
     const author = /<name>(.*?)<\/name>/.exec(b)?.[1] ?? ''
