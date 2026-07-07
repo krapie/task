@@ -5,13 +5,12 @@ interface HeaderProps {
   view: View
   onSetView: (v: View) => void
   onSignIn: () => void
-  onSignOut: () => void
   onSettings: () => void
   theme: string
   onToggleTheme: () => void
 }
 
-export function Header({ username, view, onSetView, onSignIn, onSignOut, onSettings, theme, onToggleTheme }: HeaderProps) {
+export function Header({ username, view, onSetView, onSignIn, onSettings, theme, onToggleTheme }: HeaderProps) {
   return (
     <header className="header">
       <div className="header-inner">
