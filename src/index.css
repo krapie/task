@@ -245,6 +245,24 @@ a { color: var(--kp-fg); text-decoration: none; }
   border-radius: var(--kp-radius-sm);
   color: var(--kp-fg-3);
   transition: background var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease);
+  position: relative;
+}
+
+.header-mail-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--kp-fg);
+  color: var(--kp-bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
 }
 .icon-btn:hover { background: var(--kp-hover-bg); color: var(--kp-fg); }
 .icon-btn:active { background: var(--kp-press-bg); }

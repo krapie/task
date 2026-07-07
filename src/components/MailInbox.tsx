@@ -167,9 +167,10 @@ function AddAccountForm({ onAdd, onCancel }: AddAccountFormProps) {
 interface MailInboxProps {
   isAuth: boolean
   isDark: boolean
+  onUnreadCount?: (n: number) => void
 }
 
-export function MailInbox({ isAuth, isDark }: MailInboxProps) {
+export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   if (!isAuth) {
     return (
       <div className="mail-inbox">
@@ -268,6 +269,11 @@ export function MailInbox({ isAuth, isDark }: MailInboxProps) {
   }
 
   const unreadCount = items.filter(m => !m.read).length
+
+  useEffect(() => {
+    onUnreadCount?.(unreadCount)
+  }, [unreadCount, onUnreadCount])
+
   const showDetail = selectedItem !== null && panel === 'inbox'
 
   return (

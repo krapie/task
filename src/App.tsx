@@ -132,6 +132,11 @@ export default function App() {
     localStorage.setItem('task_theme', theme)
   }, [theme])
 
+  const [mailUnread, setMailUnread] = useState(0)
+  useEffect(() => {
+    document.title = mailUnread > 0 ? `(${mailUnread}) Task` : 'Task'
+  }, [mailUnread])
+
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('task_token'))
   const [username, setUsername] = useState<string | null>(null)
   const isAuth = token !== null
@@ -742,6 +747,7 @@ export default function App() {
         onSettings={() => setShowSettings(true)}
         theme={theme}
         onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+        mailUnread={mailUnread}
       />
 
       <main className={`app-main${view === 'mail' ? ' app-main-mail' : ''}`}>
@@ -794,7 +800,7 @@ export default function App() {
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
         ) : (
-          <MailInbox isAuth={isAuth} isDark={theme === 'dark'} />
+          <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} />
         )}
       </main>
 

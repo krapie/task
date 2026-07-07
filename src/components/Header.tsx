@@ -8,9 +8,10 @@ interface HeaderProps {
   onSettings: () => void
   theme: string
   onToggleTheme: () => void
+  mailUnread?: number
 }
 
-export function Header({ username, view, onSetView, onSignIn, onSettings, theme, onToggleTheme }: HeaderProps) {
+export function Header({ username, view, onSetView, onSignIn, onSettings, theme, onToggleTheme, mailUnread = 0 }: HeaderProps) {
   return (
     <header className="header">
       <div className="header-inner">
@@ -47,10 +48,14 @@ export function Header({ username, view, onSetView, onSignIn, onSettings, theme,
             className={`icon-btn${view === 'mail' ? ' icon-btn-active' : ''}`}
             onClick={() => onSetView('mail')}
             aria-label="Mail view"
+            style={{ position: 'relative' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
             </svg>
+            {mailUnread > 0 && (
+              <span className="header-mail-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>
+            )}
           </button>
           <button className="icon-btn" onClick={onSettings} aria-label="Settings">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
