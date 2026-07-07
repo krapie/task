@@ -1,6 +1,6 @@
 # Task
 
-Daily task board at [task.kevinprk.com](https://task.kevinprk.com).
+Personal daily task board.
 
 Set up recurring **Daily Tasks** per day-of-week that auto-reset at a configurable time. Add one-off **Bonus Tasks**, track calendar events, and read email — all in one place. Works in guest mode (localStorage) or with an account for cross-device sync.
 
@@ -100,7 +100,7 @@ node server/index.js
 | `JWT_REFRESH_SECRET` | Yes | Secret for signing 30-day refresh tokens |
 | `MAIL_BRIDGE_URL` | Yes | Internal URL of the mail-bridge service |
 | `INTERNAL_API_KEY` | Yes | Shared key for task-api → mail-bridge requests |
-| `TASK_USERNAME` | No | Username override (default: `kevinprk`) |
+| `TASK_USERNAME` | No | Username displayed in the UI (default: `admin`) |
 | `PORT` | No | Server port (default: `3000`) |
 
 ### mail-bridge
@@ -167,4 +167,4 @@ node server/index.js
 
 ## CI/CD
 
-Push to `main` → GitHub Actions builds and pushes `krapi0314/task-api:<sha>` and `krapi0314/task-web:<sha>` to Docker Hub → updates `deployment.yaml` in [krapie/homeserver](https://github.com/krapie/homeserver) → ArgoCD syncs to the cluster.
+Push to `main` → GitHub Actions builds and pushes `task-api:<sha>` and `task-web:<sha>` to Docker Hub → updates `deployment.yaml` in the GitOps repo → ArgoCD syncs to the cluster.
