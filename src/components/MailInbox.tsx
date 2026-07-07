@@ -188,6 +188,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   const [syncing, setSyncing] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [activeAccount, setActiveAccount] = useState<string | null>(null)
+  const [showFlagged, setShowFlagged] = useState(false)
   const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -200,12 +201,13 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   const loadItems = useCallback(async () => {
     setLoading(true)
     const mails = await api.mail.getItems({
-      account_id: activeAccount ?? undefined,
+      account_id: showFlagged ? undefined : (activeAccount ?? undefined),
+      flagged: showFlagged ? true : undefined,
       limit: 100,
     }).catch(() => [])
     setItems(mails)
     setLoading(false)
-  }, [activeAccount])
+  }, [activeAccount, showFlagged])
 
   // Initial load
   useEffect(() => {
@@ -247,6 +249,13 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
     if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, read: true } : prev)
   }
 
+  async function handleToggleFlag(item: MailItem, e: React.MouseEvent) {
+    e.stopPropagation()
+    const { flagged } = await api.mail.toggleFlag(item.id).catch(() => ({ flagged: item.flagged }))
+    setItems(prev => prev.map(m => m.id === item.id ? { ...m, flagged } : m))
+    if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, flagged } : prev)
+  }
+
   async function handleDeleteAccount(id: string) {
     await api.mail.removeAccount(id).catch(console.error)
     setAccounts(prev => prev.filter(a => a.id !== id))
@@ -286,7 +295,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
         <div className="mail-nav">
           <button
             className={`mail-nav-item${panel === 'inbox' ? ' mail-nav-active' : ''}`}
-            onClick={() => { setPanel('inbox'); setSelectedItem(null); setSidebarOpen(false) }}
+            onClick={() => { setPanel('inbox'); setShowFlagged(false); setSelectedItem(null); setSidebarOpen(false) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="m9 3.75-6 6.75h4.5l1.5 7.5 3-11.25L15 21l1.5-7.5H21L15 3.75 12 12l-3-8.25Z" />
@@ -295,8 +304,17 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
             {unreadCount > 0 && <span className="mail-badge">{unreadCount}</span>}
           </button>
           <button
+            className={`mail-nav-item${showFlagged ? ' mail-nav-active' : ''}`}
+            onClick={() => { setShowFlagged(true); setPanel('inbox'); setSelectedItem(null); setSidebarOpen(false) }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+            </svg>
+            Flagged
+          </button>
+          <button
             className={`mail-nav-item${panel === 'accounts' ? ' mail-nav-active' : ''}`}
-            onClick={() => { setPanel('accounts'); setSelectedItem(null); setSidebarOpen(false) }}
+            onClick={() => { setPanel('accounts'); setShowFlagged(false); setSelectedItem(null); setSidebarOpen(false) }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -362,6 +380,11 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
                     <div className="mail-item-header">
                       <span className="mail-item-from">{item.from_name || item.from_address}</span>
                       <span className="mail-item-date">{formatDate(item.received_at)}</span>
+                      <button
+                        className={`flag-btn${item.flagged ? ' flag-btn-active' : ''}`}
+                        onClick={e => handleToggleFlag(item, e)}
+                        aria-label={item.flagged ? 'Unflag' : 'Flag'}
+                      >★</button>
                     </div>
                     <div className="mail-item-subject">{item.subject}</div>
                     {item.snippet && <div className="mail-item-snippet">{item.snippet}</div>}
@@ -429,6 +452,11 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
               </svg>
             </button>
             <h3 className="mail-detail-subject">{selectedItem.subject}</h3>
+            <button
+              className={`flag-btn${selectedItem.flagged ? ' flag-btn-active' : ''}`}
+              onClick={e => handleToggleFlag(selectedItem, e)}
+              aria-label={selectedItem.flagged ? 'Unflag' : 'Flag'}
+            >★</button>
           </div>
           <div className="mail-detail-meta">
             <span>From: {selectedItem.from_name ? `${selectedItem.from_name} <${selectedItem.from_address}>` : selectedItem.from_address}</span>

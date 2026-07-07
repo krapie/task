@@ -80,6 +80,7 @@ export interface MailItem {
   from_name: string | null
   received_at: string
   read: boolean
+  flagged: boolean
   snippet: string | null
   body?: string | null
   html_body?: string | null
@@ -91,4 +92,5 @@ export interface NewsItem {
   published: string
   author: string
   preview: string | null
+  flagged: boolean
 }

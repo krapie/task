@@ -124,18 +124,24 @@ export const api = {
     addAccount: (data: Omit<MailAccount, 'id' | 'last_synced'>) =>
       req<MailAccount>('POST', '/mail/accounts', data),
     removeAccount: (id: string) => req<void>('DELETE', `/mail/accounts/${id}`),
-    getItems: (params?: { account_id?: string; unread?: boolean; limit?: number }) => {
+    getItems: (params?: { account_id?: string; unread?: boolean; flagged?: boolean; limit?: number }) => {
       const q = new URLSearchParams()
       if (params?.account_id) q.set('account_id', params.account_id)
       if (params?.unread !== undefined) q.set('unread', String(params.unread))
+      if (params?.flagged !== undefined) q.set('flagged', String(params.flagged))
       if (params?.limit) q.set('limit', String(params.limit))
       return req<MailItem[]>('GET', `/mail/items?${q}`)
     },
     getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
+    toggleFlag: (id: string) => req<{ flagged: boolean }>('POST', `/mail/items/${id}/flag`),
     sync: (account_id?: string) => req<{ synced: number }>('POST', '/mail/sync', account_id ? { account_id } : {}),
   },
   news: {
     getItems: () => req<NewsItem[]>('GET', '/news'),
+    getFlagged: () => req<NewsItem[]>('GET', '/news/flagged'),
+    flag: (item: Pick<NewsItem, 'link' | 'title' | 'author' | 'published' | 'preview'>) =>
+      req<{ flagged: boolean }>('POST', '/news/flag', item),
+    unflag: (link: string) => req<{ flagged: boolean }>('DELETE', `/news/flag/${encodeURIComponent(link)}`),
   },
 }

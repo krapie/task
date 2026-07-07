@@ -67,6 +67,15 @@ async function initDb() {
       user_agent TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS news_saved (
+      link TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      author TEXT,
+      published TEXT,
+      preview TEXT,
+      flagged BOOLEAN NOT NULL DEFAULT true,
+      saved_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `)
   await pool.query(`
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
@@ -480,7 +489,31 @@ app.delete('/api/mail/accounts/:id', auth, mailProxy)
 app.get('/api/mail/items', auth, mailProxy)
 app.get('/api/mail/items/:id', auth, mailProxy)
 app.post('/api/mail/items/:id/read', auth, mailProxy)
+app.post('/api/mail/items/:id/flag', auth, mailProxy)
 app.post('/api/mail/sync', auth, mailProxy)
+
+// News flags — persisted in task DB
+app.get('/api/news/flagged', auth, async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM news_saved WHERE flagged = true ORDER BY saved_at DESC')
+  res.json(rows)
+})
+
+app.post('/api/news/flag', auth, async (req, res) => {
+  const { link, title, author, published, preview } = req.body
+  if (!link || !title) return res.status(400).json({ error: 'link and title required' })
+  await pool.query(
+    `INSERT INTO news_saved (link, title, author, published, preview, flagged)
+     VALUES ($1,$2,$3,$4,$5,true)
+     ON CONFLICT (link) DO UPDATE SET flagged = true, title=$2, author=$3, published=$4, preview=$5`,
+    [link, title, author ?? null, published ?? null, preview ?? null]
+  )
+  res.json({ flagged: true })
+})
+
+app.delete('/api/news/flag/:link', auth, async (req, res) => {
+  await pool.query('UPDATE news_saved SET flagged = false WHERE link = $1', [decodeURIComponent(req.params.link)])
+  res.json({ flagged: false })
+})
 
 // News — GeekNews Atom feed proxy with 5-min cache
 const GEEKNEWS_FEED = 'https://news.hada.io/rss/news'
@@ -533,18 +566,23 @@ async function fetchPreview(link) {
 
 app.get('/api/news', async (req, res) => {
   const now = Date.now()
-  if (newsCache && now - newsCacheAt < 5 * 60 * 1000) return res.json(newsCache)
+  // Fetch flagged state from DB regardless of cache
+  const { rows: flaggedRows } = await pool.query('SELECT link FROM news_saved WHERE flagged = true').catch(() => ({ rows: [] }))
+  const flaggedSet = new Set(flaggedRows.map(r => r.link))
+
+  if (newsCache && now - newsCacheAt < 5 * 60 * 1000) {
+    return res.json(newsCache.map(item => ({ ...item, flagged: flaggedSet.has(item.link) })))
+  }
   try {
     const r = await fetch(GEEKNEWS_FEED, { headers: { 'User-Agent': GN_UA } })
     if (!r.ok) return res.status(502).json({ error: 'feed unavailable' })
     const xml = await r.text()
     const items = parseAtom(xml)
-    // Fetch all topic pages in parallel to get the full preview
     const previews = await Promise.all(items.map(item => fetchPreview(item.link)))
     previews.forEach((p, i) => { items[i].preview = p })
     newsCache = items
     newsCacheAt = now
-    res.json(items)
+    res.json(items.map(item => ({ ...item, flagged: flaggedSet.has(item.link) })))
   } catch {
     res.status(502).json({ error: 'feed unavailable' })
   }
