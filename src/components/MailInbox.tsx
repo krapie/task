@@ -191,7 +191,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   const [showFlagged, setShowFlagged] = useState(false)
   const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
 
   const loadAccounts = useCallback(async () => {
     const accts = await api.mail.getAccounts().catch(() => [])
@@ -287,7 +287,10 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
 
   return (
     <div className="mail-inbox">
-      {/* Sidebar — in-flow, shown/hidden by toggle */}
+      {/* Backdrop for mobile sidebar overlay */}
+      {sidebarOpen && <div className="sidebar-mobile-backdrop" onClick={() => setSidebarOpen(false)} />}
+
+      {/* Sidebar — in-flow on desktop, overlay on mobile */}
       {sidebarOpen && (
         <div className="mail-sidebar">
           <div className="mail-sidebar-header">Mail</div>

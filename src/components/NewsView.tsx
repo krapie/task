@@ -80,7 +80,7 @@ export function NewsView() {
   const [tab, setTab] = useState<'all' | 'flagged'>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -148,6 +148,9 @@ export function NewsView() {
 
   return (
     <div className="news-view">
+      {/* Backdrop for mobile sidebar overlay */}
+      {sidebarOpen && <div className="sidebar-mobile-backdrop" onClick={() => setSidebarOpen(false)} />}
+
       {/* Sidebar */}
       {sidebarOpen && (
         <div className="news-sidebar">
