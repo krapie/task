@@ -16,7 +16,7 @@ export function Header({ username, view, onSetView, onSignIn, onSignOut, onSetti
     <header className="header">
       <div className="header-inner">
         <a href="https://kevinprk.com" className="pi-mark" aria-label="kevinprk.com">π</a>
-        <span className="header-title">Task</span>
+        <button className="header-title" onClick={() => onSetView('board')}>Task</button>
         <div className="header-actions">
           {username ? (
             <span className="auth-user">{username}</span>

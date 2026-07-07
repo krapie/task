@@ -223,6 +223,11 @@ a { color: var(--kp-fg); text-decoration: none; }
   font-weight: 600;
   color: var(--kp-fg);
   flex: 1;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
 }
 
 .header-actions {
