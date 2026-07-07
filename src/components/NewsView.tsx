@@ -80,6 +80,7 @@ export function NewsView() {
   const [tab, setTab] = useState<'all' | 'flagged'>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -132,43 +133,72 @@ export function NewsView() {
 
   return (
     <div className="news-view">
-      <div className="news-toolbar">
-        <span className="news-toolbar-title">GeekNews</span>
-        <button
-          className={`news-tab-btn${tab === 'all' ? ' news-tab-active' : ''}`}
-          onClick={() => setTab('all')}
-        >All</button>
-        <button
-          className={`news-tab-btn${tab === 'flagged' ? ' news-tab-active' : ''}`}
-          onClick={() => setTab('flagged')}
-        >
-          ★ Flagged{flagCount > 0 ? ` (${flagCount})` : ''}
-        </button>
-        <button className="icon-btn" onClick={load} disabled={loading} aria-label="Refresh">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-            style={{ animation: loading ? 'mail-spin 1s linear infinite' : undefined }}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-        </button>
-      </div>
-
-      {error ? (
-        <div className="news-empty">{error}</div>
-      ) : loading && displayed.length === 0 ? (
-        <div className="news-empty">Loading…</div>
-      ) : displayed.length === 0 ? (
-        <div className="news-empty">{tab === 'flagged' ? 'No flagged items' : 'No items'}</div>
-      ) : (
-        <div className="news-list">
-          {displayed.map((item, i) => (
-            <NewsItemCard
-              key={i}
-              item={item}
-              setItems={tab === 'all' ? setItemsWithSync : setFlaggedWithSync}
-            />
-          ))}
+      {/* Sidebar */}
+      {sidebarOpen && (
+        <div className="news-sidebar">
+          <div className="news-sidebar-header">News</div>
+          <div className="news-nav">
+            <button
+              className={`news-nav-item${tab === 'all' ? ' news-nav-active' : ''}`}
+              onClick={() => setTab('all')}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
+              </svg>
+              All
+              {items.length > 0 && <span className="news-nav-count">{items.length}</span>}
+            </button>
+            <button
+              className={`news-nav-item${tab === 'flagged' ? ' news-nav-active' : ''}`}
+              onClick={() => setTab('flagged')}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
+              </svg>
+              Flagged
+              {flagCount > 0 && <span className="news-nav-count">{flagCount}</span>}
+            </button>
+          </div>
         </div>
       )}
+
+      {/* Main content */}
+      <div className="news-main">
+        <div className="news-toolbar">
+          <button className="icon-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
+            </svg>
+          </button>
+          <span className="news-toolbar-title">{tab === 'all' ? 'GeekNews' : 'Flagged'}</span>
+          <button className="icon-btn" onClick={load} disabled={loading} aria-label="Refresh">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+              style={{ animation: loading ? 'mail-spin 1s linear infinite' : undefined }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+          </button>
+        </div>
+
+        {error ? (
+          <div className="news-empty">{error}</div>
+        ) : loading && displayed.length === 0 ? (
+          <div className="news-empty">Loading…</div>
+        ) : displayed.length === 0 ? (
+          <div className="news-empty">{tab === 'flagged' ? 'No flagged stories.' : 'No items'}</div>
+        ) : (
+          <div className="news-list">
+            {displayed.map((item, i) => (
+              <NewsItemCard
+                key={i}
+                item={item}
+                setItems={tab === 'all' ? setItemsWithSync : setFlaggedWithSync}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="news-footer">π  kevinprk.com</div>
+      </div>
     </div>
   )
 }

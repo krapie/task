@@ -287,74 +287,79 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
 
   return (
     <div className="mail-inbox">
-      {/* Backdrop — closes sidebar on mobile when tapping outside */}
+      {/* Sidebar — in-flow, shown/hidden by toggle */}
       {sidebarOpen && (
-        <div className="mail-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
-      )}
-      <div className={`mail-sidebar${sidebarOpen ? ' mail-sidebar-open' : ''}`}>
-        <div className="mail-nav">
-          <button
-            className={`mail-nav-item${panel === 'inbox' ? ' mail-nav-active' : ''}`}
-            onClick={() => { setPanel('inbox'); setShowFlagged(false); setSelectedItem(null); setSidebarOpen(false) }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m9 3.75-6 6.75h4.5l1.5 7.5 3-11.25L15 21l1.5-7.5H21L15 3.75 12 12l-3-8.25Z" />
-            </svg>
-            Inbox
-            {unreadCount > 0 && <span className="mail-badge">{unreadCount}</span>}
-          </button>
-          <button
-            className={`mail-nav-item${showFlagged ? ' mail-nav-active' : ''}`}
-            onClick={() => { setShowFlagged(true); setPanel('inbox'); setSelectedItem(null); setSidebarOpen(false) }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-            </svg>
-            Flagged
-          </button>
-          <button
-            className={`mail-nav-item${panel === 'accounts' ? ' mail-nav-active' : ''}`}
-            onClick={() => { setPanel('accounts'); setShowFlagged(false); setSelectedItem(null); setSidebarOpen(false) }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-            </svg>
-            Accounts
-          </button>
-        </div>
-
-        {panel === 'inbox' && (
-          <div className="mail-account-filter">
+        <div className="mail-sidebar">
+          <div className="mail-sidebar-header">Mail</div>
+          <div className="mail-nav">
             <button
-              className={`mail-filter-btn${activeAccount === null ? ' mail-filter-active' : ''}`}
-              onClick={() => { setActiveAccount(null); setSidebarOpen(false) }}
-            >All</button>
-            {accounts.map(a => (
-              <button
-                key={a.id}
-                className={`mail-filter-btn${activeAccount === a.id ? ' mail-filter-active' : ''}`}
-                onClick={() => { setActiveAccount(a.id); setSidebarOpen(false) }}
-              >{a.label}</button>
-            ))}
+              className={`mail-nav-item${panel === 'inbox' && !showFlagged ? ' mail-nav-active' : ''}`}
+              onClick={() => { setPanel('inbox'); setShowFlagged(false); setSelectedItem(null) }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z" />
+              </svg>
+              Inbox
+              {unreadCount > 0 && <span className="mail-badge">{unreadCount}</span>}
+            </button>
+            <button
+              className={`mail-nav-item${showFlagged ? ' mail-nav-active' : ''}`}
+              onClick={() => { setShowFlagged(true); setPanel('inbox'); setSelectedItem(null) }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
+              </svg>
+              Flagged
+            </button>
+            <button
+              className={`mail-nav-item${panel === 'accounts' ? ' mail-nav-active' : ''}`}
+              onClick={() => { setPanel('accounts'); setShowFlagged(false); setSelectedItem(null) }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+              </svg>
+              Accounts
+            </button>
           </div>
-        )}
-      </div>
+
+          {panel === 'inbox' && accounts.length > 0 && (
+            <div className="mail-sidebar-accounts">
+              <div style={{ fontFamily: 'var(--kp-font-mono)', fontSize: '10px', color: 'var(--kp-fg-4)', padding: '4px 8px', marginBottom: '4px', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Accounts</div>
+              <button
+                className={`mail-filter-btn${activeAccount === null ? ' mail-filter-active' : ''}`}
+                onClick={() => setActiveAccount(null)}
+              >All</button>
+              {accounts.map(a => (
+                <button
+                  key={a.id}
+                  className={`mail-filter-btn${activeAccount === a.id ? ' mail-filter-active' : ''}`}
+                  onClick={() => setActiveAccount(a.id)}
+                >{a.label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* List pane — hidden when detail is open */}
       <div className={`mail-main${showDetail ? ' mail-main-hidden' : ''}`}>
         {panel === 'inbox' ? (
           <>
             <div className="mail-toolbar">
-              <button className="icon-btn mail-menu-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Menu">
+              <button className="icon-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
                 </svg>
               </button>
               <span className="mail-toolbar-title">
-                {activeAccount ? accounts.find(a => a.id === activeAccount)?.label : 'All inboxes'}
+                {showFlagged ? 'Flagged' : activeAccount ? accounts.find(a => a.id === activeAccount)?.label : 'Inbox'}
               </span>
+              {!showFlagged && unreadCount > 0 && (
+                <span style={{ fontFamily: 'var(--kp-font-mono)', fontSize: '11px', color: 'var(--kp-fg-4)' }}>{unreadCount} unread</span>
+              )}
+              <div style={{ flex: 1 }} />
               <button className="icon-btn" onClick={handleSync} disabled={syncing} aria-label="Sync">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
                   style={{ animation: syncing ? 'mail-spin 1s linear infinite' : undefined }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
                 </svg>
@@ -396,7 +401,13 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
         ) : (
           <div className="mail-accounts-panel">
             <div className="mail-toolbar">
+              <button className="icon-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
+                </svg>
+              </button>
               <span className="mail-toolbar-title">Mail accounts</span>
+              <div style={{ flex: 1 }} />
               {!showAddForm && (
                 <button className="btn-ghost btn-sm" onClick={() => setShowAddForm(true)}>
                   + Add account
