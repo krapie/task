@@ -60,6 +60,7 @@ export function NewsView() {
               rel="noopener noreferrer"
             >
               <div className="news-item-title">{item.title}</div>
+              {item.preview && <div className="news-item-preview">{item.preview}</div>}
               <div className="news-item-meta">
                 <span>{item.author}</span>
                 {item.published && <span>{timeAgo(item.published)}</span>}

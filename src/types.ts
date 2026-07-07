@@ -90,4 +90,5 @@ export interface NewsItem {
   link: string
   published: string
   author: string
+  preview: string | null
 }

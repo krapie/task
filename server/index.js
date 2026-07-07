@@ -487,6 +487,8 @@ const GEEKNEWS_FEED = 'https://news.hada.io/rss/news'
 let newsCache = null
 let newsCacheAt = 0
 
+const GN_UA = 'Mozilla/5.0 (compatible; task-app/1.0)'
+
 function parseAtom(xml) {
   const items = []
   const re = /<entry>([\s\S]*?)<\/entry>/g
@@ -497,21 +499,49 @@ function parseAtom(xml) {
     const link = /<link[^>]*rel='alternate'[^>]*href='([^']*)'/.exec(b)?.[1] ?? ''
     const published = /<published>(.*?)<\/published>/.exec(b)?.[1] ?? ''
     const author = /<name>(.*?)<\/name>/.exec(b)?.[1] ?? ''
-    if (title && link) items.push({ title, link, published, author })
+    if (title && link) items.push({ title, link, published, author, preview: null })
   }
   return items
+}
+
+function extractPreview(html) {
+  // Find the topic_contents div
+  const start = html.indexOf('id=\'topic_contents\'')
+  if (start === -1) return null
+  const open = html.indexOf('>', start) + 1
+  const chunk = html.slice(open, open + 8000)
+  // Take only content above the first <hr>
+  const hrIdx = chunk.indexOf('<hr')
+  const above = hrIdx !== -1 ? chunk.slice(0, hrIdx) : chunk
+  // Strip HTML tags and decode entities
+  return above
+    .replace(/<[^>]*>/g, '')
+    .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim() || null
+}
+
+async function fetchPreview(link) {
+  try {
+    const r = await fetch(link, { headers: { 'User-Agent': GN_UA }, signal: AbortSignal.timeout(5000) })
+    if (!r.ok) return null
+    return extractPreview(await r.text())
+  } catch {
+    return null
+  }
 }
 
 app.get('/api/news', async (req, res) => {
   const now = Date.now()
   if (newsCache && now - newsCacheAt < 5 * 60 * 1000) return res.json(newsCache)
   try {
-    const r = await fetch(GEEKNEWS_FEED, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; task-app/1.0)' },
-    })
+    const r = await fetch(GEEKNEWS_FEED, { headers: { 'User-Agent': GN_UA } })
     if (!r.ok) return res.status(502).json({ error: 'feed unavailable' })
     const xml = await r.text()
     const items = parseAtom(xml)
+    // Fetch all topic pages in parallel to get the full preview
+    const previews = await Promise.all(items.map(item => fetchPreview(item.link)))
+    previews.forEach((p, i) => { items[i].preview = p })
     newsCache = items
     newsCacheAt = now
     res.json(items)
