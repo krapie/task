@@ -1025,23 +1025,11 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .footer-pi a:hover { color: var(--kp-fg-2); }
 
-/* Wide layout: side-by-side sections, expanded content width */
+/* Wide layout: expanded header/footer inner width */
 @media (min-width: 900px) {
-  .app-main {
-    max-width: 1040px;
-  }
   .header-inner,
   .footer-inner {
     max-width: 1040px;
-  }
-  .task-board {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--kp-space-7);
-    align-items: start;
-  }
-  .task-section {
-    margin-bottom: 0;
   }
 }
 
