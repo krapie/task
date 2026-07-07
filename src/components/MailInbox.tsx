@@ -19,6 +19,7 @@ function buildSrcdoc(html: string): string {
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' *; img-src https: data: cid:; font-src *;">
 <style>
   * { box-sizing: border-box; }
@@ -33,6 +34,17 @@ function buildSrcdoc(html: string): string {
   img { max-width: 100%; height: auto; }
   table { max-width: 100%; }
   pre, code { white-space: pre-wrap; word-break: break-all; }
+
+  /* Dark mode: invert the whole email, then counter-invert images back to normal */
+  @media (prefers-color-scheme: dark) {
+    html {
+      filter: invert(100%) hue-rotate(180deg);
+      background: #ffffff;
+    }
+    img, video, iframe, svg {
+      filter: invert(100%) hue-rotate(180deg);
+    }
+  }
 </style>
 </head>
 <body>${html}</body>
