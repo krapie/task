@@ -4,6 +4,14 @@ import type { MailAccount, MailItem } from '../types'
 
 type Panel = 'inbox' | 'accounts'
 
+function mergeMailItems(existing: MailItem[], fresh: MailItem[]): MailItem[] {
+  const existingMap = new Map(existing.map(m => [m.id, m]))
+  const freshMap = new Map(fresh.map(m => [m.id, m]))
+  const newItems = fresh.filter(m => !existingMap.has(m.id))
+  const updatedExisting = existing.map(m => freshMap.get(m.id) ?? m)
+  return [...newItems, ...updatedExisting]
+}
+
 function formatDate(iso: string) {
   const d = new Date(iso)
   const now = new Date()
@@ -199,15 +207,19 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
     setAccounts(accts)
   }, [])
 
-  const loadItems = useCallback(async () => {
-    setLoading(true)
+  const loadItems = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
     const mails = await api.mail.getItems({
       account_id: showFlagged ? undefined : (activeAccount ?? undefined),
       flagged: showFlagged ? true : undefined,
       limit: 100,
     }).catch(() => [])
-    setItems(mails)
-    setLoading(false)
+    if (silent) {
+      setItems(prev => mergeMailItems(prev, mails))
+    } else {
+      setItems(mails)
+      setLoading(false)
+    }
   }, [activeAccount, showFlagged])
 
   // Initial load
@@ -220,7 +232,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   useEffect(() => {
     setSyncing(true)
     api.mail.sync().catch(console.error).finally(async () => {
-      await loadItems()
+      await loadItems(true)
       await loadAccounts()
       setSyncing(false)
     })
@@ -229,7 +241,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   // Periodic refresh from DB every 3 minutes (picks up background poller results)
   useEffect(() => {
     const id = setInterval(async () => {
-      await loadItems()
+      await loadItems(true)
       await loadAccounts()
     }, 3 * 60 * 1000)
     return () => clearInterval(id)
@@ -238,7 +250,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   async function handleSync() {
     setSyncing(true)
     await api.mail.sync(activeAccount ?? undefined).catch(console.error)
-    await loadItems()
+    await loadItems(true)
     await loadAccounts()
     setSyncing(false)
   }

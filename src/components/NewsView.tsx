@@ -11,6 +11,14 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}일 전`
 }
 
+function mergeNewsItems(existing: NewsItem[], fresh: NewsItem[]): NewsItem[] {
+  const existingMap = new Map(existing.map(n => [n.link, n]))
+  const freshMap = new Map(fresh.map(n => [n.link, n]))
+  const newItems = fresh.filter(n => !existingMap.has(n.link))
+  const updatedExisting = existing.map(n => freshMap.get(n.link) ?? n)
+  return [...newItems, ...updatedExisting]
+}
+
 // Plain text preview from server → split into bullet lines
 function PreviewBullets({ text }: { text: string }) {
   // Each bullet is separated by content that was originally an <li>
@@ -82,20 +90,24 @@ export function NewsView() {
   const [error, setError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) { setLoading(true); setError(null) }
     try {
       const [feed, flagged] = await Promise.all([
         api.news.getItems(),
         api.news.getFlagged(),
       ])
-      setItems(feed)
-      setFlaggedItems(flagged)
+      if (silent) {
+        setItems(prev => mergeNewsItems(prev, feed))
+        setFlaggedItems(prev => mergeNewsItems(prev, flagged))
+      } else {
+        setItems(feed)
+        setFlaggedItems(flagged)
+      }
     } catch {
-      setError('Failed to load feed')
+      if (!silent) setError('Failed to load feed')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
@@ -104,7 +116,7 @@ export function NewsView() {
   // Refresh when browser tab becomes visible
   useEffect(() => {
     function onVisibility() {
-      if (document.visibilityState === 'visible') load()
+      if (document.visibilityState === 'visible') load(true)
     }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
@@ -112,7 +124,7 @@ export function NewsView() {
 
   // Auto-refresh every 10 minutes
   useEffect(() => {
-    const id = setInterval(load, 10 * 60 * 1000)
+    const id = setInterval(() => load(true), 10 * 60 * 1000)
     return () => clearInterval(id)
   }, [load])
 
@@ -189,7 +201,7 @@ export function NewsView() {
             </svg>
           </button>
           <span className="news-toolbar-title">{tab === 'all' ? 'GeekNews' : 'Flagged'}</span>
-          <button className="icon-btn" onClick={load} disabled={loading} aria-label="Refresh">
+          <button className="icon-btn" onClick={() => load()} disabled={loading} aria-label="Refresh">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
               style={{ animation: loading ? 'mail-spin 1s linear infinite' : undefined }}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
