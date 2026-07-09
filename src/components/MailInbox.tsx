@@ -429,10 +429,13 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
             ) : (
               <div className="mail-list">
                 {displayedItems.map(item => (
-                  <button
+                  <div
                     key={item.id}
+                    role="button"
+                    tabIndex={0}
                     className={`mail-item${!item.read ? ' mail-item-unread' : ''}${selectedItem?.id === item.id ? ' mail-item-selected' : ''}`}
                     onClick={() => handleItemClick(item)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleItemClick(item) }}
                   >
                     <div className="mail-item-header">
                       <span className="mail-item-from">{item.from_name || item.from_address}</span>
@@ -457,7 +460,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
                     </div>
                     <div className="mail-item-subject">{item.subject}</div>
                     {item.snippet && <div className="mail-item-snippet">{item.snippet}</div>}
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
