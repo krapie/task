@@ -192,6 +192,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const loadAccounts = useCallback(async () => {
     const accts = await api.mail.getAccounts().catch(() => [])
@@ -249,6 +250,12 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
     if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, read: true } : prev)
   }
 
+  async function handleMarkAllRead() {
+    const unread = items.filter(m => !m.read)
+    await Promise.all(unread.map(m => api.mail.markRead(m.id).catch(console.error)))
+    setItems(prev => prev.map(m => ({ ...m, read: true })))
+  }
+
   async function handleToggleFlag(item: MailItem, e: React.MouseEvent) {
     e.stopPropagation()
     const { flagged } = await api.mail.toggleFlag(item.id).catch(() => ({ flagged: item.flagged }))
@@ -282,6 +289,19 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   useEffect(() => {
     onUnreadCount?.(unreadCount)
   }, [unreadCount, onUnreadCount])
+
+  // Reset search when switching views
+  useEffect(() => { setSearchQuery('') }, [panel, showFlagged, activeAccount])
+
+  const q = searchQuery.trim().toLowerCase()
+  const displayedItems = q
+    ? items.filter(m =>
+        m.from_name?.toLowerCase().includes(q) ||
+        m.from_address?.toLowerCase().includes(q) ||
+        m.subject?.toLowerCase().includes(q) ||
+        m.snippet?.toLowerCase().includes(q)
+      )
+    : items
 
   const showDetail = selectedItem !== null && panel === 'inbox'
 
@@ -361,12 +381,39 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
                 <span style={{ fontFamily: 'var(--kp-font-mono)', fontSize: '11px', color: 'var(--kp-fg-4)' }}>{unreadCount} unread</span>
               )}
               <div style={{ flex: 1 }} />
+              {!showFlagged && unreadCount > 0 && (
+                <button className="icon-btn" onClick={handleMarkAllRead} aria-label="Mark all as read" title="Mark all as read">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                </button>
+              )}
               <button className="icon-btn" onClick={handleSync} disabled={syncing} aria-label="Sync">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
                   style={{ animation: syncing ? 'mail-spin 1s linear infinite' : undefined }}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
                 </svg>
               </button>
+            </div>
+
+            <div className="mail-search-bar">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ flexShrink: 0, color: 'var(--kp-fg-4)' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+              </svg>
+              <input
+                className="mail-search-input"
+                type="search"
+                placeholder="Search"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button className="mail-search-clear icon-btn" onClick={() => setSearchQuery('')} aria-label="Clear search">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
 
             {loading ? (
@@ -377,9 +424,11 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
                   ? 'Add an account to get started'
                   : 'No messages. Sync to fetch new mail.'}
               </div>
+            ) : displayedItems.length === 0 ? (
+              <div className="mail-empty">No results for "{searchQuery}"</div>
             ) : (
               <div className="mail-list">
-                {items.map(item => (
+                {displayedItems.map(item => (
                   <button
                     key={item.id}
                     className={`mail-item${!item.read ? ' mail-item-unread' : ''}${selectedItem?.id === item.id ? ' mail-item-selected' : ''}`}
@@ -388,6 +437,18 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
                     <div className="mail-item-header">
                       <span className="mail-item-from">{item.from_name || item.from_address}</span>
                       <span className="mail-item-date">{formatDate(item.received_at)}</span>
+                      {!item.read && (
+                        <button
+                          className="mail-item-read-btn"
+                          onClick={e => { e.stopPropagation(); handleMarkRead(item) }}
+                          aria-label="Mark as read"
+                          title="Mark as read"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        </button>
+                      )}
                       <button
                         className={`flag-btn${item.flagged ? ' flag-btn-active' : ''}`}
                         onClick={e => handleToggleFlag(item, e)}

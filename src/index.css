@@ -1183,6 +1183,11 @@ a { color: var(--kp-fg); text-decoration: none; }
   .mobile-add-type + .mobile-add-type { border-left: 1px solid var(--kp-border); }
   .mobile-add-type.selected { background: var(--kp-fg); color: var(--kp-bg); }
   .mobile-add-row { display: flex; gap: var(--kp-space-2); }
+
+  /* Mail: always show mark-read button on mobile (no hover) */
+  .mail-item-read-btn { opacity: 1; }
+  /* Prevent iOS zoom on search input */
+  .mail-search-input { font-size: 16px; }
 }
 
 /* ── Calendar view ─────────────────────────────────────────────── */
@@ -1723,6 +1728,30 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg);
 }
 
+.mail-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--kp-border);
+  flex-shrink: 0;
+}
+
+.mail-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  font-size: var(--kp-text-xs);
+  font-family: var(--kp-font-sans);
+  color: var(--kp-fg);
+  outline: none;
+}
+.mail-search-input::placeholder { color: var(--kp-fg-4); }
+.mail-search-input::-webkit-search-decoration,
+.mail-search-input::-webkit-search-cancel-button { display: none; }
+
 .mail-list {
   flex: 1;
   overflow-y: auto;
@@ -1796,6 +1825,21 @@ a { color: var(--kp-fg); text-decoration: none; }
 .mail-item-unread .mail-item-date {
   color: var(--kp-fg-2);
 }
+
+.mail-item-read-btn {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--kp-fg-4);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease);
+}
+.mail-item:hover .mail-item-read-btn { opacity: 1; }
+.mail-item-read-btn:hover { color: var(--kp-fg); }
 
 .mail-item-subject {
   font-size: 13px;
