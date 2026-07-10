@@ -124,12 +124,13 @@ export const api = {
     addAccount: (data: Omit<MailAccount, 'id' | 'last_synced'>) =>
       req<MailAccount>('POST', '/mail/accounts', data),
     removeAccount: (id: string) => req<void>('DELETE', `/mail/accounts/${id}`),
-    getItems: (params?: { account_id?: string; unread?: boolean; flagged?: boolean; limit?: number }) => {
+    getItems: (params?: { account_id?: string; unread?: boolean; flagged?: boolean; limit?: number; offset?: number }) => {
       const q = new URLSearchParams()
       if (params?.account_id) q.set('account_id', params.account_id)
       if (params?.unread !== undefined) q.set('unread', String(params.unread))
       if (params?.flagged !== undefined) q.set('flagged', String(params.flagged))
       if (params?.limit) q.set('limit', String(params.limit))
+      if (params?.offset) q.set('offset', String(params.offset))
       return req<MailItem[]>('GET', `/mail/items?${q}`)
     },
     getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),

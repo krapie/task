@@ -541,7 +541,7 @@ function parseAtom(xml) {
     const link = /<link[^>]*rel='alternate'[^>]*href='([^']*)'/.exec(b)?.[1] ?? ''
     const published = /<published>(.*?)<\/published>/.exec(b)?.[1] ?? ''
     const author = /<name>(.*?)<\/name>/.exec(b)?.[1] ?? ''
-    if (title && link && author === 'xguru' && !title.startsWith('Show GN:')) items.push({ title, link, published, author, preview: null })
+    if (title && link) items.push({ title, link, published, author, preview: null })
   }
   return items
 }

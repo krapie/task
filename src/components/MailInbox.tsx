@@ -201,6 +201,11 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
   const [bodyLoading, setBodyLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
   const [searchQuery, setSearchQuery] = useState('')
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadingMoreRef = useRef(false)
+  const itemsLengthRef = useRef(0)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
   const loadAccounts = useCallback(async () => {
     const accts = await api.mail.getAccounts().catch(() => [])
@@ -214,6 +219,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
       flagged: showFlagged ? true : undefined,
       limit: 100,
     }).catch(() => [])
+    setHasMore(mails.length === 100)
     if (silent) {
       setItems(prev => mergeMailItems(prev, mails))
     } else {
@@ -221,6 +227,34 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
       setLoading(false)
     }
   }, [activeAccount, showFlagged])
+
+  useEffect(() => { itemsLengthRef.current = items.length }, [items])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMore) return
+    loadingMoreRef.current = true
+    setLoadingMore(true)
+    const mails = await api.mail.getItems({
+      account_id: showFlagged ? undefined : (activeAccount ?? undefined),
+      flagged: showFlagged ? true : undefined,
+      limit: 50,
+      offset: itemsLengthRef.current,
+    }).catch(() => [])
+    setItems(prev => [...prev, ...mails])
+    setHasMore(mails.length === 50)
+    setLoadingMore(false)
+    loadingMoreRef.current = false
+  }, [activeAccount, showFlagged, hasMore])
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) loadMore()
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loadMore])
 
   // Initial load
   useEffect(() => {
@@ -474,6 +508,8 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
                     {item.snippet && <div className="mail-item-snippet">{item.snippet}</div>}
                   </div>
                 ))}
+                {!searchQuery && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
+                {loadingMore && <div className="mail-empty" style={{ padding: '12px', fontSize: 'var(--kp-text-xs)', color: 'var(--kp-fg-4)' }}>Loading more…</div>}
               </div>
             )}
           </>
