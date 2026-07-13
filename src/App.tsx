@@ -11,7 +11,7 @@ import { NewsView } from './components/NewsView'
 import { TodoView } from './components/TodoView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
-import { getActiveSlotDate, getNextSlotDate, getSlotLabels } from './lib/slots'
+import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem } from './types'
 
 type Theme = 'light' | 'dark'
@@ -928,6 +928,7 @@ export default function App() {
                 active={activeSlot}
                 onChange={setSelectedSlot}
                 slotLabels={getSlotLabels(settings.workWeek)}
+                slotOrder={getSlotOrder(settings.workWeek)}
               />
               <button
                 className="icon-btn"

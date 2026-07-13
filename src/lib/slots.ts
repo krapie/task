@@ -2,6 +2,16 @@ import type { Slot, WorkWeek } from '../types'
 
 export const SLOTS: Slot[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'weekend']
 
+const SLOT_ORDER_MAP: Record<WorkWeek, Slot[]> = {
+  'mon-fri': ['mon', 'tue', 'wed', 'thu', 'fri', 'weekend'],
+  'tue-sat': ['tue', 'wed', 'thu', 'fri', 'mon', 'weekend'],
+  'sun-thu': ['mon', 'tue', 'wed', 'thu', 'fri', 'weekend'],
+}
+
+export function getSlotOrder(workWeek: WorkWeek): Slot[] {
+  return SLOT_ORDER_MAP[workWeek]
+}
+
 const DAY_TO_SLOT_MAP: Record<WorkWeek, Slot[]> = {
   'mon-fri': ['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend'],
   'tue-sat': ['weekend', 'weekend', 'tue', 'wed', 'thu', 'fri', 'mon'],

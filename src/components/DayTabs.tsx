@@ -1,4 +1,3 @@
-import { SLOTS } from '../lib/slots'
 import type { Slot } from '../types'
 
 interface DayTabsProps {
@@ -6,12 +5,13 @@ interface DayTabsProps {
   active: Slot
   onChange: (slot: Slot) => void
   slotLabels: Record<Slot, string>
+  slotOrder: Slot[]
 }
 
-export function DayTabs({ selected, active, onChange, slotLabels }: DayTabsProps) {
+export function DayTabs({ selected, active, onChange, slotLabels, slotOrder }: DayTabsProps) {
   return (
     <div className="day-tabs">
-      {SLOTS.map(slot => (
+      {slotOrder.map(slot => (
         <button
           key={slot}
           className={`day-tab${selected === slot ? ' active' : ''}`}
