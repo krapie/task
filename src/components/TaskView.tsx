@@ -1,7 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
+import { marked } from 'marked'
 import type { TodoItem, AgentTask, AgentTaskStatus } from '../types'
 
+marked.use({ breaks: true, gfm: true })
+
 const TERMINAL: AgentTaskStatus[] = ['done', 'failed', 'canceled']
+
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+function pad2(n: number) { return String(n).padStart(2, '0') }
+function makeDateStr(y: number, m: number, d: number) { return `${y}-${pad2(m)}-${pad2(d)}` }
+function todayDateStr() {
+  const n = new Date()
+  return makeDateStr(n.getFullYear(), n.getMonth() + 1, n.getDate())
+}
 
 function timeAgo(isoStr: string): string {
   const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000)
@@ -49,6 +61,118 @@ function TrashIcon() {
   )
 }
 
+function CalIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+    </svg>
+  )
+}
+
+function DatePicker({ value, onChange, placeholder = 'Due date' }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [viewYear, setViewYear] = useState(() => value ? parseInt(value.split('-')[0]) : new Date().getFullYear())
+  const [viewMonth, setViewMonth] = useState(() => value ? parseInt(value.split('-')[1]) : new Date().getMonth() + 1)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (value) {
+      setViewYear(parseInt(value.split('-')[0]))
+      setViewMonth(parseInt(value.split('-')[1]))
+    }
+  }, [value])
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function formatLabel(v: string) {
+    const [y, m, d] = v.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  function buildCells() {
+    const firstDow = new Date(viewYear, viewMonth - 1, 1).getDay()
+    const days = new Date(viewYear, viewMonth, 0).getDate()
+    const cells: (number | null)[] = Array(firstDow).fill(null)
+    for (let d = 1; d <= days; d++) cells.push(d)
+    return cells
+  }
+
+  function prevMonth() {
+    if (viewMonth === 1) { setViewMonth(12); setViewYear(y => y - 1) }
+    else setViewMonth(m => m - 1)
+  }
+  function nextMonth() {
+    if (viewMonth === 12) { setViewMonth(1); setViewYear(y => y + 1) }
+    else setViewMonth(m => m + 1)
+  }
+
+  const today = todayDateStr()
+
+  return (
+    <div className="date-picker" ref={ref}>
+      <button
+        type="button"
+        className="date-picker-btn"
+        onClick={() => setOpen(v => !v)}
+      >
+        <CalIcon />
+        {value
+          ? <span className="date-picker-value">{formatLabel(value)}</span>
+          : <span className="date-picker-placeholder">{placeholder}</span>
+        }
+      </button>
+      {value && (
+        <button
+          type="button"
+          className="date-picker-clear"
+          onClick={e => { e.stopPropagation(); onChange('') }}
+        >
+          ×
+        </button>
+      )}
+      {open && (
+        <div className="date-picker-popover">
+          <div className="date-picker-nav">
+            <button type="button" className="date-picker-nav-btn" onClick={prevMonth}>‹</button>
+            <span className="date-picker-nav-label">{MONTH_SHORT[viewMonth - 1]} {viewYear}</span>
+            <button type="button" className="date-picker-nav-btn" onClick={nextMonth}>›</button>
+          </div>
+          <div className="date-picker-grid">
+            {['Su','Mo','Tu','We','Th','Fr','Sa'].map(h => (
+              <span key={h} className="date-picker-dow">{h}</span>
+            ))}
+            {buildCells().map((d, i) => {
+              if (d === null) return <span key={i} />
+              const ds = makeDateStr(viewYear, viewMonth, d)
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`date-picker-day${ds === value ? ' selected' : ''}${ds === today ? ' today' : ''}`}
+                  onClick={() => { onChange(ds); setOpen(false) }}
+                >
+                  {d}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TodoItemRow({
   todo,
   onToggle,
@@ -93,13 +217,7 @@ function TodoItemRow({
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
           onBlur={save}
         />
-        <input
-          type="date"
-          className="todo-due-input-inline"
-          value={editDue}
-          onChange={e => setEditDue(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-        />
+        <DatePicker value={editDue} onChange={setEditDue} placeholder="No due date" />
       </div>
     )
   }
@@ -116,21 +234,28 @@ function TodoItemRow({
       >
         <CheckIcon />
       </button>
-      <span className={`task-text${todo.completed ? ' done' : ''}`} onClick={e => { e.stopPropagation(); startEdit() }}>{todo.text}</span>
-      {due && (
-        <span className={`todo-due-badge${due.overdue ? ' todo-due-overdue' : ''}`}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-          </svg>
-          {due.label}
-        </span>
-      )}
-      <button className="task-edit-btn" onClick={e => { e.stopPropagation(); startEdit() }} aria-label="Edit">
-        <PencilIcon />
-      </button>
-      <button className="task-delete" onClick={e => { e.stopPropagation(); onDelete() }} aria-label="Delete">
-        <TrashIcon />
-      </button>
+      <span
+        className={`task-text${todo.completed ? ' done' : ''}`}
+        onClick={e => { e.stopPropagation(); startEdit() }}
+      >
+        {todo.text}
+      </span>
+      <div className="task-item-right">
+        <button className="task-edit-btn" onClick={e => { e.stopPropagation(); startEdit() }} aria-label="Edit">
+          <PencilIcon />
+        </button>
+        <button className="task-delete" onClick={e => { e.stopPropagation(); onDelete() }} aria-label="Delete">
+          <TrashIcon />
+        </button>
+        {due && (
+          <span className={`todo-due-badge${due.overdue ? ' todo-due-overdue' : ''}`}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+            {due.label}
+          </span>
+        )}
+      </div>
     </div>
   )
 }
@@ -147,7 +272,10 @@ const STATUS_LABEL: Record<AgentTaskStatus, string> = {
 
 function AgentTaskRow({ task }: { task: AgentTask }) {
   const [expanded, setExpanded] = useState(false)
+  const [showPrompt, setShowPrompt] = useState(false)
   const isTerminal = TERMINAL.includes(task.status)
+
+  const summaryHtml = task.summary ? marked.parse(task.summary) as string : null
 
   return (
     <div className={`agent-task-item agent-task-${task.status}`}>
@@ -162,14 +290,35 @@ function AgentTaskRow({ task }: { task: AgentTask }) {
         <span className="agent-task-time">{timeAgo(task.created_at)}</span>
       </div>
 
+      {task.prompt && (
+        <div className="agent-task-desc-wrap">
+          <button
+            className="agent-task-desc-toggle"
+            onClick={() => setShowPrompt(v => !v)}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+              style={{ transform: showPrompt ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+            </svg>
+            Description
+          </button>
+          {showPrompt && (
+            <div className="agent-task-desc">{task.prompt}</div>
+          )}
+        </div>
+      )}
+
       {task.status === 'failed' && task.error && (
         <div className="agent-task-error">{task.error}</div>
       )}
 
-      {task.status === 'done' && task.summary && (
+      {summaryHtml && (
         <div className="agent-task-summary-wrap">
-          <p className={`agent-task-summary${expanded ? ' expanded' : ''}`}>{task.summary}</p>
-          {task.summary.length > 140 && (
+          <div
+            className={`agent-task-md${expanded ? '' : ' agent-task-md-collapsed'}`}
+            dangerouslySetInnerHTML={{ __html: summaryHtml }}
+          />
+          {task.summary!.length > 300 && (
             <button className="agent-task-expand" onClick={() => setExpanded(v => !v)}>
               {expanded ? 'Show less' : 'Show more'}
             </button>
@@ -304,22 +453,16 @@ export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteT
                 onChange={e => setText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && submitTodo()}
               />
-              <input
-                type="date"
-                className="todo-due-input"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                title="Due date (optional)"
-              />
+              <DatePicker value={dueDate} onChange={setDueDate} />
               <button className="add-task-btn" onClick={submitTodo}>Add</button>
             </div>
           </div>
         </div>
 
-        {/* Agent Queue */}
+        {/* Agent Tasks */}
         <div className="task-section agent-tasks-section">
           <div className="agent-tasks-header">
-            <span className="section-label">Agent Queue</span>
+            <span className="section-label">Agent Tasks</span>
             <button
               className="icon-btn agent-tasks-new-btn"
               onClick={() => setShowAgentForm(v => !v)}

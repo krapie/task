@@ -111,6 +111,7 @@ export type AgentTaskStatus = 'queued' | 'running' | 'waiting_quota' | 'gating' 
 export interface AgentTask {
   id: number
   title: string
+  prompt: string | null
   repo: string
   status: AgentTaskStatus
   branch: string | null
