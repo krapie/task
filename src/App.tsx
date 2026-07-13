@@ -207,15 +207,6 @@ export default function App() {
     [todos, selectedSlotDate]
   )
 
-  // Derived: count of incomplete todos per date (for calendar dots)
-  const todosByDate = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const t of todos) {
-      if (t.due_date && !t.completed) map[t.due_date] = (map[t.due_date] ?? 0) + 1
-    }
-    return map
-  }, [todos])
-
   // Derived: todos due on the selected calendar date (for EventPanel)
   const calendarDayTodos = useMemo(() =>
     selectedCalendarDate ? todos.filter(t => t.due_date === selectedCalendarDate) : [],
@@ -1016,7 +1007,7 @@ export default function App() {
               const y = prev.month === 12 ? prev.year + 1 : prev.year
               return { year: y, month: m }
             })}
-            todosByDate={todosByDate}
+            todos={todos}
             onDayClick={date => { setSelectedCalendarDate(prev => prev === date ? null : date); setEditingEventId(null) }}
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />

@@ -63,12 +63,14 @@ function TodoItemRow({
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(todo.text)
   const [editDue, setEditDue] = useState(todo.due_date ?? '')
+  const [revealed, setRevealed] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   function startEdit() {
     setEditText(todo.text)
     setEditDue(todo.due_date ?? '')
     setEditing(true)
+    setRevealed(false)
     setTimeout(() => inputRef.current?.focus(), 0)
   }
 
@@ -103,15 +105,18 @@ function TodoItemRow({
   }
 
   return (
-    <div className={`task-item${todo.completed ? ' task-item-done' : ''}`}>
+    <div
+      className={`task-item${todo.completed ? ' task-item-done' : ''}${revealed ? ' revealed' : ''}`}
+      onClick={() => setRevealed(v => !v)}
+    >
       <button
         className={`task-checkbox${todo.completed ? ' checked' : ''}`}
-        onClick={onToggle}
+        onClick={e => { e.stopPropagation(); onToggle() }}
         aria-label={todo.completed ? 'Mark incomplete' : 'Mark complete'}
       >
         <CheckIcon />
       </button>
-      <span className={`task-text${todo.completed ? ' done' : ''}`} onClick={startEdit}>{todo.text}</span>
+      <span className={`task-text${todo.completed ? ' done' : ''}`} onClick={e => { e.stopPropagation(); startEdit() }}>{todo.text}</span>
       {due && (
         <span className={`todo-due-badge${due.overdue ? ' todo-due-overdue' : ''}`}>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -120,10 +125,10 @@ function TodoItemRow({
           {due.label}
         </span>
       )}
-      <button className="task-edit-btn" onClick={startEdit} aria-label="Edit">
+      <button className="task-edit-btn" onClick={e => { e.stopPropagation(); startEdit() }} aria-label="Edit">
         <PencilIcon />
       </button>
-      <button className="task-delete" onClick={onDelete} aria-label="Delete">
+      <button className="task-delete" onClick={e => { e.stopPropagation(); onDelete() }} aria-label="Delete">
         <TrashIcon />
       </button>
     </div>

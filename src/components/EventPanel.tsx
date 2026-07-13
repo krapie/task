@@ -146,7 +146,10 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
 export function EventPanel({ date, dayEvents, dayTodos, focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [revealedId, setRevealedId] = useState<string | null>(null)
   const focusRef = useRef<HTMLDivElement>(null)
+
+  function toggleReveal(id: string) { setRevealedId(prev => prev === id ? null : id) }
 
   const sorted = [...dayEvents].sort((a, b) => (a.time ?? '99:99').localeCompare(b.time ?? '99:99'))
 
@@ -163,8 +166,9 @@ export function EventPanel({ date, dayEvents, dayTodos, focusEventId, onClose, o
   }, [onClose])
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay cal-modal-overlay" onClick={onClose}>
       <div className="modal cal-modal" onClick={e => e.stopPropagation()}>
+        <div className="cal-modal-handle" />
         <div className="modal-header cal-modal-header">
           <span className="modal-title">{formatDisplayDate(date)}</span>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -196,10 +200,10 @@ export function EventPanel({ date, dayEvents, dayTodos, focusEventId, onClose, o
                   <div
                     key={event.id}
                     ref={isFocused ? focusRef : null}
-                    className={['cal-event-item', isFocused ? 'cal-event-item-focused' : ''].filter(Boolean).join(' ')}
+                    className={['cal-event-item', isFocused ? 'cal-event-item-focused' : '', revealedId === event.id ? 'revealed' : ''].filter(Boolean).join(' ')}
                   >
                     <div className="cal-event-detail">
-                      <div className="cal-event-detail-top">
+                      <div className="cal-event-detail-top" onClick={() => toggleReveal(event.id)}>
                         {event.time && <span className="event-item-time">{event.time}</span>}
                         <span className="cal-event-title">{event.title}</span>
                       </div>

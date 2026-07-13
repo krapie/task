@@ -479,6 +479,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 .task-section {
   margin-bottom: 0;
+  min-width: 0;
 }
 
 /* Task Items */
@@ -604,6 +605,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 .add-task-input {
   flex: 1;
+  min-width: 0;
   height: 34px;
   padding: 0 var(--kp-space-3);
   border: 1px solid var(--kp-border);
@@ -1209,6 +1211,16 @@ a { color: var(--kp-fg); text-decoration: none; }
   .mail-item-read-btn { opacity: 1; }
   /* Prevent iOS zoom on search input */
   .mail-search-input { font-size: 16px; }
+
+  /* Task tab: reduce padding, fix add-task-row layout */
+  .todo-view { padding: 16px; }
+  .add-task-row { flex-wrap: wrap; }
+  .add-task-input { flex: none; width: 100%; }
+  .todo-due-input { flex: 1; }
+
+  /* Prevent iOS zoom on agent form inputs */
+  .agent-title-input { font-size: 16px; }
+  .agent-prompt-input { font-size: 16px; }
 }
 
 /* ── Calendar view ─────────────────────────────────────────────── */
@@ -1525,6 +1537,9 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 /* ── Calendar event modal ───────────────────────────────────────── */
 
+/* Handle indicator for mobile bottom sheet — hidden on desktop */
+.cal-modal-handle { display: none; }
+
 .cal-modal {
   max-width: 420px;
   max-height: min(600px, 90vh);
@@ -1627,6 +1642,37 @@ a { color: var(--kp-fg); text-decoration: none; }
   .calendar-day-num { width: 20px; height: 20px; font-size: 12px; }
   .event-bar { height: 16px; font-size: 11px; padding: 0 3px; }
   .event-bar-time, .event-bar-recurrence { display: none; }
+  .cal-event-item.revealed .task-edit-btn { display: flex; opacity: 1; }
+  .cal-event-item.revealed .task-delete { display: flex; opacity: 1; }
+
+  /* EventPanel: bottom sheet on mobile */
+  .cal-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .cal-modal-overlay .modal.cal-modal {
+    max-width: 100%;
+    width: 100%;
+    max-height: 85vh;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-top-left-radius: var(--kp-radius-lg);
+    border-top-right-radius: var(--kp-radius-lg);
+    animation: calModalUp var(--kp-dur-base) var(--kp-ease);
+  }
+  @keyframes calModalUp {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(0); }
+  }
+  .cal-modal-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--kp-border-strong);
+    margin: 10px auto 4px;
+    flex-shrink: 0;
+  }
 }
 
 /* ── icon-btn active state ─────────────────────────────────────────── */
@@ -2355,15 +2401,22 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 
 
-/* ── Calendar todo dots ────────────────────────────────── */
-.calendar-todo-dot {
-  display: block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--kp-fg-2);
-  margin: 2px auto 0;
-  flex-shrink: 0;
+/* ── Todo bars in calendar ─────────────────────────────── */
+.event-bar.is-todo {
+  background: transparent;
+  color: var(--kp-fg-2);
+  border: 1px solid var(--kp-fg-3);
+  opacity: 1;
+}
+.event-bar.is-todo:hover {
+  border-color: var(--kp-fg);
+  color: var(--kp-fg);
+}
+.event-bar.is-todo.is-todo-done {
+  opacity: 0.38;
+}
+.event-bar.is-todo.is-todo-done .event-bar-title {
+  text-decoration: line-through;
 }
 
 /* ── EventPanel todo list ──────────────────────────────── */

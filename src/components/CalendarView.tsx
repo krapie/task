@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { CalendarEvent, Addition } from '../types'
+import type { CalendarEvent, Addition, TodoItem } from '../types'
 
 const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = [
@@ -40,11 +40,28 @@ function buildWeeks(year: number, month: number): string[][] {
 type CalendarItem =
   | { kind: 'event'; event: CalendarEvent }
   | { kind: 'addition'; addition: Addition }
+  | { kind: 'todo'; todo: TodoItem }
 
-function itemId(item: CalendarItem)    { return item.kind === 'event' ? item.event.id         : item.addition.id }
-function itemStart(item: CalendarItem) { return item.kind === 'event' ? item.event.start_date  : item.addition.slot_date }
-function itemEnd(item: CalendarItem)   { return item.kind === 'event' ? item.event.end_date    : item.addition.slot_date }
-function itemTitle(item: CalendarItem) { return item.kind === 'event' ? item.event.title       : item.addition.text }
+function itemId(item: CalendarItem) {
+  if (item.kind === 'event') return item.event.id
+  if (item.kind === 'addition') return item.addition.id
+  return item.todo.id
+}
+function itemStart(item: CalendarItem) {
+  if (item.kind === 'event') return item.event.start_date
+  if (item.kind === 'addition') return item.addition.slot_date
+  return item.todo.due_date!
+}
+function itemEnd(item: CalendarItem) {
+  if (item.kind === 'event') return item.event.end_date
+  if (item.kind === 'addition') return item.addition.slot_date
+  return item.todo.due_date!
+}
+function itemTitle(item: CalendarItem) {
+  if (item.kind === 'event') return item.event.title
+  if (item.kind === 'addition') return item.addition.text
+  return item.todo.text
+}
 
 interface PositionedItem {
   item: CalendarItem
@@ -83,7 +100,7 @@ interface CalendarWeekProps {
   weekDates: string[]
   events: CalendarEvent[]
   additions: Addition[]
-  todosByDate: Record<string, number>
+  todos: TodoItem[]
   today: string
   selectedDate: string | null
   currentMonth: number
@@ -91,11 +108,12 @@ interface CalendarWeekProps {
   onEventClick: (event: CalendarEvent) => void
 }
 
-function CalendarWeek({ weekDates, events, additions, todosByDate, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
+function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
   const items = useMemo<CalendarItem[]>(() => [
     ...events.map(e => ({ kind: 'event' as const, event: e })),
     ...additions.map(a => ({ kind: 'addition' as const, addition: a })),
-  ], [events, additions])
+    ...todos.filter(t => t.due_date !== null).map(t => ({ kind: 'todo' as const, todo: t })),
+  ], [events, additions, todos])
   const positioned = useMemo(() => layoutWeek(weekDates, items), [weekDates, items])
 
   // Count overflow per column (items with lane >= MAX_LANES)
@@ -128,12 +146,11 @@ function CalendarWeek({ weekDates, events, additions, todosByDate, today, select
             onClick={() => onDayClick(date)}
           >
             <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
-            {todosByDate[date] > 0 && <span className="calendar-todo-dot" />}
           </div>
         )
       })}
 
-      {/* Event and addition bars — same grid-row: 1, overlaid on day cells via DOM order */}
+      {/* Event, addition, and todo bars — same grid-row: 1, overlaid on day cells via DOM order */}
       {visibleItems.map(pe => {
         const { item } = pe
         return (
@@ -142,6 +159,8 @@ function CalendarWeek({ weekDates, events, additions, todosByDate, today, select
             className={[
               'event-bar',
               item.kind === 'addition' ? 'is-addition' : '',
+              item.kind === 'todo' ? 'is-todo' : '',
+              item.kind === 'todo' && item.todo.completed ? 'is-todo-done' : '',
               pe.isStart ? 'is-start' : 'is-continuation',
               pe.isEnd ? 'is-end' : '',
             ].filter(Boolean).join(' ')}
@@ -153,6 +172,7 @@ function CalendarWeek({ weekDates, events, additions, todosByDate, today, select
             onClick={e => {
               e.stopPropagation()
               if (item.kind === 'addition') onDayClick(item.addition.slot_date)
+              else if (item.kind === 'todo') onDayClick(item.todo.due_date!)
               else onEventClick(item.event)
             }}
           >
@@ -192,7 +212,7 @@ interface CalendarViewProps {
   month: number
   events: CalendarEvent[]
   additions: Addition[]
-  todosByDate: Record<string, number>
+  todos: TodoItem[]
   selectedDate: string | null
   onPrevMonth: () => void
   onNextMonth: () => void
@@ -200,7 +220,7 @@ interface CalendarViewProps {
   onEventClick: (event: CalendarEvent) => void
 }
 
-export function CalendarView({ year, month, events, additions, todosByDate, selectedDate, onPrevMonth, onNextMonth, onDayClick, onEventClick }: CalendarViewProps) {
+export function CalendarView({ year, month, events, additions, todos, selectedDate, onPrevMonth, onNextMonth, onDayClick, onEventClick }: CalendarViewProps) {
   const today = todayStr()
   const weeks = useMemo(() => buildWeeks(year, month), [year, month])
 
@@ -231,7 +251,7 @@ export function CalendarView({ year, month, events, additions, todosByDate, sele
               weekDates={weekDates}
               events={events}
               additions={additions}
-              todosByDate={todosByDate}
+              todos={todos}
               today={today}
               selectedDate={selectedDate}
               currentMonth={month}
