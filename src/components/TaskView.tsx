@@ -41,6 +41,9 @@ function AgentTaskRow({ task }: { task: AgentTask }) {
           {STATUS_LABEL[task.status]}
         </span>
         <span className="agent-task-title">{task.title}</span>
+        {task.session && task.session !== 'default' && (
+          <span className="agent-task-session">{task.session}</span>
+        )}
         <span className="agent-task-time">{timeAgo(task.created_at)}</span>
       </div>
 
@@ -92,9 +95,14 @@ function AgentTaskRow({ task }: { task: AgentTask }) {
   )
 }
 
-function AgentSubmitForm({ onSubmit, onCancel }: { onSubmit: (title: string, prompt: string) => Promise<void>; onCancel: () => void }) {
+function AgentSubmitForm({ onSubmit, onCancel, sessions }: {
+  onSubmit: (title: string, prompt: string, session?: string) => Promise<void>
+  onCancel: () => void
+  sessions: string[]
+}) {
   const [title, setTitle] = useState('')
   const [prompt, setPrompt] = useState('')
+  const [session, setSession] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
@@ -109,7 +117,7 @@ function AgentSubmitForm({ onSubmit, onCancel }: { onSubmit: (title: string, pro
     setSubmitting(true)
     setError(null)
     try {
-      await onSubmit(t, p)
+      await onSubmit(t, p, session.trim() || undefined)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to submit')
       setSubmitting(false)
@@ -125,6 +133,20 @@ function AgentSubmitForm({ onSubmit, onCancel }: { onSubmit: (title: string, pro
         value={title}
         onChange={e => setTitle(e.target.value)}
       />
+      <div className="agent-session-row">
+        <input
+          className="agent-session-input"
+          placeholder="Session (optional)"
+          value={session}
+          onChange={e => setSession(e.target.value)}
+          list="agent-session-datalist"
+        />
+        {sessions.length > 0 && (
+          <datalist id="agent-session-datalist">
+            {sessions.map(s => <option key={s} value={s} />)}
+          </datalist>
+        )}
+      </div>
       <textarea
         className="agent-prompt-input"
         placeholder="Describe what the agent should do…"
@@ -151,7 +173,7 @@ function AgentSubmitForm({ onSubmit, onCancel }: { onSubmit: (title: string, pro
 
 interface AgentViewProps {
   agentTasks: AgentTask[]
-  onSubmitAgentTask: (title: string, prompt: string) => Promise<void>
+  onSubmitAgentTask: (title: string, prompt: string, session?: string) => Promise<void>
 }
 
 const FINISHED_VISIBLE = 3
@@ -159,11 +181,30 @@ const FINISHED_VISIBLE = 3
 export function AgentView({ agentTasks, onSubmitAgentTask }: AgentViewProps) {
   const [showAgentForm, setShowAgentForm] = useState(false)
   const [showAllFinished, setShowAllFinished] = useState(false)
+  const [sessionFilter, setSessionFilter] = useState<string | null>(null)
 
-  const activeTasks = agentTasks.filter(t => !TERMINAL.includes(t.status))
-  const finishedTasks = agentTasks.filter(t => TERMINAL.includes(t.status))
+  // Unique sessions, ordered by most recent task
+  const sessions = Array.from(
+    agentTasks.reduce((acc, t) => {
+      const s = t.session ?? 'default'
+      if (!acc.has(s)) acc.set(s, t.created_at)
+      return acc
+    }, new Map<string, string>()).keys()
+  )
+
+  const filtered = sessionFilter
+    ? agentTasks.filter(t => (t.session ?? 'default') === sessionFilter)
+    : agentTasks
+
+  const activeTasks = filtered.filter(t => !TERMINAL.includes(t.status))
+  const finishedTasks = filtered.filter(t => TERMINAL.includes(t.status))
   const visibleFinished = showAllFinished ? finishedTasks : finishedTasks.slice(0, FINISHED_VISIBLE)
   const hiddenCount = finishedTasks.length - FINISHED_VISIBLE
+
+  function selectSession(s: string | null) {
+    setSessionFilter(s)
+    setShowAllFinished(false)
+  }
 
   return (
     <div className="todo-view">
@@ -185,17 +226,38 @@ export function AgentView({ agentTasks, onSubmitAgentTask }: AgentViewProps) {
 
           {showAgentForm && (
             <AgentSubmitForm
-              onSubmit={async (title, prompt) => {
-                await onSubmitAgentTask(title, prompt)
+              sessions={sessions}
+              onSubmit={async (title, prompt, session) => {
+                await onSubmitAgentTask(title, prompt, session)
                 setShowAgentForm(false)
               }}
               onCancel={() => setShowAgentForm(false)}
             />
           )}
 
-          {agentTasks.length === 0 && !showAgentForm && (
+          {sessions.length > 1 && (
+            <div className="agent-session-pills">
+              <button
+                className={`agent-session-pill${sessionFilter === null ? ' active' : ''}`}
+                onClick={() => selectSession(null)}
+              >
+                All
+              </button>
+              {sessions.map(s => (
+                <button
+                  key={s}
+                  className={`agent-session-pill${sessionFilter === s ? ' active' : ''}`}
+                  onClick={() => selectSession(s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filtered.length === 0 && !showAgentForm && (
             <div className="empty-state" style={{ fontSize: 'var(--kp-text-sm)' }}>
-              No agent tasks yet.
+              {agentTasks.length === 0 ? 'No agent tasks yet.' : 'No tasks in this session.'}
             </div>
           )}
 

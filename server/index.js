@@ -565,14 +565,14 @@ function agentqFetch(url, options = {}) {
 
 app.post('/api/agentq/tasks', auth, async (req, res) => {
   if (!AGENTQ_JWT_SECRET) return res.status(503).json({ error: 'agentq not configured' })
-  const { title, prompt } = req.body
+  const { title, prompt, session } = req.body
   if (!title || !prompt) return res.status(400).json({ error: 'title and prompt required' })
   try {
     const token = signAgentqJwt(req.user?.username)
     const r = await agentqFetch(`${AGENTQ_URL}/v1/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title, prompt, repo: '/home/kevinprk/homeserver/apps/task' }),
+      body: JSON.stringify({ title, prompt, repo: '/home/kevinprk/homeserver/apps/task', ...(session ? { session } : {}) }),
     })
     const data = await r.json()
     res.status(r.status).json(data)

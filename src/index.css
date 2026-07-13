@@ -2494,6 +2494,65 @@ a { color: var(--kp-fg); text-decoration: none; }
 .agent-tasks-show-more:hover { color: var(--kp-fg-1); }
 [data-theme="dark"] .agent-tasks-show-more { border-top-color: var(--kp-gray-700); }
 
+/* Session filter pills */
+.agent-session-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: var(--kp-space-2) var(--kp-space-4);
+  border-bottom: 1px solid var(--kp-border);
+}
+
+.agent-session-pill {
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid var(--kp-border);
+  background: none;
+  color: var(--kp-fg-3);
+  font-size: var(--kp-text-xs);
+  font-family: var(--kp-font-mono);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.agent-session-pill:hover { color: var(--kp-fg-1); border-color: var(--kp-fg-3); }
+.agent-session-pill.active {
+  background: var(--kp-fg);
+  color: var(--kp-bg);
+  border-color: var(--kp-fg);
+}
+
+/* Session badge on task card */
+.agent-task-session {
+  font-size: 10px;
+  font-family: var(--kp-font-mono);
+  color: var(--kp-fg-4);
+  background: var(--kp-hover-bg);
+  border: 1px solid var(--kp-border);
+  border-radius: 99px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+
+/* Session input row in submit form */
+.agent-session-row {
+  position: relative;
+}
+.agent-session-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--kp-space-2);
+  background: var(--kp-input-bg);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  color: var(--kp-fg);
+  font-size: var(--kp-text-sm);
+  font-family: var(--kp-font-mono);
+  outline: none;
+  box-sizing: border-box;
+}
+.agent-session-input:focus { border-color: var(--kp-fg-3); }
+.agent-session-input::placeholder { font-family: inherit; color: var(--kp-fg-4); }
+
 .agent-submit-form {
   display: flex;
   flex-direction: column;

@@ -113,6 +113,7 @@ export interface AgentTask {
   title: string
   prompt: string | null
   repo: string
+  session: string | null
   status: AgentTaskStatus
   branch: string | null
   error: string | null

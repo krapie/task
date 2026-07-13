@@ -153,7 +153,7 @@ export const api = {
     unflag: (link: string) => req<{ flagged: boolean }>('POST', '/news/unflag', { link }),
   },
   agentq: {
-    submit: (title: string, prompt: string) => req<{ id: number }>('POST', '/agentq/tasks', { title, prompt }),
+    submit: (title: string, prompt: string, session?: string) => req<{ id: number }>('POST', '/agentq/tasks', { title, prompt, ...(session ? { session } : {}) }),
     list: () => req<{ tasks: AgentTask[] }>('GET', '/agentq/tasks'),
     get: (id: number) => req<AgentTask>('GET', `/agentq/tasks/${id}`),
   },

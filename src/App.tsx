@@ -496,8 +496,8 @@ export default function App() {
     setTodos(prev => prev.filter(t => t.id !== id))
   }
 
-  async function handleSubmitAgentTask(title: string, prompt: string): Promise<void> {
-    const result = await api.agentq.submit(title, prompt)
+  async function handleSubmitAgentTask(title: string, prompt: string, session?: string): Promise<void> {
+    const result = await api.agentq.submit(title, prompt, session)
     await loadAgentTasks()
     return void result
   }
@@ -1018,6 +1018,7 @@ export default function App() {
             agentTasks={agentTasks}
             onSubmitAgentTask={handleSubmitAgentTask}
           />
+
         )}
       </main>
 
