@@ -486,6 +486,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .task-board-right {
   display: flex;
   flex-direction: column;
+  gap: 32px;
   min-width: 0;
 }
 
