@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { TodoItem, AgentTask, AgentTaskStatus } from '../types'
 
 const TERMINAL: AgentTaskStatus[] = ['done', 'failed', 'canceled']
@@ -23,6 +23,30 @@ function formatDue(dateStr: string): { label: string; overdue: boolean } {
   if (diff === -1) return { label: 'Yesterday', overdue: true }
   if (diff > 0 && diff <= 6) return { label: due.toLocaleDateString('en-US', { weekday: 'short' }), overdue: false }
   return { label: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), overdue }
+}
+
+function CheckIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+    </svg>
+  )
+}
+
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+    </svg>
+  )
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+    </svg>
+  )
 }
 
 function TodoItemRow({
@@ -58,38 +82,34 @@ function TodoItemRow({
 
   if (editing) {
     return (
-      <div className="todo-item todo-item-editing">
+      <div className="task-item task-item-editing">
         <input
           ref={inputRef}
-          className="todo-edit-input"
+          className="task-edit-input"
           value={editText}
           onChange={e => setEditText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+          onBlur={save}
         />
         <input
           type="date"
-          className="todo-due-input"
+          className="todo-due-input-inline"
           value={editDue}
           onChange={e => setEditDue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
         />
-        <div className="todo-edit-actions">
-          <button className="add-task-btn" onClick={save}>Save</button>
-          <button className="settings-action-btn" onClick={() => setEditing(false)}>Cancel</button>
-        </div>
       </div>
     )
   }
 
   return (
-    <div className={`todo-item${todo.completed ? ' todo-completed' : ''}`}>
+    <div className={`task-item${todo.completed ? ' task-item-done' : ''}`}>
       <button
         className={`task-checkbox${todo.completed ? ' checked' : ''}`}
         onClick={onToggle}
         aria-label={todo.completed ? 'Mark incomplete' : 'Mark complete'}
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-        </svg>
+        <CheckIcon />
       </button>
       <span className={`task-text${todo.completed ? ' done' : ''}`} onClick={startEdit}>{todo.text}</span>
       {due && (
@@ -101,14 +121,10 @@ function TodoItemRow({
         </span>
       )}
       <button className="task-edit-btn" onClick={startEdit} aria-label="Edit">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
-        </svg>
+        <PencilIcon />
       </button>
       <button className="task-delete" onClick={onDelete} aria-label="Delete">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-        </svg>
+        <TrashIcon />
       </button>
     </div>
   )
@@ -175,6 +191,10 @@ function AgentSubmitForm({ onSubmit, onCancel }: { onSubmit: (title: string, pro
   const [error, setError] = useState<string | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    titleRef.current?.focus()
+  }, [])
+
   async function submit() {
     const t = title.trim(), p = prompt.trim()
     if (!t || !p) return
@@ -196,7 +216,6 @@ function AgentSubmitForm({ onSubmit, onCancel }: { onSubmit: (title: string, pro
         placeholder="Task title"
         value={title}
         onChange={e => setTitle(e.target.value)}
-        autoFocus
       />
       <textarea
         className="agent-prompt-input"
@@ -249,46 +268,51 @@ export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteT
 
   return (
     <div className="todo-view">
-      <div className="todo-add-bar">
-        <input
-          ref={inputRef}
-          className="todo-add-input"
-          placeholder="Add a task…"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submitTodo()}
-        />
-        <input
-          type="date"
-          className="todo-due-input"
-          value={dueDate}
-          onChange={e => setDueDate(e.target.value)}
-          title="Due date (optional)"
-        />
-        <button className="add-task-btn" onClick={submitTodo}>Add</button>
-      </div>
+      <div className="task-board">
 
-      <div className="todo-list-wrap">
-        {todos.length === 0 && (
-          <div className="empty-state" style={{ padding: '24px' }}>No tasks yet.</div>
-        )}
-
-        {todos.length > 0 && (
-          <div className="task-list">
-            {todos.map(t => (
-              <TodoItemRow
-                key={t.id}
-                todo={t}
-                onToggle={() => onToggleTodo(t.id)}
-                onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
-                onDelete={() => onDeleteTodo(t.id)}
+        {/* Personal Tasks */}
+        <div className="task-section">
+          <div className="section-label">Tasks</div>
+          {todos.length === 0 && (
+            <div className="empty-state">No tasks yet.</div>
+          )}
+          {todos.length > 0 && (
+            <div className="task-list">
+              {todos.map(t => (
+                <TodoItemRow
+                  key={t.id}
+                  todo={t}
+                  onToggle={() => onToggleTodo(t.id)}
+                  onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
+                  onDelete={() => onDeleteTodo(t.id)}
+                />
+              ))}
+            </div>
+          )}
+          <div className="add-task">
+            <div className="add-task-row">
+              <input
+                ref={inputRef}
+                className="add-task-input"
+                placeholder="Add a task…"
+                value={text}
+                onChange={e => setText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && submitTodo()}
               />
-            ))}
+              <input
+                type="date"
+                className="todo-due-input"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                title="Due date (optional)"
+              />
+              <button className="add-task-btn" onClick={submitTodo}>Add</button>
+            </div>
           </div>
-        )}
+        </div>
 
-        {/* Agent Queue section */}
-        <div className="agent-tasks-section">
+        {/* Agent Queue */}
+        <div className="task-section agent-tasks-section">
           <div className="agent-tasks-header">
             <span className="section-label">Agent Queue</span>
             <button
@@ -313,13 +337,14 @@ export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteT
           )}
 
           {agentTasks.length === 0 && !showAgentForm && (
-            <div className="empty-state" style={{ padding: '16px 24px', fontSize: 'var(--kp-text-sm)' }}>
+            <div className="empty-state" style={{ fontSize: 'var(--kp-text-sm)' }}>
               No agent tasks yet.
             </div>
           )}
 
           {agentTasks.map(t => <AgentTaskRow key={t.id} task={t} />)}
         </div>
+
       </div>
     </div>
   )

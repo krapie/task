@@ -2294,35 +2294,28 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 /* ── Todo view ──────────────────────────────────────────── */
 .todo-view {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
 }
 
-.todo-add-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--kp-space-2);
-  padding: var(--kp-space-3) var(--kp-space-4);
-  border-bottom: 1px solid var(--kp-border);
+.task-item-done { opacity: 0.55; }
+
+/* Inline date input shown during task edit */
+.todo-due-input-inline {
+  height: 22px;
+  padding: 0 var(--kp-space-1);
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px solid var(--kp-border-strong);
+  color: var(--kp-fg-3);
+  font-size: var(--kp-text-xs);
+  font-family: var(--kp-font-mono);
+  outline: none;
   flex-shrink: 0;
 }
 
-.todo-add-input {
-  flex: 1;
-  height: 32px;
-  padding: 0 var(--kp-space-2);
-  background: var(--kp-input-bg);
-  border: 1px solid var(--kp-border);
-  border-radius: var(--kp-radius-sm);
-  color: var(--kp-fg);
-  font-size: var(--kp-text-sm);
-  font-family: inherit;
-  outline: none;
-}
-.todo-add-input:focus { border-color: var(--kp-fg-3); }
-
+/* Due date badge in add-task-row */
 .todo-due-input {
   height: 32px;
   padding: 0 var(--kp-space-2);
@@ -2335,49 +2328,6 @@ a { color: var(--kp-fg); text-decoration: none; }
   outline: none;
 }
 .todo-due-input:focus { border-color: var(--kp-fg-3); }
-
-.todo-list-wrap {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--kp-space-2) 0;
-}
-
-.todo-item {
-  display: flex;
-  align-items: center;
-  gap: var(--kp-space-2);
-  padding: var(--kp-space-2) var(--kp-space-4);
-  transition: background var(--kp-dur-fast) var(--kp-ease);
-}
-.todo-item:hover { background: var(--kp-hover-bg); }
-.todo-item.todo-completed { opacity: 0.55; }
-
-.todo-item-editing {
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--kp-space-2);
-  padding: var(--kp-space-3) var(--kp-space-4);
-  background: var(--kp-hover-bg);
-}
-
-.todo-edit-input {
-  flex: 1;
-  height: 32px;
-  padding: 0 var(--kp-space-2);
-  background: var(--kp-input-bg);
-  border: 1px solid var(--kp-border);
-  border-radius: var(--kp-radius-sm);
-  color: var(--kp-fg);
-  font-size: var(--kp-text-sm);
-  font-family: inherit;
-  outline: none;
-}
-.todo-edit-input:focus { border-color: var(--kp-fg-3); }
-
-.todo-edit-actions {
-  display: flex;
-  gap: var(--kp-space-2);
-}
 
 .todo-due-badge {
   display: inline-flex;
