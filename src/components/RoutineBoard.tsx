@@ -649,7 +649,8 @@ export function RoutineBoard({
           <div className="desktop-add"><DailyTaskAddInput slot={slot} onAdd={onAddTemplate} slotLabels={slotLabels} /></div>
         </div>
 
-        {/* Bonus Tasks */}
+        {/* Bonus Tasks + Tasks share right column, stacked directly */}
+        <div className="task-board-right">
         <div className="task-section">
           <div className="section-label">
             Bonus Tasks
@@ -726,7 +727,7 @@ export function RoutineBoard({
         </div>
 
         {/* Tasks (todos) */}
-        <div className="task-section task-section-todos">
+        <div className="task-section">
           <div className="section-label">Tasks</div>
           {todos.length === 0 ? (
             <div className="empty-state">No tasks yet.</div>
@@ -745,6 +746,7 @@ export function RoutineBoard({
           )}
           <AddTodoInput onAdd={onAddTodo} />
         </div>
+        </div>{/* end task-board-right */}
       </div>
 
       <MobileAddInput

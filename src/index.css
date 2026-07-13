@@ -482,8 +482,12 @@ a { color: var(--kp-fg); text-decoration: none; }
   min-width: 0;
 }
 
-/* Pin Tasks (todos) to column 2, stacking below Bonus Tasks on desktop */
-.task-section-todos { grid-column: 2; }
+/* Right column: Bonus Tasks + Tasks stacked directly with no grid gap */
+.task-board-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
 
 /* Task Items */
 .task-list {
@@ -2466,6 +2470,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .agent-tasks-section {
   margin-top: var(--kp-space-4);
   border-top: 1px solid var(--kp-border);
+  grid-column: 1 / -1;
 }
 
 .agent-tasks-header {
