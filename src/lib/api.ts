@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, AgentTask } from '../types'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
@@ -151,5 +151,10 @@ export const api = {
     flag: (item: Pick<NewsItem, 'link' | 'title' | 'author' | 'published' | 'preview'>) =>
       req<{ flagged: boolean }>('POST', '/news/flag', item),
     unflag: (link: string) => req<{ flagged: boolean }>('POST', '/news/unflag', { link }),
+  },
+  agentq: {
+    submit: (title: string, prompt: string) => req<{ id: number }>('POST', '/agentq/tasks', { title, prompt }),
+    list: () => req<{ tasks: AgentTask[] }>('GET', '/agentq/tasks'),
+    get: (id: number) => req<AgentTask>('GET', `/agentq/tasks/${id}`),
   },
 }

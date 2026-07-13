@@ -2467,3 +2467,178 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-3);
 }
 
+/* ── Agent Queue section ───────────────────────────────── */
+.agent-tasks-section {
+  margin-top: var(--kp-space-4);
+  border-top: 1px solid var(--kp-border);
+}
+
+.agent-tasks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--kp-space-3) var(--kp-space-4) var(--kp-space-2);
+}
+
+.agent-tasks-new-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--kp-radius-sm);
+}
+
+.agent-submit-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--kp-space-2);
+  padding: var(--kp-space-3) var(--kp-space-4);
+  border-bottom: 1px solid var(--kp-border);
+  background: var(--kp-hover-bg);
+}
+
+.agent-title-input {
+  height: 32px;
+  padding: 0 var(--kp-space-2);
+  background: var(--kp-input-bg);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  color: var(--kp-fg);
+  font-size: var(--kp-text-sm);
+  font-family: inherit;
+  outline: none;
+}
+.agent-title-input:focus { border-color: var(--kp-fg-3); }
+
+.agent-prompt-input {
+  padding: var(--kp-space-2);
+  background: var(--kp-input-bg);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  color: var(--kp-fg);
+  font-size: var(--kp-text-sm);
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  line-height: 1.5;
+}
+.agent-prompt-input:focus { border-color: var(--kp-fg-3); }
+
+.agent-submit-actions { display: flex; gap: var(--kp-space-2); }
+
+.agent-submit-error {
+  font-size: var(--kp-text-xs);
+  color: #c0392b;
+}
+[data-theme="dark"] .agent-submit-error { color: #e74c3c; }
+
+.agent-task-item {
+  padding: var(--kp-space-3) var(--kp-space-4);
+  border-bottom: 1px solid var(--kp-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--kp-space-1);
+}
+.agent-task-item:last-child { border-bottom: none; }
+
+.agent-task-header {
+  display: flex;
+  align-items: center;
+  gap: var(--kp-space-2);
+  flex-wrap: wrap;
+}
+
+.agent-task-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-family: var(--kp-font-mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--kp-fg-3);
+  flex-shrink: 0;
+}
+.agent-task-status-done { color: var(--kp-fg-2); }
+.agent-task-status-failed { color: #c0392b; }
+[data-theme="dark"] .agent-task-status-failed { color: #e74c3c; }
+.agent-task-status-running { color: var(--kp-fg-2); }
+
+.agent-task-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--kp-fg-3);
+  flex-shrink: 0;
+}
+.agent-task-dot-running {
+  background: var(--kp-fg-2);
+  animation: agent-pulse 1.4s ease-in-out infinite;
+}
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.agent-task-title {
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-task-time {
+  font-size: 11px;
+  color: var(--kp-fg-4);
+  font-family: var(--kp-font-mono);
+  flex-shrink: 0;
+}
+
+.agent-task-error {
+  font-size: var(--kp-text-xs);
+  color: #c0392b;
+  line-height: 1.4;
+}
+[data-theme="dark"] .agent-task-error { color: #e74c3c; }
+
+.agent-task-summary-wrap { display: flex; flex-direction: column; gap: 4px; }
+
+.agent-task-summary {
+  font-size: var(--kp-text-xs);
+  color: var(--kp-fg-2);
+  line-height: 1.5;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.agent-task-summary.expanded {
+  display: block;
+  overflow: visible;
+}
+
+.agent-task-expand {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--kp-fg-3);
+  padding: 0;
+  font-family: inherit;
+  text-align: left;
+}
+.agent-task-expand:hover { color: var(--kp-fg-2); }
+
+.agent-task-pr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-family: var(--kp-font-mono);
+  color: var(--kp-fg-3);
+  text-decoration: none;
+}
+.agent-task-pr:hover { color: var(--kp-fg); text-decoration: underline; }
+

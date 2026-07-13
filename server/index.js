@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser'
 import pg from 'pg'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { randomUUID, createHash } from 'crypto'
+import { randomUUID, createHash, createHmac } from 'crypto'
 import fetch from 'node-fetch'
 
 const PORT = process.env.PORT || 3000
@@ -13,6 +13,18 @@ const TASK_USERNAME = process.env.TASK_USERNAME || 'admin'
 const TASK_PASSWORD = process.env.TASK_PASSWORD || ''
 const MAIL_BRIDGE_URL = process.env.MAIL_BRIDGE_URL || 'http://localhost:3001'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
+const AGENTQ_URL = process.env.AGENTQ_URL || 'http://192.168.0.17:8888'
+const AGENTQ_JWT_SECRET = process.env.AGENTQ_JWT_SECRET || ''
+
+function b64url(buf) {
+  return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+function signAgentqJwt(sub) {
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const body = b64url(JSON.stringify({ sub: sub || 'task', aud: 'agentq', iss: 'task', exp: Math.floor(Date.now() / 1000) + 60 }))
+  const sig = b64url(createHmac('sha256', AGENTQ_JWT_SECRET).update(`${header}.${body}`).digest())
+  return `${header}.${body}.${sig}`
+}
 
 const pool = new pg.Pool({ connectionString: process.env.POSTGRES_URL })
 
@@ -541,6 +553,50 @@ app.patch('/api/todos/:id', auth, async (req, res) => {
 app.delete('/api/todos/:id', auth, async (req, res) => {
   await pool.query('DELETE FROM todos WHERE id = $1', [req.params.id])
   res.json({})
+})
+
+// agentq proxy — signs JWT server-side, forwards to agentq host process
+app.post('/api/agentq/tasks', auth, async (req, res) => {
+  if (!AGENTQ_JWT_SECRET) return res.status(503).json({ error: 'agentq not configured' })
+  const { title, prompt } = req.body
+  if (!title || !prompt) return res.status(400).json({ error: 'title and prompt required' })
+  try {
+    const token = signAgentqJwt(req.user?.username)
+    const r = await fetch(`${AGENTQ_URL}/v1/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ title, prompt, repo: '/home/kevinprk/homeserver/apps/task' }),
+    })
+    const data = await r.json()
+    res.status(r.status).json(data)
+  } catch {
+    res.status(502).json({ error: 'agentq unreachable' })
+  }
+})
+
+app.get('/api/agentq/tasks', auth, async (req, res) => {
+  if (!AGENTQ_JWT_SECRET) return res.status(503).json({ error: 'agentq not configured' })
+  try {
+    const token = signAgentqJwt(req.user?.username)
+    const qs = req.query.status ? `?status=${req.query.status}` : ''
+    const r = await fetch(`${AGENTQ_URL}/v1/tasks${qs}`, { headers: { Authorization: `Bearer ${token}` } })
+    const data = await r.json()
+    res.status(r.status).json(data)
+  } catch {
+    res.status(502).json({ error: 'agentq unreachable' })
+  }
+})
+
+app.get('/api/agentq/tasks/:id', auth, async (req, res) => {
+  if (!AGENTQ_JWT_SECRET) return res.status(503).json({ error: 'agentq not configured' })
+  try {
+    const token = signAgentqJwt(req.user?.username)
+    const r = await fetch(`${AGENTQ_URL}/v1/tasks/${req.params.id}`, { headers: { Authorization: `Bearer ${token}` } })
+    const data = await r.json()
+    res.status(r.status).json(data)
+  } catch {
+    res.status(502).json({ error: 'agentq unreachable' })
+  }
 })
 
 // News flags — persisted in task DB

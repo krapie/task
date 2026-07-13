@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { TemplateWithState, Addition, Slot, DailyEvent, TodoItem } from '../types'
 import { formatDayLabel, getNextReset, SLOTS } from '../lib/slots'
 
-interface QuestBoardProps {
+interface RoutineBoardProps {
   slot: Slot
   slotDate: string
   isActive: boolean
@@ -265,7 +265,7 @@ function EditInput({ initialText, onConfirm, onCancel }: EditInputProps) {
   )
 }
 
-export function QuestBoard({
+export function RoutineBoard({
   slot,
   slotDate,
   isActive,
@@ -287,7 +287,7 @@ export function QuestBoard({
   onToggleEvent,
   dueTodos,
   onToggleTodo,
-}: QuestBoardProps) {
+}: RoutineBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [revealedId, setRevealedId] = useState<string | null>(null)

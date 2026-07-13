@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { DayTabs } from './components/DayTabs'
-import { QuestBoard } from './components/QuestBoard'
+import { RoutineBoard } from './components/RoutineBoard'
 import { SettingsPanel, downloadExport } from './components/SettingsPanel'
 import { SignInModal } from './components/SignInModal'
 import { ImportModal } from './components/ImportModal'
@@ -8,14 +8,14 @@ import { CalendarView } from './components/CalendarView'
 import { EventPanel } from './components/EventPanel'
 import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
-import { TodoView } from './components/TodoView'
+import { TaskView } from './components/TaskView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder } from './lib/slots'
-import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem } from './types'
+import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem, AgentTask } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'board' | 'calendar' | 'mail' | 'news' | 'todo'
+type View = 'routine' | 'task' | 'calendar' | 'mail' | 'news'
 
 const SLOT_DAY_NAMES: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
@@ -164,7 +164,7 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
 
   // Calendar state
-  const [view, setView] = useState<View>('board')
+  const [view, setView] = useState<View>('routine')
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
@@ -172,6 +172,7 @@ export default function App() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [calendarAdditions, setCalendarAdditions] = useState<Addition[]>([])
   const [todos, setTodos] = useState<TodoItem[]>([])
+  const [agentTasks, setAgentTasks] = useState<AgentTask[]>([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
 
@@ -306,6 +307,12 @@ export default function App() {
     }
   }, [isAuth])
 
+  const loadAgentTasks = useCallback(async () => {
+    if (!isAuth) return
+    const result = await api.agentq.list().catch(() => null)
+    if (result) setAgentTasks(result.tasks)
+  }, [isAuth])
+
   const loadDaily = useCallback(async (slotDate: string) => {
     if (!slotDate || loadedDatesRef.current.has(slotDate)) return
     loadedDatesRef.current.add(slotDate)
@@ -351,6 +358,7 @@ export default function App() {
       loadDaily(slotDate)
       loadAllEvents()
       loadTodos()
+      loadAgentTasks()
     })
   }, [isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -368,6 +376,17 @@ export default function App() {
       loadCalendarAdditions(calendarMonth.year, calendarMonth.month)
     }
   }, [view, calendarMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load agent tasks when switching to task view; poll every 15s while active non-terminal tasks exist
+  useEffect(() => {
+    if (view !== 'task' || !isAuth) return
+    loadAgentTasks()
+    const id = setInterval(() => {
+      const hasActive = agentTasks.some(t => !['done', 'failed', 'canceled'].includes(t.status))
+      if (hasActive) loadAgentTasks()
+    }, 15000)
+    return () => clearInterval(id)
+  }, [view, isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync all board data: templates + daily + events
   const [boardSyncing, setBoardSyncing] = useState(false)
@@ -489,6 +508,12 @@ export default function App() {
   async function handleDeleteTodo(id: string) {
     await api.todos.remove(id).catch(console.error)
     setTodos(prev => prev.filter(t => t.id !== id))
+  }
+
+  async function handleSubmitAgentTask(title: string, prompt: string): Promise<void> {
+    const result = await api.agentq.submit(title, prompt)
+    await loadAgentTasks()
+    return void result
   }
 
   // Template handlers
@@ -839,11 +864,19 @@ export default function App() {
         <a href="https://kevinprk.com" className="rail-pi-mark" title="kevinprk.com">π</a>
 
         <button
-          className={`rail-btn${view === 'board' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('board')} title="Board"
+          className={`rail-btn${view === 'routine' ? ' rail-btn-active' : ''}`}
+          onClick={() => setView('routine')} title="Routine"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+          </svg>
+        </button>
+        <button
+          className={`rail-btn${view === 'task' ? ' rail-btn-active' : ''}`}
+          onClick={() => setView('task')} title="Task"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
           </svg>
         </button>
         <button
@@ -873,14 +906,6 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
         </button>
-        <button
-          className={`rail-btn${view === 'todo' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('todo')} title="Todo"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-        </button>
 
         <div className="rail-spacer" />
 
@@ -902,7 +927,7 @@ export default function App() {
       </nav>
 
       <main className="app-main">
-        {view === 'board' ? (
+        {view === 'routine' ? (
           <>
             {/* Date hero */}
             <div className="board-date-hero">
@@ -946,7 +971,7 @@ export default function App() {
 
             {/* Board content */}
             <div className="board-content">
-              <QuestBoard
+              <RoutineBoard
                 slot={selectedSlot}
                 slotDate={selectedSlotDate}
                 isActive={selectedSlot === activeSlot}
@@ -1000,12 +1025,14 @@ export default function App() {
         ) : view === 'news' ? (
           <NewsView />
         ) : (
-          <TodoView
+          <TaskView
             todos={todos}
-            onAdd={handleAddTodo}
-            onToggle={handleToggleTodo}
-            onEdit={handleEditTodo}
-            onDelete={handleDeleteTodo}
+            onAddTodo={handleAddTodo}
+            onToggleTodo={handleToggleTodo}
+            onEditTodo={handleEditTodo}
+            onDeleteTodo={handleDeleteTodo}
+            agentTasks={agentTasks}
+            onSubmitAgentTask={handleSubmitAgentTask}
           />
         )}
       </main>
@@ -1053,11 +1080,17 @@ export default function App() {
 
       {/* Bottom tab bar — mobile only */}
       <nav className="app-bottom-nav">
-        <button className={`bottom-nav-btn${view === 'board' ? ' bottom-nav-active' : ''}`} onClick={() => setView('board')}>
+        <button className={`bottom-nav-btn${view === 'routine' ? ' bottom-nav-active' : ''}`} onClick={() => setView('routine')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
           </svg>
-          <span>Board</span>
+          <span>Routine</span>
+        </button>
+        <button className={`bottom-nav-btn${view === 'task' ? ' bottom-nav-active' : ''}`} onClick={() => setView('task')}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          <span>Task</span>
         </button>
         <button className={`bottom-nav-btn${view === 'calendar' ? ' bottom-nav-active' : ''}`} onClick={() => setView('calendar')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -1077,12 +1110,6 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
           <span>News</span>
-        </button>
-        <button className={`bottom-nav-btn${view === 'todo' ? ' bottom-nav-active' : ''}`} onClick={() => setView('todo')}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-          </svg>
-          <span>Todo</span>
         </button>
         <button className="bottom-nav-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

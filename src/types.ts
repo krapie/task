@@ -104,3 +104,20 @@ export interface NewsItem {
   preview: string | null
   flagged: boolean
 }
+
+export type AgentTaskStatus = 'queued' | 'running' | 'waiting_quota' | 'gating' | 'done' | 'failed' | 'canceled'
+
+export interface AgentTask {
+  id: number
+  title: string
+  repo: string
+  status: AgentTaskStatus
+  branch: string | null
+  error: string | null
+  summary: string | null
+  pr_number: number | null
+  pr_url: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
