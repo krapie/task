@@ -2404,25 +2404,6 @@ a { color: var(--kp-fg); text-decoration: none; }
   background: rgba(231, 76, 60, 0.1);
 }
 
-.todo-completed-section {
-  margin-top: var(--kp-space-2);
-  padding: 0 var(--kp-space-4);
-}
-
-.todo-completed-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--kp-space-1);
-  padding: var(--kp-space-1) 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--kp-fg-3);
-  font-size: var(--kp-text-xs);
-  font-family: inherit;
-  margin-bottom: var(--kp-space-1);
-}
-.todo-completed-toggle:hover { color: var(--kp-fg-2); }
 
 /* ── Calendar todo dots ────────────────────────────────── */
 .calendar-todo-dot {

@@ -235,7 +235,6 @@ interface TaskViewProps {
 export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteTodo, agentTasks, onSubmitAgentTask }: TaskViewProps) {
   const [text, setText] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [showCompleted, setShowCompleted] = useState(false)
   const [showAgentForm, setShowAgentForm] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -247,9 +246,6 @@ export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteT
     setDueDate('')
     inputRef.current?.focus()
   }
-
-  const active = todos.filter(t => !t.completed)
-  const completed = todos.filter(t => t.completed)
 
   return (
     <div className="todo-view">
@@ -273,13 +269,13 @@ export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteT
       </div>
 
       <div className="todo-list-wrap">
-        {active.length === 0 && completed.length === 0 && (
+        {todos.length === 0 && (
           <div className="empty-state" style={{ padding: '24px' }}>No tasks yet.</div>
         )}
 
-        {active.length > 0 && (
+        {todos.length > 0 && (
           <div className="task-list">
-            {active.map(t => (
+            {todos.map(t => (
               <TodoItemRow
                 key={t.id}
                 todo={t}
@@ -288,31 +284,6 @@ export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteT
                 onDelete={() => onDeleteTodo(t.id)}
               />
             ))}
-          </div>
-        )}
-
-        {completed.length > 0 && (
-          <div className="todo-completed-section">
-            <button className="todo-completed-toggle" onClick={() => setShowCompleted(v => !v)}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                style={{ transform: showCompleted ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-              </svg>
-              {completed.length} completed
-            </button>
-            {showCompleted && (
-              <div className="task-list">
-                {completed.map(t => (
-                  <TodoItemRow
-                    key={t.id}
-                    todo={t}
-                    onToggle={() => onToggleTodo(t.id)}
-                    onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
-                    onDelete={() => onDeleteTodo(t.id)}
-                  />
-                ))}
-              </div>
-            )}
           </div>
         )}
 
