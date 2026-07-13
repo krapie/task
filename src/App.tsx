@@ -8,14 +8,14 @@ import { CalendarView } from './components/CalendarView'
 import { EventPanel } from './components/EventPanel'
 import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
-import { TaskView } from './components/TaskView'
+import { AgentView } from './components/TaskView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem, AgentTask } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'routine' | 'task' | 'calendar' | 'mail' | 'news'
+type View = 'routine' | 'agent' | 'calendar' | 'mail' | 'news'
 
 const SLOT_DAY_NAMES: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
@@ -201,11 +201,6 @@ export default function App() {
     return expandForView(calendarEvents, start, end)
   }, [calendarEvents, calendarMonth])
 
-  // Derived: todos due on the selected slot date (shown in board)
-  const dueTodos = useMemo(() =>
-    todos.filter(t => t.due_date === selectedSlotDate),
-    [todos, selectedSlotDate]
-  )
 
   // Derived: todos due on the selected calendar date (for EventPanel)
   const calendarDayTodos = useMemo(() =>
@@ -370,7 +365,7 @@ export default function App() {
 
   // Load agent tasks when switching to task view; poll every 15s while active non-terminal tasks exist
   useEffect(() => {
-    if (view !== 'task' || !isAuth) return
+    if (view !== 'agent' || !isAuth) return
     loadAgentTasks()
     const id = setInterval(() => {
       const hasActive = agentTasks.some(t => !['done', 'failed', 'canceled'].includes(t.status))
@@ -863,11 +858,11 @@ export default function App() {
           </svg>
         </button>
         <button
-          className={`rail-btn${view === 'task' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('task')} title="Task"
+          className={`rail-btn${view === 'agent' ? ' rail-btn-active' : ''}`}
+          onClick={() => setView('agent')} title="Agent"
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v10.5a2.25 2.25 0 0 0 2.25 2.25Zm.75-12h9v9h-9v-9Z" />
           </svg>
         </button>
         <button
@@ -982,8 +977,11 @@ export default function App() {
                 onToggleAddition={handleToggleAddition}
                 onEditTemplate={handleEditTemplate}
                 onToggleEvent={handleToggleEvent}
-                dueTodos={dueTodos}
+                todos={todos}
                 onToggleTodo={handleToggleTodo}
+                onAddTodo={handleAddTodo}
+                onEditTodo={handleEditTodo}
+                onDeleteTodo={handleDeleteTodo}
               />
             </div>
             <div className="board-footer">
@@ -1016,12 +1014,7 @@ export default function App() {
         ) : view === 'news' ? (
           <NewsView />
         ) : (
-          <TaskView
-            todos={todos}
-            onAddTodo={handleAddTodo}
-            onToggleTodo={handleToggleTodo}
-            onEditTodo={handleEditTodo}
-            onDeleteTodo={handleDeleteTodo}
+          <AgentView
             agentTasks={agentTasks}
             onSubmitAgentTask={handleSubmitAgentTask}
           />
@@ -1077,11 +1070,11 @@ export default function App() {
           </svg>
           <span>Routine</span>
         </button>
-        <button className={`bottom-nav-btn${view === 'task' ? ' bottom-nav-active' : ''}`} onClick={() => setView('task')}>
+        <button className={`bottom-nav-btn${view === 'agent' ? ' bottom-nav-active' : ''}`} onClick={() => setView('agent')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v10.5a2.25 2.25 0 0 0 2.25 2.25Zm.75-12h9v9h-9v-9Z" />
           </svg>
-          <span>Task</span>
+          <span>Agent</span>
         </button>
         <button className={`bottom-nav-btn${view === 'calendar' ? ' bottom-nav-active' : ''}`} onClick={() => setView('calendar')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

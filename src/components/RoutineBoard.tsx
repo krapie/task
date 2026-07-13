@@ -22,10 +22,236 @@ interface RoutineBoardProps {
   onEditAddition: (id: string, text: string) => void
   onToggleAddition: (id: string) => void
   onToggleEvent: (id: string) => void
-  dueTodos: TodoItem[]
+  todos: TodoItem[]
   onToggleTodo: (id: string) => void
+  onAddTodo: (text: string, dueDate?: string) => void
+  onEditTodo: (id: string, text: string, dueDate: string | null) => void
+  onDeleteTodo: (id: string) => void
 }
 
+// --- Date helpers for DatePicker ---
+const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function pad2(n: number) { return String(n).padStart(2, '0') }
+function makeDateStr(y: number, m: number, d: number) { return `${y}-${pad2(m)}-${pad2(d)}` }
+function todayDateStr() {
+  const n = new Date()
+  return makeDateStr(n.getFullYear(), n.getMonth() + 1, n.getDate())
+}
+function formatDue(dateStr: string): { label: string; overdue: boolean } {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const due = new Date(y, m - 1, d)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diff = Math.round((due.getTime() - today.getTime()) / 86400000)
+  const overdue = diff < 0
+  if (diff === 0) return { label: 'Today', overdue: false }
+  if (diff === 1) return { label: 'Tomorrow', overdue: false }
+  if (diff === -1) return { label: 'Yesterday', overdue: true }
+  if (diff > 0 && diff <= 6) return { label: due.toLocaleDateString('en-US', { weekday: 'short' }), overdue: false }
+  return { label: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), overdue }
+}
+
+function CalIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+    </svg>
+  )
+}
+
+function DatePicker({ value, onChange, placeholder = 'Due date' }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [viewYear, setViewYear] = useState(() => value ? parseInt(value.split('-')[0]) : new Date().getFullYear())
+  const [viewMonth, setViewMonth] = useState(() => value ? parseInt(value.split('-')[1]) : new Date().getMonth() + 1)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (value) {
+      setViewYear(parseInt(value.split('-')[0]))
+      setViewMonth(parseInt(value.split('-')[1]))
+    }
+  }, [value])
+
+  useEffect(() => {
+    if (!open) return
+    function onDown(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function formatLabel(v: string) {
+    const [y, m, d] = v.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  function buildCells() {
+    const firstDow = new Date(viewYear, viewMonth - 1, 1).getDay()
+    const days = new Date(viewYear, viewMonth, 0).getDate()
+    const cells: (number | null)[] = Array(firstDow).fill(null)
+    for (let d = 1; d <= days; d++) cells.push(d)
+    return cells
+  }
+
+  function prevMonth() {
+    if (viewMonth === 1) { setViewMonth(12); setViewYear(y => y - 1) }
+    else setViewMonth(m => m - 1)
+  }
+  function nextMonth() {
+    if (viewMonth === 12) { setViewMonth(1); setViewYear(y => y + 1) }
+    else setViewMonth(m => m + 1)
+  }
+
+  const today = todayDateStr()
+
+  return (
+    <div className="date-picker" ref={ref}>
+      <button
+        type="button"
+        className="date-picker-btn"
+        onClick={() => setOpen(v => !v)}
+      >
+        <CalIcon />
+        {value
+          ? <span className="date-picker-value">{formatLabel(value)}</span>
+          : <span className="date-picker-placeholder">{placeholder}</span>
+        }
+      </button>
+      {value && (
+        <button
+          type="button"
+          className="date-picker-clear"
+          onClick={e => { e.stopPropagation(); onChange('') }}
+        >
+          ×
+        </button>
+      )}
+      {open && (
+        <div className="date-picker-popover">
+          <div className="date-picker-nav">
+            <button type="button" className="date-picker-nav-btn" onClick={prevMonth}>‹</button>
+            <span className="date-picker-nav-label">{MONTH_SHORT[viewMonth - 1]} {viewYear}</span>
+            <button type="button" className="date-picker-nav-btn" onClick={nextMonth}>›</button>
+          </div>
+          <div className="date-picker-grid">
+            {['Su','Mo','Tu','We','Th','Fr','Sa'].map(h => (
+              <span key={h} className="date-picker-dow">{h}</span>
+            ))}
+            {buildCells().map((d, i) => {
+              if (d === null) return <span key={i} />
+              const ds = makeDateStr(viewYear, viewMonth, d)
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`date-picker-day${ds === value ? ' selected' : ''}${ds === today ? ' today' : ''}`}
+                  onClick={() => { onChange(ds); setOpen(false) }}
+                >
+                  {d}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// --- Todo row (self-contained edit/reveal state) ---
+function TodoItemRow({
+  todo,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  todo: TodoItem
+  onToggle: () => void
+  onEdit: (text: string, dueDate: string | null) => void
+  onDelete: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState(todo.text)
+  const [editDue, setEditDue] = useState(todo.due_date ?? '')
+  const [revealed, setRevealed] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function startEdit() {
+    setEditText(todo.text)
+    setEditDue(todo.due_date ?? '')
+    setEditing(true)
+    setRevealed(false)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  function save() {
+    const t = editText.trim()
+    if (t) onEdit(t, editDue || null)
+    setEditing(false)
+  }
+
+  const due = todo.due_date ? formatDue(todo.due_date) : null
+
+  if (editing) {
+    return (
+      <div className="task-item task-item-editing">
+        <input
+          ref={inputRef}
+          className="task-edit-input"
+          value={editText}
+          onChange={e => setEditText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+          onBlur={save}
+        />
+        <DatePicker value={editDue} onChange={setEditDue} placeholder="No due date" />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`task-item${todo.completed ? ' task-item-done' : ''}${revealed ? ' revealed' : ''}`}
+      onClick={() => setRevealed(v => !v)}
+    >
+      <button
+        className={`task-checkbox${todo.completed ? ' checked' : ''}`}
+        onClick={e => { e.stopPropagation(); onToggle() }}
+        aria-label={todo.completed ? 'Mark incomplete' : 'Mark complete'}
+      >
+        <CheckIcon />
+      </button>
+      <span
+        className={`task-text${todo.completed ? ' done' : ''}`}
+        onClick={e => { e.stopPropagation(); startEdit() }}
+      >
+        {todo.text}
+      </span>
+      <div className="task-item-right">
+        <button className="task-edit-btn" onClick={e => { e.stopPropagation(); startEdit() }} aria-label="Edit">
+          <PencilIcon />
+        </button>
+        <button className="task-delete" onClick={e => { e.stopPropagation(); onDelete() }} aria-label="Delete">
+          <TrashIcon />
+        </button>
+        {due && (
+          <span className={`todo-due-badge${due.overdue ? ' todo-due-overdue' : ''}`}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+            {due.label}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// --- Shared icon components ---
 function useCountdown(rotateHour: number, rotateMinute: number) {
   const [label, setLabel] = useState('')
 
@@ -170,6 +396,38 @@ function AddInput({ placeholder, onAdd }: { placeholder: string; onAdd: (text: s
   )
 }
 
+function AddTodoInput({ onAdd }: { onAdd: (text: string, dueDate?: string) => void }) {
+  const [text, setText] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function submit() {
+    const t = text.trim()
+    if (!t) return
+    onAdd(t, dueDate || undefined)
+    setText('')
+    setDueDate('')
+    inputRef.current?.focus()
+  }
+
+  return (
+    <div className="add-task">
+      <div className="add-task-row">
+        <input
+          ref={inputRef}
+          className="add-task-input"
+          placeholder="Add a task…"
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submit()}
+        />
+        <DatePicker value={dueDate} onChange={setDueDate} />
+        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
+      </div>
+    </div>
+  )
+}
+
 function MobileAddInput({
   slot,
   isActive,
@@ -285,8 +543,11 @@ export function RoutineBoard({
   onEditAddition,
   onToggleAddition,
   onToggleEvent,
-  dueTodos,
+  todos,
   onToggleTodo,
+  onAddTodo,
+  onEditTodo,
+  onDeleteTodo,
 }: RoutineBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -464,29 +725,26 @@ export function RoutineBoard({
           /></div>
         </div>
 
-        {/* Due Todos */}
-        {dueTodos.length > 0 && (
-          <div className="task-section">
-            <div className="section-label">Due</div>
+        {/* Tasks (todos) */}
+        <div className="task-section">
+          <div className="section-label">Tasks</div>
+          {todos.length === 0 ? (
+            <div className="empty-state">No tasks yet.</div>
+          ) : (
             <div className="task-list">
-              {dueTodos.map(t => (
-                <div key={t.id} className="task-item">
-                  <button
-                    className={`task-checkbox${t.completed ? ' checked' : ''}`}
-                    onClick={() => onToggleTodo(t.id)}
-                    aria-label={t.completed ? 'Mark incomplete' : 'Mark complete'}
-                  >
-                    <CheckIcon />
-                  </button>
-                  <svg className="event-task-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                  </svg>
-                  <span className={`task-text${t.completed ? ' done' : ''}`}>{t.text}</span>
-                </div>
+              {todos.map(t => (
+                <TodoItemRow
+                  key={t.id}
+                  todo={t}
+                  onToggle={() => onToggleTodo(t.id)}
+                  onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
+                  onDelete={() => onDeleteTodo(t.id)}
+                />
               ))}
             </div>
-          </div>
-        )}
+          )}
+          <AddTodoInput onAdd={onAddTodo} />
+        </div>
       </div>
 
       <MobileAddInput
