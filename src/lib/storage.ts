@@ -12,7 +12,7 @@ type StoredTemplates = Record<Slot, Template[]>
 type StoredDailyEntry = { additions: Addition[]; completions: string[] }
 type StoredDaily = Record<string, StoredDailyEntry>
 
-const DEFAULT_SETTINGS: Settings = { rotateHour: 6, rotateMinute: 0, keepBonus: false }
+const DEFAULT_SETTINGS: Settings = { rotateHour: 6, rotateMinute: 0, keepBonus: false, workWeek: 'mon-fri' }
 const DEFAULT_TEMPLATES: StoredTemplates = { mon: [], tue: [], wed: [], thu: [], fri: [], weekend: [] }
 
 function load<T>(key: string, fallback: T): T {

@@ -10,7 +10,7 @@ import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
-import { getActiveSlotDate, getNextSlotDate } from './lib/slots'
+import { getActiveSlotDate, getNextSlotDate, getSlotLabels } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence } from './types'
 
 type Theme = 'light' | 'dark'
@@ -145,7 +145,7 @@ export default function App() {
   const [username, setUsername] = useState<string | null>(null)
   const isAuth = token !== null
 
-  const [settings, setSettings] = useState<Settings>({ rotateHour: 6, rotateMinute: 0, keepBonus: false })
+  const [settings, setSettings] = useState<Settings>({ rotateHour: 6, rotateMinute: 0, keepBonus: false, workWeek: 'mon-fri' })
 
   const [activeSlot, setActiveSlot] = useState<Slot>('mon')
   const [activeSlotDate, setActiveSlotDate] = useState<string>('')
@@ -175,7 +175,7 @@ export default function App() {
 
   // Derived: date for the currently selected slot
   const selectedSlotDate = activeSlotDate
-    ? getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+    ? getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
     : ''
   const selectedDailyData: SlotDailyData = dailyData[selectedSlotDate] ?? { completions: [], additions: [], eventCompletions: [] }
 
@@ -237,7 +237,7 @@ export default function App() {
   }, [isAuth])
 
   const refreshSlot = useCallback((s: Settings) => {
-    const { slot, slotDate } = getActiveSlotDate(s.rotateHour, s.rotateMinute)
+    const { slot, slotDate } = getActiveSlotDate(s.rotateHour, s.rotateMinute, s.workWeek ?? 'mon-fri')
     setActiveSlot(slot)
     setActiveSlotDate(slotDate)
     setSelectedSlot(prev => {
@@ -326,7 +326,7 @@ export default function App() {
   // Load daily data whenever selected slot changes
   useEffect(() => {
     if (!activeSlotDate) return
-    const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+    const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
     loadDaily(slotDate)
   }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
 
@@ -343,7 +343,7 @@ export default function App() {
   const syncBoardData = useCallback(async () => {
     if (!activeSlotDate) return
     setBoardSyncing(true)
-    const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+    const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
     loadedDatesRef.current.delete(slotDate)
     await Promise.all([loadTemplates(), loadAllEvents(), loadDaily(slotDate)])
     setBoardSyncing(false)
@@ -353,7 +353,7 @@ export default function App() {
   useEffect(() => {
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible' || !activeSlotDate) return
-      const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+      const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
       loadedDatesRef.current.delete(slotDate)
       loadTemplates()
       loadAllEvents()
@@ -371,7 +371,7 @@ export default function App() {
     if (!isAuth) return
     const id = setInterval(() => {
       if (!activeSlotDate) return
-      const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate)
+      const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
       loadedDatesRef.current.delete(slotDate)
       loadTemplates()
       loadAllEvents()
@@ -383,7 +383,7 @@ export default function App() {
   // Check for slot rollover every minute
   useEffect(() => {
     const id = setInterval(() => {
-      const { slot, slotDate } = getActiveSlotDate(settings.rotateHour, settings.rotateMinute)
+      const { slot, slotDate } = getActiveSlotDate(settings.rotateHour, settings.rotateMinute, settings.workWeek)
       if (slotDate !== activeSlotDate) {
         setActiveSlot(slot)
         setActiveSlotDate(slotDate)
@@ -409,7 +409,7 @@ export default function App() {
     setUsername(null)
     const s = storage.getSettings()
     setSettings(s)
-    const { slot, slotDate } = getActiveSlotDate(s.rotateHour, s.rotateMinute)
+    const { slot, slotDate } = getActiveSlotDate(s.rotateHour, s.rotateMinute, s.workWeek ?? 'mon-fri')
     setActiveSlot(slot)
     setActiveSlotDate(slotDate)
     setSelectedSlot(slot)
@@ -427,7 +427,7 @@ export default function App() {
     } else {
       storage.setSettings(next)
     }
-    const { slot, slotDate } = getActiveSlotDate(next.rotateHour, next.rotateMinute)
+    const { slot, slotDate } = getActiveSlotDate(next.rotateHour, next.rotateMinute, next.workWeek)
     if (slotDate !== activeSlotDate) {
       setActiveSlot(slot)
       setActiveSlotDate(slotDate)
@@ -865,6 +865,7 @@ export default function App() {
                 selected={selectedSlot}
                 active={activeSlot}
                 onChange={setSelectedSlot}
+                slotLabels={getSlotLabels(settings.workWeek)}
               />
               <button
                 className="icon-btn"
@@ -891,6 +892,7 @@ export default function App() {
                 calendarEvents={selectedEvents}
                 rotateHour={settings.rotateHour}
                 rotateMinute={settings.rotateMinute}
+                slotLabels={getSlotLabels(settings.workWeek)}
                 onToggleTemplate={handleToggleTemplate}
                 onAddTemplate={handleAddTemplate}
                 onDeleteTemplate={handleDeleteTemplate}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { TemplateWithState, Addition, Slot, DailyEvent } from '../types'
-import { formatDayLabel, getNextReset, SLOTS, SLOT_LABELS } from '../lib/slots'
+import { formatDayLabel, getNextReset, SLOTS } from '../lib/slots'
 
 interface QuestBoardProps {
   slot: Slot
@@ -10,6 +10,7 @@ interface QuestBoardProps {
   additions: Addition[]
   rotateHour: number
   rotateMinute: number
+  slotLabels: Record<Slot, string>
   onToggleTemplate: (id: string) => void
   onAddTemplate: (text: string, slots: Slot[]) => void
   onDeleteTemplate: (id: string) => void
@@ -84,7 +85,7 @@ function ChevronDownIcon() {
   )
 }
 
-function DailyTaskAddInput({ slot: currentSlot, onAdd }: { slot: Slot; onAdd: (text: string, slots: Slot[]) => void }) {
+function DailyTaskAddInput({ slot: currentSlot, onAdd, slotLabels }: { slot: Slot; onAdd: (text: string, slots: Slot[]) => void; slotLabels: Record<Slot, string> }) {
   const [text, setText] = useState('')
   const [selectedDays, setSelectedDays] = useState<Slot[]>([currentSlot])
   const inputRef = useRef<HTMLInputElement>(null)
@@ -119,7 +120,7 @@ function DailyTaskAddInput({ slot: currentSlot, onAdd }: { slot: Slot; onAdd: (t
             className={`day-toggle-chip${selectedDays.includes(s) ? ' selected' : ''}`}
             onClick={() => toggleDay(s)}
           >
-            {SLOT_LABELS[s]}
+            {slotLabels[s]}
           </button>
         ))}
       </div>
@@ -172,11 +173,13 @@ function MobileAddInput({
   isActive,
   onAddTemplate,
   onAddAddition,
+  slotLabels,
 }: {
   slot: Slot
   isActive: boolean
   onAddTemplate: (text: string, slots: Slot[]) => void
   onAddAddition: (text: string) => void
+  slotLabels: Record<Slot, string>
 }) {
   const [text, setText] = useState('')
   const [type, setType] = useState<'daily' | 'bonus'>('daily')
@@ -213,7 +216,7 @@ function MobileAddInput({
         <input
           ref={inputRef}
           className="add-task-input"
-          placeholder={type === 'daily' ? 'Add daily task…' : isActive ? 'Add bonus task for today…' : `Add bonus task for ${SLOT_LABELS[slot]}…`}
+          placeholder={type === 'daily' ? 'Add daily task…' : isActive ? 'Add bonus task for today…' : `Add bonus task for ${slotLabels[slot]}…`}
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
@@ -268,6 +271,7 @@ export function QuestBoard({
   additions,
   rotateHour,
   rotateMinute,
+  slotLabels,
   onToggleTemplate,
   calendarEvents,
   onAddTemplate,
@@ -296,7 +300,7 @@ export function QuestBoard({
       <div className="slot-header">
         <div>
           <div style={{ fontWeight: 600, fontSize: 'var(--kp-text-base)', color: 'var(--kp-fg)' }}>
-            {slotDate ? formatDayLabel(slotDate) : SLOT_LABELS[slot]}
+            {slotDate ? formatDayLabel(slotDate) : slotLabels[slot]}
           </div>
           {slotDate && (
             <div className="slot-date">
@@ -377,7 +381,7 @@ export function QuestBoard({
           ) : (
             <div className="empty-state">No daily tasks yet. Add one below.</div>
           )}
-          <div className="desktop-add"><DailyTaskAddInput slot={slot} onAdd={onAddTemplate} /></div>
+          <div className="desktop-add"><DailyTaskAddInput slot={slot} onAdd={onAddTemplate} slotLabels={slotLabels} /></div>
         </div>
 
         {/* Bonus Tasks */}
@@ -426,7 +430,7 @@ export function QuestBoard({
           ) : (
             calendarEvents.length === 0 && (
               <div className="empty-state">
-                {isActive ? 'No bonus tasks for today.' : `No bonus tasks for ${SLOT_LABELS[slot]}.`}
+                {isActive ? 'No bonus tasks for today.' : `No bonus tasks for ${slotLabels[slot]}.`}
               </div>
             )
           )}
@@ -451,7 +455,7 @@ export function QuestBoard({
             </div>
           )}
           <div className="desktop-add"><AddInput
-            placeholder={isActive ? 'Add bonus task for today…' : `Add bonus task for ${SLOT_LABELS[slot]}…`}
+            placeholder={isActive ? 'Add bonus task for today…' : `Add bonus task for ${slotLabels[slot]}…`}
             onAdd={onAddAddition}
           /></div>
         </div>
@@ -462,6 +466,7 @@ export function QuestBoard({
         isActive={isActive}
         onAddTemplate={onAddTemplate}
         onAddAddition={onAddAddition}
+        slotLabels={slotLabels}
       />
     </div>
   )

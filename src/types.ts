@@ -1,4 +1,5 @@
 export type Slot = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'weekend'
+export type WorkWeek = 'mon-fri' | 'tue-sat' | 'sun-thu'
 
 export interface Template {
   id: string
@@ -24,6 +25,7 @@ export interface Settings {
   rotateHour: number
   rotateMinute: number
   keepBonus: boolean
+  workWeek: WorkWeek
 }
 
 export interface ExportData {

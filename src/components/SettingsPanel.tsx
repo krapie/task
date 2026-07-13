@@ -82,6 +82,23 @@ export function SettingsPanel({ settings, username, onClose, onSave, onSignIn, o
           <div className="settings-divider" />
 
           <div className="settings-group">
+            <div className="settings-label">Work week</div>
+            <div className="work-week-options">
+              {(['mon-fri', 'tue-sat', 'sun-thu'] as const).map(opt => (
+                <button
+                  key={opt}
+                  className={`work-week-btn${settings.workWeek === opt ? ' work-week-active' : ''}`}
+                  onClick={() => onSave({ workWeek: opt })}
+                >
+                  {opt === 'mon-fri' ? 'Mon – Fri' : opt === 'tue-sat' ? 'Tue – Sat' : 'Sun – Thu'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="settings-divider" />
+
+          <div className="settings-group">
             <div className="settings-label">Bonus tasks</div>
             <div className="toggle-row">
               <span className="toggle-label">Keep after reset</span>

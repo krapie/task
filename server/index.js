@@ -81,6 +81,7 @@ async function initDb() {
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('rotateMinute', '0') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('keepBonus', 'false') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('workWeek', 'mon-fri') ON CONFLICT DO NOTHING;
   `)
 }
 
@@ -376,11 +377,12 @@ app.get('/api/settings', auth, async (_req, res) => {
     rotateHour: parseInt(s.rotateHour ?? '6'),
     rotateMinute: parseInt(s.rotateMinute ?? '0'),
     keepBonus: s.keepBonus === 'true',
+    workWeek: s.workWeek ?? 'mon-fri',
   })
 })
 
 app.put('/api/settings', auth, async (req, res) => {
-  const { rotateHour, rotateMinute, keepBonus } = req.body ?? {}
+  const { rotateHour, rotateMinute, keepBonus, workWeek } = req.body ?? {}
   const upsert = 'INSERT INTO settings VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'
   const client = await pool.connect()
   try {
@@ -388,6 +390,7 @@ app.put('/api/settings', auth, async (req, res) => {
     if (rotateHour !== undefined) await client.query(upsert, ['rotateHour', String(rotateHour)])
     if (rotateMinute !== undefined) await client.query(upsert, ['rotateMinute', String(rotateMinute)])
     if (keepBonus !== undefined) await client.query(upsert, ['keepBonus', String(keepBonus)])
+    if (workWeek !== undefined) await client.query(upsert, ['workWeek', String(workWeek)])
     await client.query('COMMIT')
   } catch (e) {
     await client.query('ROLLBACK')
@@ -401,6 +404,7 @@ app.put('/api/settings', auth, async (req, res) => {
     rotateHour: parseInt(s.rotateHour),
     rotateMinute: parseInt(s.rotateMinute),
     keepBonus: s.keepBonus === 'true',
+    workWeek: s.workWeek ?? 'mon-fri',
   })
 })
 
@@ -421,6 +425,7 @@ app.get('/api/export', auth, async (_req, res) => {
       rotateHour: parseInt(s.rotateHour ?? '6'),
       rotateMinute: parseInt(s.rotateMinute ?? '0'),
       keepBonus: s.keepBonus === 'true',
+      workWeek: s.workWeek ?? 'mon-fri',
     },
   })
 })

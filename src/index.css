@@ -812,6 +812,27 @@ a { color: var(--kp-fg); text-decoration: none; }
   background: var(--kp-border);
 }
 
+.work-week-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.work-week-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  background: none;
+  color: var(--kp-fg-3);
+  font-family: var(--kp-font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+.work-week-btn:hover { border-color: var(--kp-fg-3); color: var(--kp-fg); }
+.work-week-active { border-color: var(--kp-fg) !important; color: var(--kp-fg) !important; }
+
 .settings-account-row {
   display: flex;
   align-items: center;
