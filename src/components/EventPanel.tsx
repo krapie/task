@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CalendarEvent, Recurrence } from '../types'
+import type { CalendarEvent, Recurrence, TodoItem } from '../types'
 
 interface EventPanelProps {
   date: string
   dayEvents: CalendarEvent[]
+  dayTodos: TodoItem[]
   focusEventId?: string | null
   onClose: () => void
   onAdd: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
   onEdit: (id: string, data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
   onDelete: (id: string) => void
+  onToggleTodo: (id: string) => void
 }
 
 function formatDisplayDate(dateStr: string): string {
@@ -141,7 +143,7 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   )
 }
 
-export function EventPanel({ date, dayEvents, focusEventId, onClose, onAdd, onEdit, onDelete }: EventPanelProps) {
+export function EventPanel({ date, dayEvents, dayTodos, focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const focusRef = useRef<HTMLDivElement>(null)
@@ -221,6 +223,26 @@ export function EventPanel({ date, dayEvents, focusEventId, onClose, onAdd, onEd
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {dayTodos.length > 0 && (
+            <div className="cal-todo-list">
+              <div className="cal-todo-label">Due tasks</div>
+              {dayTodos.map(t => (
+                <div key={t.id} className={`cal-todo-item${t.completed ? ' cal-todo-done' : ''}`}>
+                  <button
+                    className={`task-checkbox${t.completed ? ' checked' : ''}`}
+                    onClick={() => onToggleTodo(t.id)}
+                    aria-label={t.completed ? 'Mark incomplete' : 'Mark complete'}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                  </button>
+                  <span className={`task-text${t.completed ? ' done' : ''}`}>{t.text}</span>
+                </div>
+              ))}
             </div>
           )}
 

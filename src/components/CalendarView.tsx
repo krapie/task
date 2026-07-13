@@ -83,6 +83,7 @@ interface CalendarWeekProps {
   weekDates: string[]
   events: CalendarEvent[]
   additions: Addition[]
+  todosByDate: Record<string, number>
   today: string
   selectedDate: string | null
   currentMonth: number
@@ -90,7 +91,7 @@ interface CalendarWeekProps {
   onEventClick: (event: CalendarEvent) => void
 }
 
-function CalendarWeek({ weekDates, events, additions, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
+function CalendarWeek({ weekDates, events, additions, todosByDate, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
   const items = useMemo<CalendarItem[]>(() => [
     ...events.map(e => ({ kind: 'event' as const, event: e })),
     ...additions.map(a => ({ kind: 'addition' as const, addition: a })),
@@ -127,6 +128,7 @@ function CalendarWeek({ weekDates, events, additions, today, selectedDate, curre
             onClick={() => onDayClick(date)}
           >
             <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
+            {todosByDate[date] > 0 && <span className="calendar-todo-dot" />}
           </div>
         )
       })}
@@ -190,6 +192,7 @@ interface CalendarViewProps {
   month: number
   events: CalendarEvent[]
   additions: Addition[]
+  todosByDate: Record<string, number>
   selectedDate: string | null
   onPrevMonth: () => void
   onNextMonth: () => void
@@ -197,7 +200,7 @@ interface CalendarViewProps {
   onEventClick: (event: CalendarEvent) => void
 }
 
-export function CalendarView({ year, month, events, additions, selectedDate, onPrevMonth, onNextMonth, onDayClick, onEventClick }: CalendarViewProps) {
+export function CalendarView({ year, month, events, additions, todosByDate, selectedDate, onPrevMonth, onNextMonth, onDayClick, onEventClick }: CalendarViewProps) {
   const today = todayStr()
   const weeks = useMemo(() => buildWeeks(year, month), [year, month])
 
@@ -228,6 +231,7 @@ export function CalendarView({ year, month, events, additions, selectedDate, onP
               weekDates={weekDates}
               events={events}
               additions={additions}
+              todosByDate={todosByDate}
               today={today}
               selectedDate={selectedDate}
               currentMonth={month}

@@ -88,6 +88,14 @@ export interface MailItem {
   html_body?: string | null
 }
 
+export interface TodoItem {
+  id: string
+  text: string
+  completed: boolean
+  due_date: string | null
+  created_at: string
+}
+
 export interface NewsItem {
   title: string
   link: string

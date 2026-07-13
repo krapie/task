@@ -2290,3 +2290,178 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-3);
 }
 
+/* ── Todo view ──────────────────────────────────────────── */
+.todo-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.todo-add-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--kp-space-2);
+  padding: var(--kp-space-3) var(--kp-space-4);
+  border-bottom: 1px solid var(--kp-border);
+  flex-shrink: 0;
+}
+
+.todo-add-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 var(--kp-space-2);
+  background: var(--kp-input-bg);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  color: var(--kp-fg);
+  font-size: var(--kp-text-sm);
+  font-family: inherit;
+  outline: none;
+}
+.todo-add-input:focus { border-color: var(--kp-fg-3); }
+
+.todo-due-input {
+  height: 32px;
+  padding: 0 var(--kp-space-2);
+  background: var(--kp-input-bg);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  color: var(--kp-fg);
+  font-size: var(--kp-text-xs);
+  font-family: var(--kp-font-mono);
+  outline: none;
+}
+.todo-due-input:focus { border-color: var(--kp-fg-3); }
+
+.todo-list-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--kp-space-2) 0;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: var(--kp-space-2);
+  padding: var(--kp-space-2) var(--kp-space-4);
+  transition: background var(--kp-dur-fast) var(--kp-ease);
+}
+.todo-item:hover { background: var(--kp-hover-bg); }
+.todo-item.todo-completed { opacity: 0.55; }
+
+.todo-item-editing {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--kp-space-2);
+  padding: var(--kp-space-3) var(--kp-space-4);
+  background: var(--kp-hover-bg);
+}
+
+.todo-edit-input {
+  flex: 1;
+  height: 32px;
+  padding: 0 var(--kp-space-2);
+  background: var(--kp-input-bg);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  color: var(--kp-fg);
+  font-size: var(--kp-text-sm);
+  font-family: inherit;
+  outline: none;
+}
+.todo-edit-input:focus { border-color: var(--kp-fg-3); }
+
+.todo-edit-actions {
+  display: flex;
+  gap: var(--kp-space-2);
+}
+
+.todo-due-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-family: var(--kp-font-mono);
+  background: var(--kp-hover-bg);
+  color: var(--kp-fg-2);
+  border: 1px solid var(--kp-border);
+}
+.todo-due-badge.todo-due-overdue {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.3);
+  background: rgba(192, 57, 43, 0.08);
+}
+[data-theme="dark"] .todo-due-badge.todo-due-overdue {
+  color: #e74c3c;
+  border-color: rgba(231, 76, 60, 0.3);
+  background: rgba(231, 76, 60, 0.1);
+}
+
+.todo-completed-section {
+  margin-top: var(--kp-space-2);
+  padding: 0 var(--kp-space-4);
+}
+
+.todo-completed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--kp-space-1);
+  padding: var(--kp-space-1) 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--kp-fg-3);
+  font-size: var(--kp-text-xs);
+  font-family: inherit;
+  margin-bottom: var(--kp-space-1);
+}
+.todo-completed-toggle:hover { color: var(--kp-fg-2); }
+
+/* ── Calendar todo dots ────────────────────────────────── */
+.calendar-todo-dot {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--kp-fg-2);
+  margin: 2px auto 0;
+  flex-shrink: 0;
+}
+
+/* ── EventPanel todo list ──────────────────────────────── */
+.cal-todo-list {
+  margin-top: var(--kp-space-3);
+  padding-top: var(--kp-space-3);
+  border-top: 1px solid var(--kp-border);
+}
+
+.cal-todo-label {
+  font-size: var(--kp-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kp-fg-3);
+  margin-bottom: var(--kp-space-2);
+}
+
+.cal-todo-item {
+  display: flex;
+  align-items: center;
+  gap: var(--kp-space-2);
+  padding: var(--kp-space-1) 0;
+}
+.cal-todo-done { opacity: 0.55; }
+
+/* ── Board "Due" section ───────────────────────────────── */
+.event-task-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--kp-fg-3);
+}
+

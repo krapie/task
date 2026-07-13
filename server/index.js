@@ -67,6 +67,13 @@ async function initDb() {
       user_agent TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS todos (
+      id TEXT PRIMARY KEY,
+      text TEXT NOT NULL,
+      completed BOOLEAN NOT NULL DEFAULT false,
+      due_date TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS news_saved (
       link TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -496,6 +503,45 @@ app.get('/api/mail/items/:id', auth, mailProxy)
 app.post('/api/mail/items/:id/read', auth, mailProxy)
 app.post('/api/mail/items/:id/flag', auth, mailProxy)
 app.post('/api/mail/sync', auth, mailProxy)
+
+// ── Todos ─────────────────────────────────────────────────────────────
+app.get('/api/todos', auth, async (_req, res) => {
+  const { rows } = await pool.query('SELECT * FROM todos ORDER BY completed ASC, created_at DESC')
+  res.json(rows)
+})
+
+app.post('/api/todos', auth, async (req, res) => {
+  const { text, due_date } = req.body ?? {}
+  if (!text?.trim()) return res.status(400).json({ error: 'text required' })
+  const id = randomUUID()
+  const { rows } = await pool.query(
+    'INSERT INTO todos (id, text, due_date) VALUES ($1, $2, $3) RETURNING *',
+    [id, text.trim(), due_date ?? null]
+  )
+  res.json(rows[0])
+})
+
+app.patch('/api/todos/:id', auth, async (req, res) => {
+  const { text, completed, due_date } = req.body ?? {}
+  const sets = []
+  const params = []
+  if (text !== undefined) { params.push(text); sets.push(`text = $${params.length}`) }
+  if (completed !== undefined) { params.push(completed); sets.push(`completed = $${params.length}`) }
+  if ('due_date' in (req.body ?? {})) { params.push(due_date ?? null); sets.push(`due_date = $${params.length}`) }
+  if (sets.length === 0) return res.status(400).json({ error: 'nothing to update' })
+  params.push(req.params.id)
+  const { rows } = await pool.query(
+    `UPDATE todos SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+    params
+  )
+  if (!rows.length) return res.status(404).json({ error: 'Not found' })
+  res.json(rows[0])
+})
+
+app.delete('/api/todos/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM todos WHERE id = $1', [req.params.id])
+  res.json({})
+})
 
 // News flags — persisted in task DB
 app.get('/api/news/flagged', auth, async (req, res) => {

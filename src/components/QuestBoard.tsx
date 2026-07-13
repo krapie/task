@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { TemplateWithState, Addition, Slot, DailyEvent } from '../types'
+import type { TemplateWithState, Addition, Slot, DailyEvent, TodoItem } from '../types'
 import { formatDayLabel, getNextReset, SLOTS } from '../lib/slots'
 
 interface QuestBoardProps {
@@ -22,6 +22,8 @@ interface QuestBoardProps {
   onEditAddition: (id: string, text: string) => void
   onToggleAddition: (id: string) => void
   onToggleEvent: (id: string) => void
+  dueTodos: TodoItem[]
+  onToggleTodo: (id: string) => void
 }
 
 function useCountdown(rotateHour: number, rotateMinute: number) {
@@ -283,6 +285,8 @@ export function QuestBoard({
   onEditAddition,
   onToggleAddition,
   onToggleEvent,
+  dueTodos,
+  onToggleTodo,
 }: QuestBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -459,6 +463,30 @@ export function QuestBoard({
             onAdd={onAddAddition}
           /></div>
         </div>
+
+        {/* Due Todos */}
+        {dueTodos.length > 0 && (
+          <div className="task-section">
+            <div className="section-label">Due</div>
+            <div className="task-list">
+              {dueTodos.map(t => (
+                <div key={t.id} className="task-item">
+                  <button
+                    className={`task-checkbox${t.completed ? ' checked' : ''}`}
+                    onClick={() => onToggleTodo(t.id)}
+                    aria-label={t.completed ? 'Mark incomplete' : 'Mark complete'}
+                  >
+                    <CheckIcon />
+                  </button>
+                  <svg className="event-task-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                  </svg>
+                  <span className={`task-text${t.completed ? ' done' : ''}`}>{t.text}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <MobileAddInput

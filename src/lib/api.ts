@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem } from '../types'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
@@ -137,6 +137,13 @@ export const api = {
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
     toggleFlag: (id: string) => req<{ flagged: boolean }>('POST', `/mail/items/${id}/flag`),
     sync: (account_id?: string) => req<{ synced: number }>('POST', '/mail/sync', account_id ? { account_id } : {}),
+  },
+  todos: {
+    getAll: () => req<TodoItem[]>('GET', '/todos'),
+    create: (text: string, due_date?: string) => req<TodoItem>('POST', '/todos', { text, due_date }),
+    update: (id: string, data: Partial<Pick<TodoItem, 'text' | 'completed' | 'due_date'>>) =>
+      req<TodoItem>('PATCH', `/todos/${id}`, data),
+    remove: (id: string) => req<void>('DELETE', `/todos/${id}`),
   },
   news: {
     getItems: () => req<NewsItem[]>('GET', '/news'),

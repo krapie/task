@@ -8,13 +8,14 @@ import { CalendarView } from './components/CalendarView'
 import { EventPanel } from './components/EventPanel'
 import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
+import { TodoView } from './components/TodoView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels } from './lib/slots'
-import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence } from './types'
+import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'board' | 'calendar' | 'mail' | 'news'
+type View = 'board' | 'calendar' | 'mail' | 'news' | 'todo'
 
 const SLOT_DAY_NAMES: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
@@ -170,6 +171,7 @@ export default function App() {
   })
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [calendarAdditions, setCalendarAdditions] = useState<Addition[]>([])
+  const [todos, setTodos] = useState<TodoItem[]>([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
 
@@ -197,6 +199,27 @@ export default function App() {
     const { start, end } = calendarViewRange(calendarMonth.year, calendarMonth.month)
     return expandForView(calendarEvents, start, end)
   }, [calendarEvents, calendarMonth])
+
+  // Derived: todos due on the selected slot date (shown in board)
+  const dueTodos = useMemo(() =>
+    todos.filter(t => t.due_date === selectedSlotDate),
+    [todos, selectedSlotDate]
+  )
+
+  // Derived: count of incomplete todos per date (for calendar dots)
+  const todosByDate = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const t of todos) {
+      if (t.due_date && !t.completed) map[t.due_date] = (map[t.due_date] ?? 0) + 1
+    }
+    return map
+  }, [todos])
+
+  // Derived: todos due on the selected calendar date (for EventPanel)
+  const calendarDayTodos = useMemo(() =>
+    selectedCalendarDate ? todos.filter(t => t.due_date === selectedCalendarDate) : [],
+    [todos, selectedCalendarDate]
+  )
 
   // Derived: bonus task additions visible in the current calendar month view
   const monthAdditions = useMemo(() => {
@@ -276,6 +299,13 @@ export default function App() {
     }
   }, [isAuth])
 
+  const loadTodos = useCallback(async () => {
+    if (isAuth) {
+      const t = await api.todos.getAll().catch(() => [])
+      setTodos(t)
+    }
+  }, [isAuth])
+
   const loadDaily = useCallback(async (slotDate: string) => {
     if (!slotDate || loadedDatesRef.current.has(slotDate)) return
     loadedDatesRef.current.add(slotDate)
@@ -320,6 +350,7 @@ export default function App() {
       loadTemplates()
       loadDaily(slotDate)
       loadAllEvents()
+      loadTodos()
     })
   }, [isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -435,6 +466,29 @@ export default function App() {
       loadedDatesRef.current = new Set()
       setDailyData({})
     }
+  }
+
+  // Todo handlers
+  async function handleAddTodo(text: string, dueDate?: string) {
+    const todo = await api.todos.create(text, dueDate).catch(() => null)
+    if (todo) setTodos(prev => [todo, ...prev])
+  }
+
+  async function handleToggleTodo(id: string) {
+    const todo = todos.find(t => t.id === id)
+    if (!todo) return
+    const updated = await api.todos.update(id, { completed: !todo.completed }).catch(() => null)
+    if (updated) setTodos(prev => prev.map(t => t.id === id ? updated : t))
+  }
+
+  async function handleEditTodo(id: string, text: string, due_date: string | null) {
+    const updated = await api.todos.update(id, { text, due_date }).catch(() => null)
+    if (updated) setTodos(prev => prev.map(t => t.id === id ? updated : t))
+  }
+
+  async function handleDeleteTodo(id: string) {
+    await api.todos.remove(id).catch(console.error)
+    setTodos(prev => prev.filter(t => t.id !== id))
   }
 
   // Template handlers
@@ -819,6 +873,14 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
         </button>
+        <button
+          className={`rail-btn${view === 'todo' ? ' rail-btn-active' : ''}`}
+          onClick={() => setView('todo')} title="Todo"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+        </button>
 
         <div className="rail-spacer" />
 
@@ -903,6 +965,8 @@ export default function App() {
                 onToggleAddition={handleToggleAddition}
                 onEditTemplate={handleEditTemplate}
                 onToggleEvent={handleToggleEvent}
+                dueTodos={dueTodos}
+                onToggleTodo={handleToggleTodo}
               />
             </div>
             <div className="board-footer">
@@ -926,13 +990,22 @@ export default function App() {
               const y = prev.month === 12 ? prev.year + 1 : prev.year
               return { year: y, month: m }
             })}
+            todosByDate={todosByDate}
             onDayClick={date => { setSelectedCalendarDate(prev => prev === date ? null : date); setEditingEventId(null) }}
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
         ) : view === 'mail' ? (
           <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} />
-        ) : (
+        ) : view === 'news' ? (
           <NewsView />
+        ) : (
+          <TodoView
+            todos={todos}
+            onAdd={handleAddTodo}
+            onToggle={handleToggleTodo}
+            onEdit={handleEditTodo}
+            onDelete={handleDeleteTodo}
+          />
         )}
       </main>
 
@@ -940,11 +1013,13 @@ export default function App() {
         <EventPanel
           date={selectedCalendarDate}
           dayEvents={selectedDayEvents}
+          dayTodos={calendarDayTodos}
           focusEventId={editingEventId}
           onClose={() => { setSelectedCalendarDate(null); setEditingEventId(null) }}
           onAdd={handleAddEvent}
           onEdit={handleEditEvent}
           onDelete={handleDeleteEvent}
+          onToggleTodo={handleToggleTodo}
         />
       )}
 
@@ -1001,6 +1076,12 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
           <span>News</span>
+        </button>
+        <button className={`bottom-nav-btn${view === 'todo' ? ' bottom-nav-active' : ''}`} onClick={() => setView('todo')}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          <span>Todo</span>
         </button>
         <button className="bottom-nav-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
