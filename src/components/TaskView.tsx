@@ -405,11 +405,19 @@ interface TaskViewProps {
   onSubmitAgentTask: (title: string, prompt: string) => Promise<void>
 }
 
+const FINISHED_VISIBLE = 3
+
 export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteTodo, agentTasks, onSubmitAgentTask }: TaskViewProps) {
   const [text, setText] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [showAgentForm, setShowAgentForm] = useState(false)
+  const [showAllFinished, setShowAllFinished] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const activeTasks = agentTasks.filter(t => !TERMINAL.includes(t.status))
+  const finishedTasks = agentTasks.filter(t => TERMINAL.includes(t.status))
+  const visibleFinished = showAllFinished ? finishedTasks : finishedTasks.slice(0, FINISHED_VISIBLE)
+  const hiddenCount = finishedTasks.length - FINISHED_VISIBLE
 
   function submitTodo() {
     const t = text.trim()
@@ -490,7 +498,19 @@ export function TaskView({ todos, onAddTodo, onToggleTodo, onEditTodo, onDeleteT
             </div>
           )}
 
-          {agentTasks.map(t => <AgentTaskRow key={t.id} task={t} />)}
+          {activeTasks.map(t => <AgentTaskRow key={t.id} task={t} />)}
+          {visibleFinished.map(t => <AgentTaskRow key={t.id} task={t} />)}
+
+          {finishedTasks.length > FINISHED_VISIBLE && (
+            <button
+              className="agent-tasks-show-more"
+              onClick={() => setShowAllFinished(v => !v)}
+            >
+              {showAllFinished
+                ? 'Show less'
+                : `Show ${hiddenCount} older task${hiddenCount === 1 ? '' : 's'}`}
+            </button>
+          )}
         </div>
 
       </div>

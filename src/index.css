@@ -2478,6 +2478,22 @@ a { color: var(--kp-fg); text-decoration: none; }
   border-radius: var(--kp-radius-sm);
 }
 
+.agent-tasks-show-more {
+  display: block;
+  width: 100%;
+  padding: var(--kp-space-2) 0;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--kp-gray-200);
+  color: var(--kp-fg-3);
+  font-size: var(--kp-text-xs);
+  text-align: center;
+  cursor: pointer;
+  margin-top: var(--kp-space-1);
+}
+.agent-tasks-show-more:hover { color: var(--kp-fg-1); }
+[data-theme="dark"] .agent-tasks-show-more { border-top-color: var(--kp-gray-700); }
+
 .agent-submit-form {
   display: flex;
   flex-direction: column;
