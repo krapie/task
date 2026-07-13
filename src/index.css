@@ -482,6 +482,9 @@ a { color: var(--kp-fg); text-decoration: none; }
   min-width: 0;
 }
 
+/* Pin Tasks (todos) to column 2, stacking below Bonus Tasks on desktop */
+.task-section-todos { grid-column: 2; }
+
 /* Task Items */
 .task-list {
   display: flex;

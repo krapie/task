@@ -726,7 +726,7 @@ export function RoutineBoard({
         </div>
 
         {/* Tasks (todos) */}
-        <div className="task-section">
+        <div className="task-section task-section-todos">
           <div className="section-label">Tasks</div>
           {todos.length === 0 ? (
             <div className="empty-state">No tasks yet.</div>
