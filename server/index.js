@@ -288,6 +288,7 @@ app.get('/api/daily/:slotDate', auth, async (req, res) => {
     slotDate,
     slot,
     templates: templates.map(t => ({ ...t, completed: completedIds.has(t.id) })),
+    completionIds: completionRows.map(r => r.template_id),
     additions,
     eventCompletions: ecRows.map(r => r.event_id),
   })

@@ -319,7 +319,7 @@ export default function App() {
     if (isAuth) {
       const d = await api.daily.get(slotDate).catch(() => null) as DailyData | null
       if (!d) return
-      const serverCompletions = d.templates.filter(t => t.completed).map(t => t.id)
+      const serverCompletions = d.completionIds ?? d.templates.filter(t => t.completed).map(t => t.id)
       const serverAdditions = d.additions
       const serverEventCompletions = d.eventCompletions ?? []
       setDailyData(prev => {

@@ -39,6 +39,7 @@ export interface DailyData {
   slotDate: string
   slot: Slot
   templates: TemplateWithState[]
+  completionIds: string[]
   additions: Addition[]
   eventCompletions: string[]
 }
