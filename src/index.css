@@ -1606,6 +1606,8 @@ a { color: var(--kp-fg); text-decoration: none; }
   flex-shrink: 0;
   padding-top: 1px;
 }
+.cal-event-item:hover .task-edit-btn,
+.cal-event-item:hover .task-delete { opacity: 1; }
 
 .cal-modal-add {
   padding: var(--kp-space-4) var(--kp-space-5);
