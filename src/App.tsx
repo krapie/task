@@ -363,16 +363,13 @@ export default function App() {
     }
   }, [view, calendarMonth]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load agent tasks when switching to task view; poll every 15s while active non-terminal tasks exist
+  // Load agent tasks when switching to agent view; poll every 3s while visible
   useEffect(() => {
     if (view !== 'agent' || !isAuth) return
     loadAgentTasks()
-    const id = setInterval(() => {
-      const hasActive = agentTasks.some(t => !['done', 'failed', 'canceled'].includes(t.status))
-      if (hasActive) loadAgentTasks()
-    }, 15000)
+    const id = setInterval(loadAgentTasks, 3000)
     return () => clearInterval(id)
-  }, [view, isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, isAuth, loadAgentTasks])
 
   // Sync all board data: templates + daily + events
   const [boardSyncing, setBoardSyncing] = useState(false)
