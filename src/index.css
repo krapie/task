@@ -639,6 +639,10 @@ a { color: var(--kp-fg); text-decoration: none; }
 .add-task-btn:hover { background: var(--kp-hover-bg); color: var(--kp-fg); }
 .add-task-btn:active { background: var(--kp-press-bg); }
 
+.add-task-btn-full {
+  width: 100%;
+}
+
 /* Day-toggle chips (daily task add input) */
 .day-toggle-row {
   display: flex;
@@ -2438,7 +2442,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 /* ── EventPanel todo list ──────────────────────────────── */
 .cal-todo-list {
   margin-top: var(--kp-space-3);
-  padding-top: var(--kp-space-3);
+  padding: var(--kp-space-3) var(--kp-space-5) var(--kp-space-5);
   border-top: 1px solid var(--kp-border);
 }
 

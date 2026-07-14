@@ -102,7 +102,10 @@ function AgentSubmitForm({ onSubmit, onCancel, sessions }: {
 }) {
   const [title, setTitle] = useState('')
   const [prompt, setPrompt] = useState('')
-  const [session, setSession] = useState('')
+  const [session, setSession] = useState(() => {
+    const latest = sessions[0]
+    return latest && latest !== 'default' ? latest : ''
+  })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
