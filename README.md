@@ -2,15 +2,25 @@
 
 Personal daily task board.
 
-Set up recurring **Daily Tasks** per day-of-week that auto-reset at a configurable time. Add one-off **Bonus Tasks**, track calendar events, and read email — all in one place. Works in guest mode (localStorage) or with an account for cross-device sync.
+Set up recurring **Daily Tasks** per day-of-week that auto-reset at a configurable time. Add one-off **Bonus Tasks** and plain **Tasks** (todos with due dates), track calendar events, queue coding work for an [agentq](https://github.com/krapie/agentq) agent, read email, and browse news — all in one place. Works in guest mode (localStorage) or with an account for cross-device sync.
 
 ## Features
 
-### Board
+### Routine (board)
 - **6 day slots** — Mon, Tue, Wed, Thu, Fri, Weekend (Sat+Sun combined)
 - **Daily Tasks** — recurring templates that reset automatically each day (default 6 AM local time)
 - **Bonus Tasks** — one-off additions per day
+- **Tasks** — a plain todo list (independent of the day slots) with optional due dates, shown alongside Bonus Tasks
 - **Multi-day add** — toggle which days a new task applies to and add to all at once
+
+### Agent
+- Enqueue coding tasks (title + prompt) to a locally-running [agentq](https://github.com/krapie/agentq) daemon and track their status (queued, running, waiting on quota, done, failed) without leaving the app
+- Filter tasks by session, and target a specific session when submitting a new task
+- The task-api server signs a short-lived JWT server-side and proxies requests to agentq — the frontend never holds agentq credentials
+
+### News
+- GeekNews (news.hada.io) feed reader with a link preview pulled from the article page
+- Flag/save articles for later; flags persist server-side
 
 ### Calendar
 - Monthly calendar view with event management
@@ -54,7 +64,9 @@ Set up recurring **Daily Tasks** per day-of-week that auto-reset at a configurab
 │   ├── components/       # React UI components
 │   │   ├── MailInbox.tsx # IMAP inbox with sandboxed HTML rendering
 │   │   ├── CalendarView.tsx
-│   │   ├── QuestBoard.tsx
+│   │   ├── RoutineBoard.tsx # Daily/Bonus/Tasks board (Routine tab)
+│   │   ├── TaskView.tsx  # Agent task queue UI (Agent tab, agentq integration)
+│   │   ├── NewsView.tsx  # GeekNews reader (News tab)
 │   │   └── ...
 │   ├── lib/
 │   │   ├── api.ts        # Authenticated API client with auto-refresh
@@ -102,6 +114,8 @@ node server/index.js
 | `INTERNAL_API_KEY` | Yes | Shared key for task-api → mail-bridge requests |
 | `TASK_USERNAME` | No | Username displayed in the UI (default: `admin`) |
 | `PORT` | No | Server port (default: `3000`) |
+| `AGENTQ_URL` | No | Base URL of the agentq daemon's API (default: `http://192.168.0.17:8888`) |
+| `AGENTQ_JWT_SECRET` | No | HMAC secret shared with agentq for signing proxied requests; Agent tab endpoints return `503` if unset |
 
 ### mail-bridge
 
@@ -145,6 +159,31 @@ node server/index.js
 | PUT | `/api/events/:id` | ✓ | Update event |
 | DELETE | `/api/events/:id` | ✓ | Delete event |
 | POST | `/api/events/:id/toggle` | ✓ | Toggle event completion for a date |
+
+### Tasks (todos)
+| Method | Path | Auth | Description |
+|--------|------|------|--------------|
+| GET | `/api/todos` | ✓ | List todos (incomplete first, then newest) |
+| POST | `/api/todos` | ✓ | Create todo (`text`, optional `due_date`) |
+| PATCH | `/api/todos/:id` | ✓ | Update `text` / `completed` / `due_date` |
+| DELETE | `/api/todos/:id` | ✓ | Delete todo |
+
+### Agent (proxied to agentq)
+| Method | Path | Auth | Description |
+|--------|------|------|--------------|
+| POST | `/api/agentq/tasks` | ✓ | Enqueue a task (`title`, `prompt`, optional `session`) |
+| GET | `/api/agentq/tasks` | ✓ | List tasks, optionally filtered by `?status=` |
+| GET | `/api/agentq/tasks/:id` | ✓ | Get a single task |
+
+Returns `503` if `AGENTQ_JWT_SECRET` isn't configured, `502` if the agentq daemon is unreachable.
+
+### News
+| Method | Path | Auth | Description |
+|--------|------|------|--------------|
+| GET | `/api/news` | — | GeekNews feed with previews (5-min server cache) |
+| GET | `/api/news/flagged` | ✓ | List flagged/saved articles |
+| POST | `/api/news/flag` | ✓ | Flag/save an article |
+| POST | `/api/news/unflag` | ✓ | Unflag an article |
 
 ### Mail (proxied to mail-bridge)
 | Method | Path | Auth | Description |
