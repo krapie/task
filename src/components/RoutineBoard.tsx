@@ -361,8 +361,8 @@ function DailyTaskAddInput({ slot: currentSlot, onAdd, slotLabels }: { slot: Slo
           onChange={e => setText(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
         />
-        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
       </div>
+      <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
     </div>
   )
 }
@@ -390,8 +390,8 @@ function AddInput({ placeholder, onAdd }: { placeholder: string; onAdd: (text: s
           onChange={e => setText(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
         />
-        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
       </div>
+      <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
     </div>
   )
 }
@@ -422,8 +422,8 @@ function AddTodoInput({ onAdd }: { onAdd: (text: string, dueDate?: string) => vo
           onKeyDown={e => e.key === 'Enter' && submit()}
         />
         <DatePicker value={dueDate} onChange={setDueDate} />
-        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
       </div>
+      <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
     </div>
   )
 }
