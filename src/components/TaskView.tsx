@@ -186,9 +186,13 @@ export function AgentView({ agentTasks, onSubmitAgentTask }: AgentViewProps) {
   const [showAllFinished, setShowAllFinished] = useState(false)
   const [sessionFilter, setSessionFilter] = useState<string | null>(null)
 
-  // Unique sessions, ordered by most recent task
+  const sorted = [...agentTasks].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
+
+  // Unique sessions, ordered by most recently used
   const sessions = Array.from(
-    agentTasks.reduce((acc, t) => {
+    sorted.reduce((acc, t) => {
       const s = t.session ?? 'default'
       if (!acc.has(s)) acc.set(s, t.created_at)
       return acc
@@ -196,8 +200,8 @@ export function AgentView({ agentTasks, onSubmitAgentTask }: AgentViewProps) {
   )
 
   const filtered = sessionFilter
-    ? agentTasks.filter(t => (t.session ?? 'default') === sessionFilter)
-    : agentTasks
+    ? sorted.filter(t => (t.session ?? 'default') === sessionFilter)
+    : sorted
 
   const activeTasks = filtered.filter(t => !TERMINAL.includes(t.status))
   const finishedTasks = filtered.filter(t => TERMINAL.includes(t.status))
