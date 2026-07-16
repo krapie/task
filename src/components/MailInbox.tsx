@@ -428,10 +428,8 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
               )}
               <div style={{ flex: 1 }} />
               {!showFlagged && unreadCount > 0 && (
-                <button className="icon-btn" onClick={handleMarkAllRead} aria-label="Mark all as read" title="Mark all as read">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                  </svg>
+                <button className="btn-ghost btn-sm" onClick={handleMarkAllRead} title="Mark all as read">
+                  Mark all read
                 </button>
               )}
               <button className="icon-btn" onClick={handleSync} disabled={syncing} aria-label="Sync">
