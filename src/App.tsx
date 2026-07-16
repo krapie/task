@@ -391,13 +391,14 @@ export default function App() {
       loadTemplates()
       loadAllEvents()
       loadDaily(slotDate)
+      loadTodos()
       if (view === 'calendar') {
         loadCalendarAdditions(calendarMonth.year, calendarMonth.month)
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
-  }, [selectedSlot, activeSlot, activeSlotDate, view, calendarMonth, loadTemplates, loadAllEvents, loadDaily, loadCalendarAdditions])
+  }, [selectedSlot, activeSlot, activeSlotDate, view, calendarMonth, loadTemplates, loadAllEvents, loadDaily, loadTodos, loadCalendarAdditions])
 
   // Periodic auto-refresh every 5 minutes (when authenticated)
   useEffect(() => {
@@ -409,9 +410,10 @@ export default function App() {
       loadTemplates()
       loadAllEvents()
       loadDaily(slotDate)
+      loadTodos()
     }, 5 * 60 * 1000)
     return () => clearInterval(id)
-  }, [isAuth, activeSlotDate, selectedSlot, activeSlot, loadTemplates, loadAllEvents, loadDaily])
+  }, [isAuth, activeSlotDate, selectedSlot, activeSlot, loadTemplates, loadAllEvents, loadDaily, loadTodos])
 
   // Check for slot rollover every minute
   useEffect(() => {
