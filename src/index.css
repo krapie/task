@@ -1217,7 +1217,16 @@ a { color: var(--kp-fg); text-decoration: none; }
   }
   .mobile-add-type + .mobile-add-type { border-left: 1px solid var(--kp-border); }
   .mobile-add-type.selected { background: var(--kp-fg); color: var(--kp-bg); }
-  .mobile-add-row { display: flex; gap: var(--kp-space-2); }
+
+  /* DatePicker full-width inside mobile quick-add */
+  .mobile-add .date-picker { width: 100%; }
+  .mobile-add .date-picker-btn {
+    width: 100%;
+    height: 40px;
+    font-size: 14px;
+    justify-content: flex-start;
+  }
+  .mobile-add .date-picker-popover { left: 0; right: 0; min-width: unset; }
 
   /* Mail: always show mark-read button on mobile (no hover) */
   .mail-item-read-btn { opacity: 1; }

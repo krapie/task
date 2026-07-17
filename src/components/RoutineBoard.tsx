@@ -433,56 +433,95 @@ function MobileAddInput({
   isActive,
   onAddTemplate,
   onAddAddition,
+  onAddTodo,
   slotLabels,
 }: {
   slot: Slot
   isActive: boolean
   onAddTemplate: (text: string, slots: Slot[]) => void
   onAddAddition: (text: string) => void
+  onAddTodo: (text: string, dueDate?: string) => void
   slotLabels: Record<Slot, string>
 }) {
   const [text, setText] = useState('')
-  const [type, setType] = useState<'daily' | 'bonus'>('daily')
+  const [type, setType] = useState<'daily' | 'bonus' | 'task'>('daily')
+  const [dueDate, setDueDate] = useState('')
+  const [selectedDays, setSelectedDays] = useState<Slot[]>([slot])
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { setSelectedDays([slot]) }, [slot])
+
+  function switchType(t: 'daily' | 'bonus' | 'task') {
+    setType(t)
+    setText('')
+    setDueDate('')
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  function toggleDay(s: Slot) {
+    setSelectedDays(prev =>
+      prev.includes(s)
+        ? prev.length > 1 ? prev.filter(d => d !== s) : prev
+        : [...prev, s]
+    )
+  }
 
   function submit() {
     const t = text.trim()
     if (!t) return
-    if (type === 'daily') onAddTemplate(t, [slot])
-    else onAddAddition(t)
+    if (type === 'daily') onAddTemplate(t, selectedDays)
+    else if (type === 'bonus') onAddAddition(t)
+    else onAddTodo(t, dueDate || undefined)
     setText('')
+    setDueDate('')
     inputRef.current?.focus()
   }
+
+  const placeholder =
+    type === 'daily' ? 'Add daily task…'
+    : type === 'bonus' ? (isActive ? 'Add bonus task for today…' : `Add bonus task for ${slotLabels[slot]}…`)
+    : 'Add a task…'
 
   return (
     <div className="mobile-add">
       <div className="mobile-add-toggle">
-        <button
-          type="button"
-          className={`mobile-add-type${type === 'daily' ? ' selected' : ''}`}
-          onClick={() => setType('daily')}
-        >
-          Daily
-        </button>
-        <button
-          type="button"
-          className={`mobile-add-type${type === 'bonus' ? ' selected' : ''}`}
-          onClick={() => setType('bonus')}
-        >
-          Bonus
-        </button>
+        {(['daily', 'bonus', 'task'] as const).map(t => (
+          <button
+            key={t}
+            type="button"
+            className={`mobile-add-type${type === t ? ' selected' : ''}`}
+            onClick={() => switchType(t)}
+          >
+            {t === 'daily' ? 'Daily' : t === 'bonus' ? 'Bonus' : 'Task'}
+          </button>
+        ))}
       </div>
-      <div className="mobile-add-row">
-        <input
-          ref={inputRef}
-          className="add-task-input"
-          placeholder={type === 'daily' ? 'Add daily task…' : isActive ? 'Add bonus task for today…' : `Add bonus task for ${slotLabels[slot]}…`}
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submit()}
-        />
-        <button className="add-task-btn" type="button" onClick={submit}>Add</button>
-      </div>
+      <input
+        ref={inputRef}
+        className="add-task-input"
+        placeholder={placeholder}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && submit()}
+      />
+      {type === 'daily' && (
+        <div className="day-toggle-row">
+          {SLOTS.map(s => (
+            <button
+              key={s}
+              type="button"
+              className={`day-toggle-chip${selectedDays.includes(s) ? ' selected' : ''}`}
+              onClick={() => toggleDay(s)}
+            >
+              {slotLabels[s]}
+            </button>
+          ))}
+        </div>
+      )}
+      {type === 'task' && (
+        <DatePicker value={dueDate} onChange={setDueDate} />
+      )}
+      <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
     </div>
   )
 }
@@ -744,7 +783,7 @@ export function RoutineBoard({
               ))}
             </div>
           )}
-          <AddTodoInput onAdd={onAddTodo} />
+          <div className="desktop-add"><AddTodoInput onAdd={onAddTodo} /></div>
         </div>
         </div>{/* end task-board-right */}
       </div>
@@ -754,6 +793,7 @@ export function RoutineBoard({
         isActive={isActive}
         onAddTemplate={onAddTemplate}
         onAddAddition={onAddAddition}
+        onAddTodo={onAddTodo}
         slotLabels={slotLabels}
       />
     </div>
