@@ -39,6 +39,7 @@ function buildSrcdoc(html: string, isDark: boolean): string {
 <html>
 <head>
 <meta charset="utf-8">
+<base target="_blank">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' *; img-src https: data: cid:; font-src *;">
 <style>
   * { box-sizing: border-box; }
@@ -79,7 +80,7 @@ function AutoIframe({ srcdoc }: { srcdoc: string }) {
     <iframe
       ref={ref}
       srcDoc={srcdoc}
-      sandbox="allow-popups allow-same-origin"
+      sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
       title="Email content"
       onLoad={onLoad}
       style={{ width: '100%', minHeight: '200px', border: 'none', display: 'block' }}
