@@ -125,6 +125,14 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Scrollbars — thin, neutral, adapts to light/dark theme */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--kp-border-strong); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--kp-fg-4); }
+::-webkit-scrollbar-corner { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--kp-border-strong) transparent; }
+
 html { font-size: 15px; }
 
 body {
