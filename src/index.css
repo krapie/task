@@ -1206,13 +1206,15 @@ a { color: var(--kp-fg); text-decoration: none; }
     display: flex;
     flex-direction: column;
     gap: var(--kp-space-2);
-    margin-top: var(--kp-space-5);
+    margin-top: var(--kp-space-3);
   }
   .mobile-add-toggle {
     display: flex;
-    border: 1px solid var(--kp-border);
-    border-radius: var(--kp-radius-sm);
+    border-top: 1px solid var(--kp-border);
+    border-bottom: 1px solid var(--kp-border);
+    border-radius: 0;
     overflow: hidden;
+    margin: 0 -16px;
   }
   .mobile-add-type {
     flex: 1;
