@@ -2287,6 +2287,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .news-list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .news-tab-btn {
@@ -2322,6 +2323,9 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg);
   line-height: 1.4;
   text-decoration: none;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 .news-item-title:hover { text-decoration: underline; }
 
@@ -2334,6 +2338,8 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .news-item-preview-list li {
   margin-bottom: 2px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .news-item-preview-text {
@@ -2341,6 +2347,8 @@ a { color: var(--kp-fg); text-decoration: none; }
   font-size: 14px;
   color: var(--kp-fg-2);
   line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .news-item-meta {

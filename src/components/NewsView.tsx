@@ -155,7 +155,8 @@ export function NewsView() {
     })
   }
 
-  const displayed = tab === 'all' ? items : flaggedItems
+  const displayed = (tab === 'all' ? items : flaggedItems)
+    .filter(item => !item.title.startsWith('Show GN'))
   const flagCount = items.filter(i => i.flagged).length + flaggedItems.filter(i => !items.some(x => x.link === i.link)).length
 
   return (
