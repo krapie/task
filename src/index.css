@@ -1537,6 +1537,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 .calendar-events-list {
   margin-top: var(--kp-space-2);
+  border-top: none;
 }
 
 .event-task-icon {
