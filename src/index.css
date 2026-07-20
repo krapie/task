@@ -1618,7 +1618,6 @@ a { color: var(--kp-fg); text-decoration: none; }
   justify-content: space-between;
   gap: var(--kp-space-3);
   padding: var(--kp-space-3) var(--kp-space-5);
-  border-bottom: 1px solid var(--kp-border);
   transition: background var(--kp-dur-fast) var(--kp-ease);
 }
 
