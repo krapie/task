@@ -1318,7 +1318,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .calendar-week {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: 104px;
+  grid-template-rows: 116px;
   column-gap: 1px;
   background: var(--kp-border);
   border-bottom: 1px solid var(--kp-border);
@@ -1675,7 +1675,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 /* Mobile calendar adjustments */
 @media (max-width: 600px) {
   .calendar-week {
-    grid-template-rows: 88px;
+    grid-template-rows: 110px;
   }
   .calendar-day-cell { padding: 3px 4px; }
   .calendar-day-num { width: 20px; height: 20px; font-size: 12px; }
