@@ -186,6 +186,7 @@ export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], focus
 
           {sorted.length > 0 && (
             <div className="cal-event-list">
+              <div className="cal-event-list-label">Events</div>
               {sorted.map(event => {
                 const isFocused = event.id === focusEventId
                 return editingId === event.id ? (

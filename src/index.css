@@ -1602,6 +1602,16 @@ a { color: var(--kp-fg); text-decoration: none; }
   flex-direction: column;
 }
 
+.cal-event-list-label {
+  font-size: var(--kp-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kp-fg-3);
+  padding: var(--kp-space-3) var(--kp-space-5) 0;
+  margin-bottom: var(--kp-space-2);
+}
+
 .cal-event-item {
   display: flex;
   align-items: flex-start;
@@ -2471,7 +2481,6 @@ a { color: var(--kp-fg); text-decoration: none; }
 .cal-todo-list {
   margin-top: var(--kp-space-3);
   padding: var(--kp-space-3) var(--kp-space-5) var(--kp-space-5);
-  border-top: 1px solid var(--kp-border);
 }
 
 .cal-todo-label {
