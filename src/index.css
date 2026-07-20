@@ -1189,8 +1189,9 @@ a { color: var(--kp-fg); text-decoration: none; }
   /* Larger touch targets */
   .task-item { padding: var(--kp-space-4) 0; gap: var(--kp-space-2); }
   .task-checkbox { width: 20px; height: 20px; flex-shrink: 0; }
-  .add-task-input { height: 40px; }
+  .add-task-input { height: 40px; font-size: 16px; }
   .add-task-btn { height: 40px; }
+  .task-edit-input { font-size: 16px; }
 
   /* Hide task action buttons by default; reveal on tap */
   .task-edit-btn { display: none; }
