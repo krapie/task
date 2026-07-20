@@ -208,6 +208,12 @@ export default function App() {
     [todos, selectedCalendarDate]
   )
 
+  // Derived: bonus task additions for the selected calendar date (for EventPanel)
+  const calendarDayAdditions = useMemo(() =>
+    selectedCalendarDate ? calendarAdditions.filter(a => a.slot_date === selectedCalendarDate) : [],
+    [calendarAdditions, selectedCalendarDate]
+  )
+
   // Derived: bonus task additions visible in the current calendar month view
   const monthAdditions = useMemo(() => {
     const { start, end } = calendarViewRange(calendarMonth.year, calendarMonth.month)
@@ -1026,6 +1032,7 @@ export default function App() {
           date={selectedCalendarDate}
           dayEvents={selectedDayEvents}
           dayTodos={calendarDayTodos}
+          dayAdditions={calendarDayAdditions}
           focusEventId={editingEventId}
           onClose={() => { setSelectedCalendarDate(null); setEditingEventId(null) }}
           onAdd={handleAddEvent}

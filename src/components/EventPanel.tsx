@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CalendarEvent, Recurrence, TodoItem } from '../types'
+import type { Addition, CalendarEvent, Recurrence, TodoItem } from '../types'
 
 interface EventPanelProps {
   date: string
   dayEvents: CalendarEvent[]
   dayTodos: TodoItem[]
+  dayAdditions?: Addition[]
   focusEventId?: string | null
   onClose: () => void
   onAdd: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
@@ -143,7 +144,7 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   )
 }
 
-export function EventPanel({ date, dayEvents, dayTodos, focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
+export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [revealedId, setRevealedId] = useState<string | null>(null)
@@ -179,7 +180,7 @@ export function EventPanel({ date, dayEvents, dayTodos, focusEventId, onClose, o
         </div>
 
         <div className="cal-modal-body">
-          {sorted.length === 0 && !showForm && (
+          {sorted.length === 0 && dayAdditions.length === 0 && dayTodos.length === 0 && !showForm && (
             <div className="empty-state cal-modal-empty">No events for this day.</div>
           )}
 
@@ -227,6 +228,17 @@ export function EventPanel({ date, dayEvents, dayTodos, focusEventId, onClose, o
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {dayAdditions.length > 0 && (
+            <div className="cal-todo-list">
+              <div className="cal-todo-label">Bonus tasks</div>
+              {dayAdditions.map(a => (
+                <div key={a.id} className={`cal-todo-item${a.completed ? ' cal-todo-done' : ''}`}>
+                  <span className={`task-text${a.completed ? ' done' : ''}`}>{a.text}</span>
+                </div>
+              ))}
             </div>
           )}
 
