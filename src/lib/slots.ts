@@ -40,10 +40,20 @@ export function getActiveSlotDate(
   const nowMinutes = now.getHours() * 60 + now.getMinutes()
   const isAfterReset = nowMinutes >= rotateMinutes
   const activeDate = isAfterReset ? now : new Date(now.getTime() - 24 * 60 * 60 * 1000)
-  return {
-    slot: DAY_TO_SLOT_MAP[workWeek][activeDate.getDay()],
-    slotDate: formatDate(activeDate),
+  const slot = DAY_TO_SLOT_MAP[workWeek][activeDate.getDay()]
+
+  // For slots that span multiple days (e.g. weekend covers Sun+Mon in tue-sat),
+  // anchor slotDate to the first calendar day of the slot so all days in the
+  // same slot share the same data key.
+  const anchorDate = new Date(activeDate)
+  for (let i = 1; i <= 6; i++) {
+    const prev = new Date(activeDate)
+    prev.setDate(activeDate.getDate() - i)
+    if (DAY_TO_SLOT_MAP[workWeek][prev.getDay()] !== slot) break
+    anchorDate.setDate(activeDate.getDate() - i)
   }
+
+  return { slot, slotDate: formatDate(anchorDate) }
 }
 
 export function formatDate(date: Date): string {
