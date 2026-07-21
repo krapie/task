@@ -192,57 +192,73 @@ export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], onAdd
         </div>
 
         <div className="cal-modal-body">
-          {sorted.length === 0 && dayAdditions.length === 0 && dayTodos.length === 0 && !showForm && !onAddAddition && (
+          {dayAdditions.length === 0 && dayTodos.length === 0 && !onAddAddition && sorted.length === 0 && !showForm && (
             <div className="empty-state cal-modal-empty">No events for this day.</div>
           )}
 
-          {sorted.length > 0 && (
-            <div className="cal-event-list">
-              <div className="cal-todo-label cal-event-list-label">Events</div>
-              {sorted.map(event => {
-                const isFocused = event.id === focusEventId
-                return editingId === event.id ? (
-                  <div key={event.id} className="cal-event-item cal-event-item-editing">
-                    <EventForm
-                      defaultDate={date}
-                      initial={event}
-                      onSave={data => { onEdit(event.id, data); setEditingId(null) }}
-                      onCancel={() => setEditingId(null)}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    key={event.id}
-                    ref={isFocused ? focusRef : null}
-                    className={['cal-event-item', isFocused ? 'cal-event-item-focused' : '', revealedId === event.id ? 'revealed' : ''].filter(Boolean).join(' ')}
-                  >
-                    <div className="cal-event-detail">
-                      <div className="cal-event-detail-top" onClick={() => toggleReveal(event.id)}>
-                        {event.time && <span className="event-item-time">{event.time}</span>}
-                        <span className="cal-event-title">{event.title}</span>
-                      </div>
-                      <div className="cal-event-detail-meta">
-                        {event.recurrence && (
-                          <span className="event-item-recurrence">↻ {RECURRENCE_LABELS[event.recurrence]}</span>
-                        )}
-                        {event.start_date !== event.end_date && !event.recurrence && (
-                          <span className="event-item-range">{event.start_date} – {event.end_date}</span>
-                        )}
-                      </div>
+          <div className="cal-event-list">
+            <div className="cal-todo-label cal-event-list-label">Events</div>
+            {sorted.map(event => {
+              const isFocused = event.id === focusEventId
+              return editingId === event.id ? (
+                <div key={event.id} className="cal-event-item cal-event-item-editing">
+                  <EventForm
+                    defaultDate={date}
+                    initial={event}
+                    onSave={data => { onEdit(event.id, data); setEditingId(null) }}
+                    onCancel={() => setEditingId(null)}
+                  />
+                </div>
+              ) : (
+                <div
+                  key={event.id}
+                  ref={isFocused ? focusRef : null}
+                  className={['cal-event-item', isFocused ? 'cal-event-item-focused' : '', revealedId === event.id ? 'revealed' : ''].filter(Boolean).join(' ')}
+                >
+                  <div className="cal-event-detail">
+                    <div className="cal-event-detail-top" onClick={() => toggleReveal(event.id)}>
+                      {event.time && <span className="event-item-time">{event.time}</span>}
+                      <span className="cal-event-title">{event.title}</span>
                     </div>
-                    <div className="cal-event-actions">
-                      <button className="task-edit-btn" onClick={() => setEditingId(event.id)} aria-label="Edit">
-                        <PencilIcon />
-                      </button>
-                      <button className="task-delete" onClick={() => onDelete(event.id)} aria-label="Delete">
-                        <TrashIcon />
-                      </button>
+                    <div className="cal-event-detail-meta">
+                      {event.recurrence && (
+                        <span className="event-item-recurrence">↻ {RECURRENCE_LABELS[event.recurrence]}</span>
+                      )}
+                      {event.start_date !== event.end_date && !event.recurrence && (
+                        <span className="event-item-range">{event.start_date} – {event.end_date}</span>
+                      )}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
+                  <div className="cal-event-actions">
+                    <button className="task-edit-btn" onClick={() => setEditingId(event.id)} aria-label="Edit">
+                      <PencilIcon />
+                    </button>
+                    <button className="task-delete" onClick={() => onDelete(event.id)} aria-label="Delete">
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+            {showForm ? (
+              <div className="cal-modal-add-form">
+                <EventForm
+                  defaultDate={date}
+                  onSave={data => { onAdd(data); setShowForm(false) }}
+                  onCancel={() => setShowForm(false)}
+                />
+              </div>
+            ) : (
+              <div className="cal-modal-add">
+                <button className="settings-action-btn" onClick={() => setShowForm(true)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  Add event
+                </button>
+              </div>
+            )}
+          </div>
 
           {(dayAdditions.length > 0 || onAddAddition) && (
             <div className="cal-todo-list">
@@ -301,24 +317,6 @@ export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], onAdd
             </div>
           )}
 
-          {showForm ? (
-            <div className="cal-modal-add-form">
-              <EventForm
-                defaultDate={date}
-                onSave={data => { onAdd(data); setShowForm(false) }}
-                onCancel={() => setShowForm(false)}
-              />
-            </div>
-          ) : (
-            <div className="cal-modal-add">
-              <button className="settings-action-btn" onClick={() => setShowForm(true)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Add event
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
