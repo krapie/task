@@ -1602,13 +1602,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 
 .cal-event-list-label {
-  font-size: var(--kp-text-xs);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--kp-fg-3);
   padding: var(--kp-space-3) var(--kp-space-5) 0;
-  margin-bottom: var(--kp-space-2);
 }
 
 .cal-event-item {
