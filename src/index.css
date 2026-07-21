@@ -1673,6 +1673,17 @@ a { color: var(--kp-fg); text-decoration: none; }
   border-top: 1px solid var(--kp-border);
 }
 
+.cal-bonus-add {
+  margin-top: var(--kp-space-2);
+}
+
+.cal-bonus-add-form {
+  margin-top: var(--kp-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--kp-space-2);
+}
+
 /* Mobile calendar adjustments */
 @media (max-width: 600px) {
   .calendar-week {

@@ -11,7 +11,7 @@ import { NewsView } from './components/NewsView'
 import { AgentView } from './components/TaskView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
-import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder } from './lib/slots'
+import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem, AgentTask } from './types'
 
 type Theme = 'light' | 'dark'
@@ -209,10 +209,11 @@ export default function App() {
   )
 
   // Derived: bonus task additions for the selected calendar date (for EventPanel)
-  const calendarDayAdditions = useMemo(() =>
-    selectedCalendarDate ? calendarAdditions.filter(a => a.slot_date === selectedCalendarDate) : [],
-    [calendarAdditions, selectedCalendarDate]
-  )
+  const calendarDayAdditions = useMemo(() => {
+    if (!selectedCalendarDate) return []
+    const slotDate = getSlotDateForCalendarDate(selectedCalendarDate, settings.workWeek)
+    return calendarAdditions.filter(a => a.slot_date === slotDate)
+  }, [calendarAdditions, selectedCalendarDate, settings.workWeek])
 
   // Derived: bonus task additions visible in the current calendar month view
   const monthAdditions = useMemo(() => {
@@ -667,6 +668,26 @@ export default function App() {
     }
   }
 
+  async function handleAddAdditionForDate(calendarDate: string, text: string) {
+    const slotDate = getSlotDateForCalendarDate(calendarDate, settings.workWeek)
+    const tempId = `temp-${crypto.randomUUID()}`
+    const tempAddition: Addition = { id: tempId, slot_date: slotDate, text, completed: false, created_at: Date.now() }
+    setCalendarAdditions(prev => [...prev, tempAddition])
+    if (isAuth) {
+      try {
+        const a = await api.daily.addAddition(slotDate, text)
+        setCalendarAdditions(prev => prev.map(item => item.id === tempId ? a : item))
+      } catch {
+        setCalendarAdditions(prev => prev.filter(item => item.id !== tempId))
+      }
+    } else {
+      const a: Addition = { id: crypto.randomUUID(), slot_date: slotDate, text, completed: false, created_at: Date.now() }
+      setCalendarAdditions(prev => prev.map(item => item.id === tempId ? a : item))
+      const d = storage.getDaily(slotDate)
+      storage.setDaily(slotDate, { ...d, additions: [...d.additions, a] })
+    }
+  }
+
   async function handleDeleteAddition(id: string) {
     const slotDate = selectedSlotDate
     if (isAuth) {
@@ -1033,6 +1054,7 @@ export default function App() {
           dayEvents={selectedDayEvents}
           dayTodos={calendarDayTodos}
           dayAdditions={calendarDayAdditions}
+          onAddAddition={text => handleAddAdditionForDate(selectedCalendarDate, text)}
           focusEventId={editingEventId}
           onClose={() => { setSelectedCalendarDate(null); setEditingEventId(null) }}
           onAdd={handleAddEvent}

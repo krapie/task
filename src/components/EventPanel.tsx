@@ -6,6 +6,7 @@ interface EventPanelProps {
   dayEvents: CalendarEvent[]
   dayTodos: TodoItem[]
   dayAdditions?: Addition[]
+  onAddAddition?: (text: string) => void
   focusEventId?: string | null
   onClose: () => void
   onAdd: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
@@ -144,11 +145,22 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   )
 }
 
-export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
+export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], onAddAddition, focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
+  const [showBonusForm, setShowBonusForm] = useState(false)
+  const [bonusText, setBonusText] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [revealedId, setRevealedId] = useState<string | null>(null)
   const focusRef = useRef<HTMLDivElement>(null)
+  const bonusInputRef = useRef<HTMLInputElement>(null)
+
+  function submitBonus() {
+    const t = bonusText.trim()
+    if (!t) return
+    onAddAddition?.(t)
+    setBonusText('')
+    setShowBonusForm(false)
+  }
 
   function toggleReveal(id: string) { setRevealedId(prev => prev === id ? null : id) }
 
@@ -180,7 +192,7 @@ export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], focus
         </div>
 
         <div className="cal-modal-body">
-          {sorted.length === 0 && dayAdditions.length === 0 && dayTodos.length === 0 && !showForm && (
+          {sorted.length === 0 && dayAdditions.length === 0 && dayTodos.length === 0 && !showForm && !onAddAddition && (
             <div className="empty-state cal-modal-empty">No events for this day.</div>
           )}
 
@@ -232,12 +244,38 @@ export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], focus
             </div>
           )}
 
-          {dayAdditions.length > 0 && (
+          {(dayAdditions.length > 0 || onAddAddition) && (
             <div className="cal-todo-list">
               <div className="cal-todo-label">Bonus tasks</div>
               {dayAdditions.map(a => (
                 <div key={a.id} className={`cal-todo-item${a.completed ? ' cal-todo-done' : ''}`}>
                   <span className={`task-text${a.completed ? ' done' : ''}`}>{a.text}</span>
+                </div>
+              ))}
+              {onAddAddition && (showBonusForm ? (
+                <div className="cal-bonus-add-form">
+                  <input
+                    ref={bonusInputRef}
+                    className="add-task-input"
+                    placeholder="Bonus task…"
+                    value={bonusText}
+                    onChange={e => setBonusText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') submitBonus(); if (e.key === 'Escape') { setShowBonusForm(false); setBonusText('') } }}
+                    autoFocus
+                  />
+                  <div className="event-form-actions">
+                    <button className="add-task-btn" type="button" onClick={submitBonus}>Save</button>
+                    <button className="settings-action-btn" type="button" onClick={() => { setShowBonusForm(false); setBonusText('') }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="cal-bonus-add">
+                  <button className="settings-action-btn" onClick={() => setShowBonusForm(true)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Add bonus task
+                  </button>
                 </div>
               ))}
             </div>

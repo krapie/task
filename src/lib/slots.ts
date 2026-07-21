@@ -83,6 +83,20 @@ export function slotFromDate(slotDate: string, workWeek: WorkWeek = 'mon-fri'): 
   return DAY_TO_SLOT_MAP[workWeek][date.getDay()]
 }
 
+export function getSlotDateForCalendarDate(calendarDate: string, workWeek: WorkWeek = 'mon-fri'): string {
+  const [y, m, d] = calendarDate.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  const slot = DAY_TO_SLOT_MAP[workWeek][date.getDay()]
+  const anchorDate = new Date(date)
+  for (let i = 1; i <= 6; i++) {
+    const prev = new Date(date)
+    prev.setDate(date.getDate() - i)
+    if (DAY_TO_SLOT_MAP[workWeek][prev.getDay()] !== slot) break
+    anchorDate.setDate(date.getDate() - i)
+  }
+  return formatDate(anchorDate)
+}
+
 export function getNextSlotDate(
   slot: Slot,
   activeSlot: Slot,
