@@ -26,6 +26,7 @@ export interface Settings {
   rotateMinute: number
   keepBonus: boolean
   workWeek: WorkWeek
+  showAgent?: boolean
 }
 
 export interface ExportData {
