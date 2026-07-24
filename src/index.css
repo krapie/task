@@ -1407,14 +1407,12 @@ a { color: var(--kp-fg); text-decoration: none; }
 .event-bar:hover { opacity: 1; }
 
 .event-bar.is-addition {
-  background: transparent;
-  color: var(--kp-fg-2);
-  border: 1px dashed var(--kp-fg-3);
-  opacity: 1;
+  background: var(--kp-fg-3);
+  color: var(--kp-bg);
+  opacity: 0.78;
 }
 .event-bar.is-addition:hover {
-  border-color: var(--kp-fg);
-  color: var(--kp-fg);
+  opacity: 1;
 }
 
 .event-bar.is-start {
