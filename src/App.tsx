@@ -243,8 +243,10 @@ export default function App() {
   const loadSettings = useCallback(async () => {
     if (isAuth) {
       const s = await api.settings.get().catch(() => storage.getSettings())
-      setSettings(s)
-      return s
+      const local = storage.getSettings()
+      const merged = { ...s, ...(local.showAgent !== undefined ? { showAgent: local.showAgent } : {}) }
+      setSettings(merged)
+      return merged
     } else {
       const s = storage.getSettings()
       setSettings(s)
@@ -463,10 +465,9 @@ export default function App() {
   async function handleSaveSettings(partial: Partial<Settings>) {
     const next = { ...settings, ...partial }
     setSettings(next)
+    storage.setSettings(next)
     if (isAuth) {
       await api.settings.update(partial).catch(console.error)
-    } else {
-      storage.setSettings(next)
     }
     const { slot, slotDate } = getActiveSlotDate(next.rotateHour, next.rotateMinute, next.workWeek)
     if (slotDate !== activeSlotDate) {
