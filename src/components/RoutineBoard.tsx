@@ -199,14 +199,16 @@ function TodoItemRow({
 
   if (editing) {
     return (
-      <div className="task-item task-item-editing">
+      <div
+        className="task-item task-item-editing"
+        onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) save() }}
+      >
         <input
           ref={inputRef}
           className="task-edit-input"
           value={editText}
           onChange={e => setEditText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-          onBlur={save}
         />
         <DatePicker value={editDue} onChange={setEditDue} placeholder="No due date" />
       </div>
