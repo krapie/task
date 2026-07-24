@@ -1237,7 +1237,6 @@ a { color: var(--kp-fg); text-decoration: none; }
     font-size: 14px;
     justify-content: flex-start;
   }
-  .mobile-add .date-picker-popover { left: 0; right: 0; min-width: unset; }
 
   /* Mail: always show mark-read button on mobile (no hover) */
   .mail-item-read-btn { opacity: 1; }
@@ -2910,10 +2909,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .date-picker-clear:hover { color: var(--kp-fg-2); }
 
 .date-picker-popover {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 200;
+  z-index: 9999;
   background: var(--kp-bg);
   border: 1px solid var(--kp-border-strong);
   border-radius: var(--kp-radius-md);
@@ -2995,8 +2991,4 @@ a { color: var(--kp-fg); text-decoration: none; }
   opacity: 0.85;
 }
 
-/* Mobile: date picker popover full-width if needed */
-@media (max-width: 600px) {
-  .date-picker-popover { right: 0; left: auto; }
-}
 

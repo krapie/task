@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { TemplateWithState, Addition, Slot, DailyEvent, TodoItem } from '../types'
 import { formatDayLabel, getNextReset, SLOTS } from '../lib/slots'
 
@@ -65,9 +66,11 @@ function DatePicker({ value, onChange, placeholder = 'Due date' }: {
   placeholder?: string
 }) {
   const [open, setOpen] = useState(false)
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({})
   const [viewYear, setViewYear] = useState(() => value ? parseInt(value.split('-')[0]) : new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => value ? parseInt(value.split('-')[1]) : new Date().getMonth() + 1)
-  const ref = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (value) {
@@ -79,11 +82,27 @@ function DatePicker({ value, onChange, placeholder = 'Due date' }: {
   useEffect(() => {
     if (!open) return
     function onDown(e: MouseEvent) {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (!containerRef.current?.contains(t) && !popoverRef.current?.contains(t)) setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
+
+  function openToggle() {
+    if (!open && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const popW = 220
+      const style: React.CSSProperties = { position: 'fixed', top: rect.bottom + 4 }
+      if (rect.left + popW > window.innerWidth - 8) {
+        style.right = window.innerWidth - rect.right
+      } else {
+        style.left = rect.left
+      }
+      setPopoverStyle(style)
+    }
+    setOpen(v => !v)
+  }
 
   function formatLabel(v: string) {
     const [y, m, d] = v.split('-').map(Number)
@@ -107,15 +126,14 @@ function DatePicker({ value, onChange, placeholder = 'Due date' }: {
     else setViewMonth(m => m + 1)
   }
 
+  // Prevent focus leaving the edit input when interacting with popover
+  function noFocus(e: React.MouseEvent) { e.preventDefault() }
+
   const today = todayDateStr()
 
   return (
-    <div className="date-picker" ref={ref}>
-      <button
-        type="button"
-        className="date-picker-btn"
-        onClick={() => setOpen(v => !v)}
-      >
+    <div className="date-picker" ref={containerRef}>
+      <button type="button" className="date-picker-btn" onClick={openToggle}>
         <CalIcon />
         {value
           ? <span className="date-picker-value">{formatLabel(value)}</span>
@@ -126,17 +144,18 @@ function DatePicker({ value, onChange, placeholder = 'Due date' }: {
         <button
           type="button"
           className="date-picker-clear"
+          onMouseDown={noFocus}
           onClick={e => { e.stopPropagation(); onChange('') }}
         >
           ×
         </button>
       )}
-      {open && (
-        <div className="date-picker-popover">
+      {open && createPortal(
+        <div className="date-picker-popover" ref={popoverRef} style={popoverStyle}>
           <div className="date-picker-nav">
-            <button type="button" className="date-picker-nav-btn" onClick={prevMonth}>‹</button>
+            <button type="button" className="date-picker-nav-btn" onMouseDown={noFocus} onClick={prevMonth}>‹</button>
             <span className="date-picker-nav-label">{MONTH_SHORT[viewMonth - 1]} {viewYear}</span>
-            <button type="button" className="date-picker-nav-btn" onClick={nextMonth}>›</button>
+            <button type="button" className="date-picker-nav-btn" onMouseDown={noFocus} onClick={nextMonth}>›</button>
           </div>
           <div className="date-picker-grid">
             {['Su','Mo','Tu','We','Th','Fr','Sa'].map(h => (
@@ -150,6 +169,7 @@ function DatePicker({ value, onChange, placeholder = 'Due date' }: {
                   key={i}
                   type="button"
                   className={`date-picker-day${ds === value ? ' selected' : ''}${ds === today ? ' today' : ''}`}
+                  onMouseDown={noFocus}
                   onClick={() => { onChange(ds); setOpen(false) }}
                 >
                   {d}
@@ -157,7 +177,8 @@ function DatePicker({ value, onChange, placeholder = 'Due date' }: {
               )
             })}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
