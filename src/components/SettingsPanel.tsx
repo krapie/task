@@ -10,6 +10,14 @@ interface SettingsPanelProps {
   onImport: () => void
 }
 
+function ChevronRightIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+    </svg>
+  )
+}
+
 export function SettingsPanel({ settings, username, onSave, onSignIn, onSignOut, onExport, onImport }: SettingsPanelProps) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -25,117 +33,127 @@ export function SettingsPanel({ settings, username, onSave, onSignIn, onSignOut,
 
   return (
     <div className="settings-page">
-      <div className="settings-page-inner">
-        <div className="settings-group settings-account">
-          <div className="settings-label">Account</div>
-          {username ? (
-            <div className="settings-account-row">
-              <span className="settings-account-user">{username}</span>
-              <button className="settings-action-btn settings-signout-btn" onClick={onSignOut}>
-                Sign out
-              </button>
+      <div className="settings-page-header">
+        <span className="settings-page-title">Settings</span>
+      </div>
+
+      <div className="settings-page-body">
+
+        {/* Account */}
+        <div className="sp-section">
+          <div className="section-label">Account</div>
+          <div className="sp-rows">
+            <div className="sp-row">
+              <div className="sp-row-left">
+                <span className="sp-row-label">{username ?? 'Not signed in'}</span>
+                {username && <span className="sp-row-hint">Syncing to cloud</span>}
+              </div>
+              {username ? (
+                <button className="sp-inline-btn sp-btn-muted" onClick={onSignOut}>Sign out</button>
+              ) : (
+                <button className="sp-inline-btn" onClick={onSignIn}>Sign in</button>
+              )}
             </div>
-          ) : (
-            <button className="settings-action-btn" onClick={onSignIn}>
-              Sign in
+          </div>
+        </div>
+
+        {/* Schedule */}
+        <div className="sp-section">
+          <div className="section-label">Schedule</div>
+          <div className="sp-rows">
+            <div className="sp-row">
+              <div className="sp-row-left">
+                <span className="sp-row-label">Daily reset</span>
+                <span className="sp-row-hint">{tz}</span>
+              </div>
+              <div className="time-input-row">
+                <input
+                  className="time-input"
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={settings.rotateHour}
+                  onChange={handleHourChange}
+                />
+                <span className="time-sep">:</span>
+                <input
+                  className="time-input"
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={String(settings.rotateMinute).padStart(2, '0')}
+                  onChange={handleMinuteChange}
+                />
+              </div>
+            </div>
+            <div className="sp-row sp-row-wrap">
+              <span className="sp-row-label">Work week</span>
+              <div className="work-week-options">
+                {(['mon-fri', 'tue-sat', 'sun-thu'] as const).map(opt => (
+                  <button
+                    key={opt}
+                    className={`work-week-btn${settings.workWeek === opt ? ' work-week-active' : ''}`}
+                    onClick={() => onSave({ workWeek: opt })}
+                  >
+                    {opt === 'mon-fri' ? 'Mon – Fri' : opt === 'tue-sat' ? 'Tue – Sat' : 'Sun – Thu'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tasks */}
+        <div className="sp-section">
+          <div className="section-label">Tasks</div>
+          <div className="sp-rows">
+            <div className="sp-row">
+              <span className="sp-row-label">Keep bonus tasks after reset</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.keepBonus}
+                  onChange={e => onSave({ keepBonus: e.target.checked })}
+                />
+                <span className="toggle-track" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="sp-section">
+          <div className="section-label">Tabs</div>
+          <div className="sp-rows">
+            <div className="sp-row">
+              <span className="sp-row-label">Show Agent tab</span>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={settings.showAgent !== false}
+                  onChange={e => onSave({ showAgent: e.target.checked })}
+                />
+                <span className="toggle-track" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Data */}
+        <div className="sp-section">
+          <div className="section-label">Data</div>
+          <div className="sp-rows">
+            <button className="sp-row sp-row-action" onClick={onExport}>
+              <span className="sp-row-label">Export templates</span>
+              <ChevronRightIcon />
             </button>
-          )}
-        </div>
-
-        <div className="settings-divider" />
-
-        <div className="settings-group">
-          <div className="settings-label">Daily reset time</div>
-          <div className="time-input-row">
-            <input
-              className="time-input"
-              type="number"
-              min={0}
-              max={23}
-              value={settings.rotateHour}
-              onChange={handleHourChange}
-            />
-            <span className="time-sep">:</span>
-            <input
-              className="time-input"
-              type="number"
-              min={0}
-              max={59}
-              value={String(settings.rotateMinute).padStart(2, '0')}
-              onChange={handleMinuteChange}
-            />
-          </div>
-          <div className="settings-hint">{tz}</div>
-        </div>
-
-        <div className="settings-divider" />
-
-        <div className="settings-group">
-          <div className="settings-label">Work week</div>
-          <div className="work-week-options">
-            {(['mon-fri', 'tue-sat', 'sun-thu'] as const).map(opt => (
-              <button
-                key={opt}
-                className={`work-week-btn${settings.workWeek === opt ? ' work-week-active' : ''}`}
-                onClick={() => onSave({ workWeek: opt })}
-              >
-                {opt === 'mon-fri' ? 'Mon – Fri' : opt === 'tue-sat' ? 'Tue – Sat' : 'Sun – Thu'}
-              </button>
-            ))}
+            <button className="sp-row sp-row-action" onClick={onImport}>
+              <span className="sp-row-label">Import templates</span>
+              <ChevronRightIcon />
+            </button>
           </div>
         </div>
 
-        <div className="settings-divider" />
-
-        <div className="settings-group">
-          <div className="settings-label">Bonus tasks</div>
-          <div className="toggle-row">
-            <span className="toggle-label">Keep after reset</span>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={settings.keepBonus}
-                onChange={e => onSave({ keepBonus: e.target.checked })}
-              />
-              <span className="toggle-track" />
-            </label>
-          </div>
-        </div>
-
-        <div className="settings-divider" />
-
-        <div className="settings-group">
-          <div className="settings-label">Tabs</div>
-          <div className="toggle-row">
-            <span className="toggle-label">Show Agent tab</span>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={settings.showAgent !== false}
-                onChange={e => onSave({ showAgent: e.target.checked })}
-              />
-              <span className="toggle-track" />
-            </label>
-          </div>
-        </div>
-
-        <div className="settings-divider" />
-
-        <div className="settings-group">
-          <div className="settings-label">Data</div>
-          <button className="settings-action-btn" onClick={onExport}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            Export templates
-          </button>
-          <button className="settings-action-btn" onClick={onImport}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-            </svg>
-            Import templates
-          </button>
-        </div>
       </div>
     </div>
   )
