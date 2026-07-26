@@ -565,25 +565,21 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .goal-text-strike { text-decoration: line-through; color: var(--kp-fg-4); }
 .goal-item-done .goal-item-text { color: var(--kp-fg-4); }
-.goal-item-note {
-  font-size: var(--kp-text-xs);
-  color: var(--kp-fg-4);
-  font-family: var(--kp-font-mono);
-  cursor: pointer;
-  line-height: 1.4;
-}
-.goal-item-note:hover { color: var(--kp-fg-3); }
 .goal-note-input {
   font-size: var(--kp-text-xs);
   font-family: var(--kp-font-mono);
-  color: var(--kp-fg-2);
+  color: var(--kp-fg-3);
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--kp-border);
+  border-bottom: 1px dashed transparent;
   outline: none;
   padding: 0;
   width: 100%;
+  transition: border-color 0.1s, color 0.1s;
 }
+.goal-note-input::placeholder { color: var(--kp-fg-4); font-style: italic; }
+.goal-note-input:hover { border-bottom-color: var(--kp-border); }
+.goal-note-input:focus { border-bottom-color: var(--kp-border-strong); color: var(--kp-fg-2); }
 .goal-item-actions {
   display: flex;
   align-items: center;

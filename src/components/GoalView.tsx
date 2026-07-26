@@ -273,11 +273,7 @@ interface GoalItemRowProps {
 }
 
 function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
-  const [editingNote, setEditingNote] = useState(false)
   const [noteVal, setNoteVal] = useState(item.note ?? '')
-  const noteRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => { if (editingNote) noteRef.current?.focus() }, [editingNote])
 
   async function toggleCompleted() {
     try {
@@ -295,10 +291,10 @@ function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
 
   async function saveNote() {
     const note = noteVal.trim() || null
+    if (note === (item.note ?? null)) return
     try {
       const updated = await api.goals.updateItem(item.id, { note })
       onUpdate(updated)
-      setEditingNote(false)
     } catch (e) { console.error(e) }
   }
 
@@ -317,22 +313,14 @@ function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
         <span className={`goal-item-text${item.crossed_out ? ' goal-text-strike' : ''}`}>
           {item.text}
         </span>
-        {item.note && !editingNote && (
-          <span className="goal-item-note" onClick={() => { setNoteVal(item.note ?? ''); setEditingNote(true) }}>
-            {item.note}
-          </span>
-        )}
-        {editingNote && (
-          <input
-            ref={noteRef}
-            className="goal-note-input"
-            value={noteVal}
-            onChange={e => setNoteVal(e.target.value)}
-            placeholder="Add note…"
-            onBlur={saveNote}
-            onKeyDown={e => { if (e.key === 'Enter') saveNote(); if (e.key === 'Escape') { setEditingNote(false); setNoteVal(item.note ?? '') } }}
-          />
-        )}
+        <input
+          className="goal-note-input"
+          value={noteVal}
+          onChange={e => setNoteVal(e.target.value)}
+          placeholder="Add comment…"
+          onBlur={saveNote}
+          onKeyDown={e => { if (e.key === 'Enter') { e.currentTarget.blur() } }}
+        />
       </div>
 
       <div className="goal-item-actions">
@@ -344,17 +332,6 @@ function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 12H3.75m16.5 0H12m0 0V3.75M12 12v8.25M6.75 5.25l10.5 13.5" />
-            </svg>
-          </button>
-        )}
-        {!editingNote && (
-          <button
-            className="goal-action-btn"
-            onClick={() => { setNoteVal(item.note ?? ''); setEditingNote(true) }}
-            title="Edit note"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
             </svg>
           </button>
         )}
