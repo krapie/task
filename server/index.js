@@ -95,6 +95,30 @@ async function initDb() {
       flagged BOOLEAN NOT NULL DEFAULT true,
       saved_at TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS goal_periods (
+      id TEXT PRIMARY KEY,
+      year INTEGER NOT NULL,
+      half INTEGER NOT NULL CHECK (half IN (1, 2)),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(year, half)
+    );
+    CREATE TABLE IF NOT EXISTS goal_categories (
+      id TEXT PRIMARY KEY,
+      period_id TEXT NOT NULL REFERENCES goal_periods(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS goal_items (
+      id TEXT PRIMARY KEY,
+      category_id TEXT NOT NULL REFERENCES goal_categories(id) ON DELETE CASCADE,
+      text TEXT NOT NULL,
+      completed BOOLEAN NOT NULL DEFAULT false,
+      crossed_out BOOLEAN NOT NULL DEFAULT false,
+      note TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `)
   await pool.query(`
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
@@ -604,6 +628,97 @@ app.get('/api/agentq/tasks/:id', auth, async (req, res) => {
   } catch {
     res.status(502).json({ error: 'agentq unreachable' })
   }
+})
+
+// ── Goals ─────────────────────────────────────────────────────────────
+app.get('/api/goals', auth, async (_req, res) => {
+  const { rows: periods } = await pool.query('SELECT * FROM goal_periods ORDER BY year DESC, half DESC')
+  const { rows: categories } = await pool.query('SELECT * FROM goal_categories ORDER BY position ASC, created_at ASC')
+  const { rows: items } = await pool.query('SELECT * FROM goal_items ORDER BY position ASC, created_at ASC')
+  const itemsByCategory = {}
+  for (const item of items) {
+    if (!itemsByCategory[item.category_id]) itemsByCategory[item.category_id] = []
+    itemsByCategory[item.category_id].push(item)
+  }
+  const categoriesByPeriod = {}
+  for (const cat of categories) {
+    if (!categoriesByPeriod[cat.period_id]) categoriesByPeriod[cat.period_id] = []
+    categoriesByPeriod[cat.period_id].push({ ...cat, items: itemsByCategory[cat.id] ?? [] })
+  }
+  res.json(periods.map(p => ({ ...p, categories: categoriesByPeriod[p.id] ?? [] })))
+})
+
+app.post('/api/goals/periods', auth, async (req, res) => {
+  const { year, half } = req.body ?? {}
+  if (!year || ![1, 2].includes(half)) return res.status(400).json({ error: 'year and half (1|2) required' })
+  const id = randomUUID()
+  const { rows } = await pool.query(
+    'INSERT INTO goal_periods (id, year, half) VALUES ($1,$2,$3) ON CONFLICT (year, half) DO UPDATE SET year=$2 RETURNING *',
+    [id, year, half]
+  )
+  res.json({ ...rows[0], categories: [] })
+})
+
+app.delete('/api/goals/periods/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM goal_periods WHERE id = $1', [req.params.id])
+  res.json({})
+})
+
+app.post('/api/goals/categories', auth, async (req, res) => {
+  const { period_id, name } = req.body ?? {}
+  if (!period_id || !name?.trim()) return res.status(400).json({ error: 'period_id and name required' })
+  const { rows: [pos] } = await pool.query('SELECT COALESCE(MAX(position),0)+1 AS p FROM goal_categories WHERE period_id=$1', [period_id])
+  const id = randomUUID()
+  const { rows } = await pool.query(
+    'INSERT INTO goal_categories (id, period_id, name, position) VALUES ($1,$2,$3,$4) RETURNING *',
+    [id, period_id, name.trim(), pos.p]
+  )
+  res.json({ ...rows[0], items: [] })
+})
+
+app.put('/api/goals/categories/:id', auth, async (req, res) => {
+  const { name } = req.body ?? {}
+  if (!name?.trim()) return res.status(400).json({ error: 'name required' })
+  const { rows } = await pool.query('UPDATE goal_categories SET name=$1 WHERE id=$2 RETURNING *', [name.trim(), req.params.id])
+  if (!rows.length) return res.status(404).json({ error: 'Not found' })
+  res.json(rows[0])
+})
+
+app.delete('/api/goals/categories/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM goal_categories WHERE id = $1', [req.params.id])
+  res.json({})
+})
+
+app.post('/api/goals/items', auth, async (req, res) => {
+  const { category_id, text } = req.body ?? {}
+  if (!category_id || !text?.trim()) return res.status(400).json({ error: 'category_id and text required' })
+  const { rows: [pos] } = await pool.query('SELECT COALESCE(MAX(position),0)+1 AS p FROM goal_items WHERE category_id=$1', [category_id])
+  const id = randomUUID()
+  const { rows } = await pool.query(
+    'INSERT INTO goal_items (id, category_id, text, position) VALUES ($1,$2,$3,$4) RETURNING *',
+    [id, category_id, text.trim(), pos.p]
+  )
+  res.json(rows[0])
+})
+
+app.put('/api/goals/items/:id', auth, async (req, res) => {
+  const { text, completed, crossed_out, note } = req.body ?? {}
+  const sets = []
+  const params = []
+  if (text !== undefined) { params.push(text.trim()); sets.push(`text = $${params.length}`) }
+  if (completed !== undefined) { params.push(completed); sets.push(`completed = $${params.length}`) }
+  if (crossed_out !== undefined) { params.push(crossed_out); sets.push(`crossed_out = $${params.length}`) }
+  if ('note' in (req.body ?? {})) { params.push(note ?? null); sets.push(`note = $${params.length}`) }
+  if (sets.length === 0) return res.status(400).json({ error: 'nothing to update' })
+  params.push(req.params.id)
+  const { rows } = await pool.query(`UPDATE goal_items SET ${sets.join(', ')} WHERE id=$${params.length} RETURNING *`, params)
+  if (!rows.length) return res.status(404).json({ error: 'Not found' })
+  res.json(rows[0])
+})
+
+app.delete('/api/goals/items/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM goal_items WHERE id = $1', [req.params.id])
+  res.json({})
 })
 
 // News flags — persisted in task DB

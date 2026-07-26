@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, AgentTask } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, AgentTask, GoalPeriod, GoalCategory, GoalItem } from '../types'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
@@ -151,6 +151,18 @@ export const api = {
     flag: (item: Pick<NewsItem, 'link' | 'title' | 'author' | 'published' | 'preview'>) =>
       req<{ flagged: boolean }>('POST', '/news/flag', item),
     unflag: (link: string) => req<{ flagged: boolean }>('POST', '/news/unflag', { link }),
+  },
+  goals: {
+    getAll: () => req<GoalPeriod[]>('GET', '/goals'),
+    createPeriod: (year: number, half: 1 | 2) => req<GoalPeriod>('POST', '/goals/periods', { year, half }),
+    deletePeriod: (id: string) => req<void>('DELETE', `/goals/periods/${id}`),
+    createCategory: (period_id: string, name: string) => req<GoalCategory>('POST', '/goals/categories', { period_id, name }),
+    updateCategory: (id: string, name: string) => req<GoalCategory>('PUT', `/goals/categories/${id}`, { name }),
+    deleteCategory: (id: string) => req<void>('DELETE', `/goals/categories/${id}`),
+    createItem: (category_id: string, text: string) => req<GoalItem>('POST', '/goals/items', { category_id, text }),
+    updateItem: (id: string, data: Partial<Pick<GoalItem, 'text' | 'completed' | 'crossed_out' | 'note'>>) =>
+      req<GoalItem>('PUT', `/goals/items/${id}`, data),
+    deleteItem: (id: string) => req<void>('DELETE', `/goals/items/${id}`),
   },
   agentq: {
     submit: (title: string, prompt: string, session?: string) => req<{ id: number }>('POST', '/agentq/tasks', { title, prompt, ...(session ? { session } : {}) }),

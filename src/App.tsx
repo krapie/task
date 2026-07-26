@@ -9,6 +9,7 @@ import { EventPanel } from './components/EventPanel'
 import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
 import { AgentView } from './components/TaskView'
+import { GoalView } from './components/GoalView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
@@ -161,6 +162,8 @@ export default function App() {
   const [selectedSlot, setSelectedSlot] = useState<Slot>('mon')
   const [showSignIn, setShowSignIn] = useState(false)
   const [showImport, setShowImport] = useState(false)
+
+  const [routineTab, setRoutineTab] = useState<'tasks' | 'goals'>('tasks')
 
   // Calendar state
   const [view, setView] = useState<View>('routine')
@@ -949,78 +952,100 @@ export default function App() {
       <main className="app-main">
         {view === 'routine' ? (
           <>
-            {/* Date hero */}
+            {/* Date hero / Goals header */}
             <div className="board-date-hero">
-              <span className="board-day-name">{SLOT_DAY_NAMES[selectedSlot] ?? selectedSlot}</span>
-              <span className="board-date-mono">{selectedSlotDate}</span>
+              {routineTab === 'tasks' ? (
+                <>
+                  <span className="board-day-name">{SLOT_DAY_NAMES[selectedSlot] ?? selectedSlot}</span>
+                  <span className="board-date-mono">{selectedSlotDate}</span>
+                </>
+              ) : (
+                <span className="board-day-name">Goals</span>
+              )}
               <div className="rail-spacer" />
-              {boardTotal > 0 && (
+              {routineTab === 'tasks' && boardTotal > 0 && (
                 <span className="board-progress-count">
                   <span className="board-progress-done">{boardDone}</span>/{boardTotal}
                 </span>
               )}
-              {boardTotal > 0 && (
+              {routineTab === 'tasks' && boardTotal > 0 && (
                 <div className="board-progress-bar">
                   <div className="board-progress-fill" style={{ width: `${boardDone / boardTotal * 100}%` }} />
                 </div>
               )}
+              <div className="routine-tab-toggle">
+                <button
+                  className={`routine-tab-btn${routineTab === 'tasks' ? ' routine-tab-active' : ''}`}
+                  onClick={() => setRoutineTab('tasks')}
+                >Tasks</button>
+                <button
+                  className={`routine-tab-btn${routineTab === 'goals' ? ' routine-tab-active' : ''}`}
+                  onClick={() => setRoutineTab('goals')}
+                >Goals</button>
+              </div>
             </div>
 
-            {/* Day chips */}
-            <div className="board-chips-bar">
-              <DayTabs
-                selected={selectedSlot}
-                active={activeSlot}
-                onChange={setSelectedSlot}
-                slotLabels={getSlotLabels(settings.workWeek)}
-                slotOrder={getSlotOrder(settings.workWeek)}
-              />
-              <button
-                className="icon-btn"
-                onClick={syncBoardData}
-                disabled={boardSyncing}
-                aria-label="Sync"
-                title="Sync"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                  style={{ animation: boardSyncing ? 'mail-spin 1s linear infinite' : undefined }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-              </button>
-            </div>
+            {routineTab === 'tasks' ? (
+              <>
+                {/* Day chips */}
+                <div className="board-chips-bar">
+                  <DayTabs
+                    selected={selectedSlot}
+                    active={activeSlot}
+                    onChange={setSelectedSlot}
+                    slotLabels={getSlotLabels(settings.workWeek)}
+                    slotOrder={getSlotOrder(settings.workWeek)}
+                  />
+                  <button
+                    className="icon-btn"
+                    onClick={syncBoardData}
+                    disabled={boardSyncing}
+                    aria-label="Sync"
+                    title="Sync"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
+                      style={{ animation: boardSyncing ? 'mail-spin 1s linear infinite' : undefined }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                  </button>
+                </div>
 
-            {/* Board content */}
-            <div className="board-content">
-              <RoutineBoard
-                slot={selectedSlot}
-                slotDate={selectedSlotDate}
-                isActive={selectedSlot === activeSlot}
-                templates={selectedTemplates}
-                additions={selectedDailyData.additions}
-                calendarEvents={selectedEvents}
-                rotateHour={settings.rotateHour}
-                rotateMinute={settings.rotateMinute}
-                slotLabels={getSlotLabels(settings.workWeek)}
-                onToggleTemplate={handleToggleTemplate}
-                onAddTemplate={handleAddTemplate}
-                onDeleteTemplate={handleDeleteTemplate}
-                onMoveTemplate={handleMoveTemplate}
-                onAddAddition={handleAddAddition}
-                onDeleteAddition={handleDeleteAddition}
-                onEditAddition={handleEditAddition}
-                onToggleAddition={handleToggleAddition}
-                onEditTemplate={handleEditTemplate}
-                onToggleEvent={handleToggleEvent}
-                todos={todos}
-                onToggleTodo={handleToggleTodo}
-                onAddTodo={handleAddTodo}
-                onEditTodo={handleEditTodo}
-                onDeleteTodo={handleDeleteTodo}
-              />
-            </div>
-            <div className="board-footer">
-              <span className="board-footer-label">π  kevinprk.com</span>
-            </div>
+                {/* Board content */}
+                <div className="board-content">
+                  <RoutineBoard
+                    slot={selectedSlot}
+                    slotDate={selectedSlotDate}
+                    isActive={selectedSlot === activeSlot}
+                    templates={selectedTemplates}
+                    additions={selectedDailyData.additions}
+                    calendarEvents={selectedEvents}
+                    rotateHour={settings.rotateHour}
+                    rotateMinute={settings.rotateMinute}
+                    slotLabels={getSlotLabels(settings.workWeek)}
+                    onToggleTemplate={handleToggleTemplate}
+                    onAddTemplate={handleAddTemplate}
+                    onDeleteTemplate={handleDeleteTemplate}
+                    onMoveTemplate={handleMoveTemplate}
+                    onAddAddition={handleAddAddition}
+                    onDeleteAddition={handleDeleteAddition}
+                    onEditAddition={handleEditAddition}
+                    onToggleAddition={handleToggleAddition}
+                    onEditTemplate={handleEditTemplate}
+                    onToggleEvent={handleToggleEvent}
+                    todos={todos}
+                    onToggleTodo={handleToggleTodo}
+                    onAddTodo={handleAddTodo}
+                    onEditTodo={handleEditTodo}
+                    onDeleteTodo={handleDeleteTodo}
+                  />
+                </div>
+                <div className="board-footer">
+                  <span className="board-footer-label">π  kevinprk.com</span>
+                </div>
+              </>
+            ) : (
+              <GoalView isAuth={isAuth} />
+            )}
           </>
         ) : view === 'calendar' ? (
           <CalendarView

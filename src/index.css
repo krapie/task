@@ -334,6 +334,343 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-4);
 }
 
+/* Routine tab toggle (Tasks / Goals) */
+.routine-tab-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--kp-bg-muted);
+  border: 1px solid var(--kp-border);
+  border-radius: 6px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.routine-tab-btn {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--kp-fg-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+  white-space: nowrap;
+}
+.routine-tab-btn:hover { color: var(--kp-fg-2); }
+.routine-tab-active {
+  background: var(--kp-bg);
+  color: var(--kp-fg);
+  box-shadow: 0 1px 2px rgba(10,10,10,0.08);
+}
+
+/* Goal view */
+.goal-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.goal-period-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px;
+  height: 44px;
+  border-bottom: 1px solid var(--kp-border);
+  flex-shrink: 0;
+}
+.goal-year-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.goal-year-btn {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  font-size: var(--kp-text-xs);
+  font-weight: 500;
+  color: var(--kp-fg-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.goal-year-btn:hover { color: var(--kp-fg-2); background: var(--kp-hover-bg); }
+.goal-year-active { color: var(--kp-fg) !important; background: var(--kp-bg-muted) !important; }
+.goal-half-tabs {
+  display: flex;
+  align-items: center;
+  background: var(--kp-bg-muted);
+  border: 1px solid var(--kp-border);
+  border-radius: 5px;
+  padding: 2px;
+  gap: 2px;
+}
+.goal-half-btn {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--kp-font-mono);
+  color: var(--kp-fg-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.goal-half-btn:hover { color: var(--kp-fg-2); }
+.goal-half-active {
+  background: var(--kp-bg);
+  color: var(--kp-fg);
+  box-shadow: 0 1px 2px rgba(10,10,10,0.06);
+}
+.goal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 22px;
+}
+.goal-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg-4);
+}
+.goal-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding-top: 48px;
+}
+.goal-empty-label {
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg-4);
+}
+.goal-init-btn {
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--kp-border);
+  border-radius: 6px;
+  font-size: var(--kp-text-xs);
+  font-weight: 500;
+  color: var(--kp-fg-2);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.1s, color 0.1s;
+}
+.goal-init-btn:hover { border-color: var(--kp-fg-3); color: var(--kp-fg); }
+
+.goal-period-content {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 680px;
+}
+.goal-category { display: flex; flex-direction: column; }
+.goal-cat-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+}
+.goal-cat-name-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+.goal-cat-name-btn:hover { opacity: 0.7; }
+.goal-cat-name-input {
+  font-family: var(--kp-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--kp-fg-3);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--kp-border);
+  outline: none;
+  padding: 0;
+  min-width: 120px;
+}
+.goal-cat-delete {
+  opacity: 0;
+  transition: opacity 0.1s;
+  margin-left: 2px;
+}
+.goal-cat-header:hover .goal-cat-delete { opacity: 1; }
+
+.goal-items {
+  border-top: 1px solid var(--kp-border);
+  margin-top: 6px;
+}
+.goal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--kp-border);
+}
+.goal-item-check {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  margin-top: 1px;
+}
+.goal-item-check input[type="checkbox"] { display: none; }
+.goal-check-box {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--kp-border-strong);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.1s, background 0.1s;
+}
+.goal-item-check:hover .goal-check-box { border-color: var(--kp-fg-3); }
+.goal-item-done .goal-check-box {
+  background: var(--kp-fg);
+  border-color: var(--kp-fg);
+}
+.goal-item-done .goal-check-box::after {
+  content: '';
+  width: 8px;
+  height: 5px;
+  border-left: 1.5px solid var(--kp-bg);
+  border-bottom: 1.5px solid var(--kp-bg);
+  transform: rotate(-45deg) translate(0, -1px);
+  display: block;
+}
+.goal-item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.goal-item-text {
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg-2);
+  line-height: 1.45;
+}
+.goal-text-strike { text-decoration: line-through; color: var(--kp-fg-4); }
+.goal-item-done .goal-item-text { color: var(--kp-fg-4); }
+.goal-item-note {
+  font-size: var(--kp-text-xs);
+  color: var(--kp-fg-4);
+  font-family: var(--kp-font-mono);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.goal-item-note:hover { color: var(--kp-fg-3); }
+.goal-note-input {
+  font-size: var(--kp-text-xs);
+  font-family: var(--kp-font-mono);
+  color: var(--kp-fg-2);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--kp-border);
+  outline: none;
+  padding: 0;
+  width: 100%;
+}
+.goal-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.goal-item:hover .goal-item-actions { opacity: 1; }
+.goal-action-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--kp-fg-4);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.goal-action-btn:hover { color: var(--kp-fg-2); background: var(--kp-hover-bg); }
+.goal-action-active { color: var(--kp-fg-2) !important; }
+.goal-action-delete:hover { color: var(--kp-fg) !important; }
+
+.goal-add-item-btn, .goal-add-cat-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 0;
+  text-align: left;
+  font-size: var(--kp-text-xs);
+  color: var(--kp-fg-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.1s;
+}
+.goal-add-item-btn { border-bottom: 1px solid var(--kp-border); }
+.goal-add-item-btn:hover, .goal-add-cat-btn:hover { color: var(--kp-fg-2); }
+.goal-add-cat-btn { margin-top: 4px; }
+
+.goal-add-item-form, .goal-add-cat-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--kp-border);
+}
+.goal-add-cat-form { border-bottom: none; margin-top: 4px; }
+.goal-item-input, .goal-cat-input {
+  flex: 1;
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--kp-border);
+  outline: none;
+  padding: 0;
+}
+.goal-item-input::placeholder, .goal-cat-input::placeholder { color: var(--kp-fg-4); }
+.goal-add-confirm {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--kp-fg);
+  background: var(--kp-bg-muted);
+  border: 1px solid var(--kp-border);
+  border-radius: 5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.goal-add-confirm:hover { border-color: var(--kp-fg-3); }
+.goal-add-cancel {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--kp-fg-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.goal-add-cancel:hover { color: var(--kp-fg-2); }
+
 /* Header */
 .header {
   border-bottom: 1px solid var(--kp-border);

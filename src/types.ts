@@ -107,6 +107,31 @@ export interface NewsItem {
   flagged: boolean
 }
 
+export interface GoalItem {
+  id: string
+  category_id: string
+  text: string
+  completed: boolean
+  crossed_out: boolean
+  note: string | null
+  position: number
+}
+
+export interface GoalCategory {
+  id: string
+  period_id: string
+  name: string
+  position: number
+  items: GoalItem[]
+}
+
+export interface GoalPeriod {
+  id: string
+  year: number
+  half: 1 | 2
+  categories: GoalCategory[]
+}
+
 export type AgentTaskStatus = 'queued' | 'running' | 'waiting_quota' | 'gating' | 'done' | 'failed' | 'canceled'
 
 export interface AgentTask {
