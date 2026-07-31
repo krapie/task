@@ -1768,7 +1768,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .calendar-week {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: 116px;
+  grid-template-rows: 128px;
   column-gap: 1px;
   background: var(--kp-border);
   border-bottom: 1px solid var(--kp-border);
@@ -1780,6 +1780,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   background: var(--kp-bg);
   /* grid-row: 1 and grid-column set via inline style in JSX */
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   padding: 4px 6px;
   cursor: pointer;
@@ -1812,6 +1813,24 @@ a { color: var(--kp-fg); text-decoration: none; }
   outline: 2px solid var(--kp-fg);
   outline-offset: 1px;
 }
+
+.calendar-day-cell.is-holiday .calendar-day-num { color: hsl(0, 62%, 46%); }
+[data-theme="dark"] .calendar-day-cell.is-holiday .calendar-day-num { color: hsl(0, 62%, 65%); }
+.calendar-day-cell.today.is-holiday .calendar-day-num { color: var(--kp-bg); }
+
+.calendar-holiday-name {
+  font-size: 9px;
+  line-height: 1;
+  color: hsl(0, 55%, 50%);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  padding: 0 2px;
+}
+[data-theme="dark"] .calendar-holiday-name { color: hsl(0, 55%, 65%); }
+.calendar-day-cell.other-month .calendar-holiday-name { opacity: 0.45; }
 
 /* Overflow count — positioned as grid item; gridRow/gridColumn/marginTop via inline style */
 .calendar-overflow-count {
@@ -2131,8 +2150,9 @@ a { color: var(--kp-fg); text-decoration: none; }
 /* Mobile calendar adjustments */
 @media (max-width: 600px) {
   .calendar-week {
-    grid-template-rows: 110px;
+    grid-template-rows: 122px;
   }
+  .calendar-holiday-name { font-size: 8px; }
   .calendar-day-cell { padding: 3px 4px; }
   .calendar-day-num { width: 20px; height: 20px; font-size: 12px; }
   .event-bar { height: 16px; font-size: 11px; padding: 0 3px; }

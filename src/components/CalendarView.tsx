@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { CalendarEvent, Addition, TodoItem } from '../types'
+import { getHoliday } from '../lib/holidays'
 
 const DAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTH_NAMES = [
@@ -8,7 +9,7 @@ const MONTH_NAMES = [
 ]
 const MAX_LANES = 3
 // Vertical layout constants (px) — keep in sync with CSS .calendar-week row height
-const DAY_NUM_H = 28   // space reserved for the day number badge
+const DAY_NUM_H = 40   // space reserved for the day number badge (+ holiday label)
 const LANE_H    = 22   // height of each event lane slot
 
 function pad(n: number) { return String(n).padStart(2, '0') }
@@ -133,6 +134,7 @@ function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate
       {weekDates.map((date, i) => {
         const col = i + 1
         const [, m] = date.split('-').map(Number)
+        const holiday = getHoliday(date)
         return (
           <div
             key={date}
@@ -141,11 +143,13 @@ function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate
               m !== currentMonth ? 'other-month' : '',
               date === today ? 'today' : '',
               date === selectedDate ? 'selected' : '',
+              holiday ? 'is-holiday' : '',
             ].filter(Boolean).join(' ')}
             style={{ gridRow: 1, gridColumn: col }}
             onClick={() => onDayClick(date)}
           >
             <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
+            {holiday && <span className="calendar-holiday-name">{holiday}</span>}
           </div>
         )
       })}
