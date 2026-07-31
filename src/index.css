@@ -1176,6 +1176,10 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-4);
   font-family: var(--kp-font-mono);
 }
+.sp-hint-warn { color: hsl(30, 70%, 48%); }
+[data-theme="dark"] .sp-hint-warn { color: hsl(30, 70%, 62%); }
+.sp-row-info { padding-top: 0; }
+.sp-row-info .sp-row-hint { font-size: 10px; }
 
 .sp-inline-btn {
   flex-shrink: 0;

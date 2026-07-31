@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react'
 import type { Settings, ExportData } from '../types'
+import { api } from '../lib/api'
 
 interface SettingsPanelProps {
   settings: Settings
@@ -15,6 +17,96 @@ function ChevronRightIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
     </svg>
+  )
+}
+
+function NotificationsSection({ isAuth }: { isAuth: boolean }) {
+  const [supported, setSupported] = useState(false)
+  const [permission, setPermission] = useState<NotificationPermission>('default')
+  const [subscribed, setSubscribed] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [hint, setHint] = useState<string | null>(null)
+
+  useEffect(() => {
+    setSupported('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window)
+    if ('Notification' in window) setPermission(Notification.permission)
+
+    async function checkSubscription() {
+      try {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        setSubscribed(!!sub)
+      } catch {}
+    }
+    if ('serviceWorker' in navigator) checkSubscription()
+  }, [])
+
+  async function handleToggle() {
+    if (!isAuth) { setHint('Sign in first to enable notifications'); return }
+    setLoading(true)
+    setHint(null)
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const existing = await reg.pushManager.getSubscription()
+
+      if (existing) {
+        await api.push.unsubscribe(existing.endpoint)
+        await existing.unsubscribe()
+        setSubscribed(false)
+        setHint('Notifications disabled')
+      } else {
+        const { key } = await api.push.getVapidKey()
+        const perm = await Notification.requestPermission()
+        setPermission(perm)
+        if (perm !== 'granted') { setHint('Permission denied'); return }
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: key,
+        })
+        await api.push.subscribe(sub.toJSON() as PushSubscriptionJSON)
+        setSubscribed(true)
+        setHint('Notifications enabled')
+      }
+    } catch (e) {
+      setHint(`Error: ${(e as Error).message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!supported) return null
+
+  const blocked = permission === 'denied'
+
+  return (
+    <div className="sp-section">
+      <div className="section-label">Notifications</div>
+      <div className="sp-rows">
+        <div className="sp-row">
+          <div className="sp-row-left">
+            <span className="sp-row-label">Email notifications</span>
+            {blocked
+              ? <span className="sp-row-hint sp-hint-warn">Blocked in browser settings</span>
+              : hint && <span className="sp-row-hint">{hint}</span>
+            }
+          </div>
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={subscribed}
+              disabled={loading || blocked}
+              onChange={handleToggle}
+            />
+            <span className="toggle-track" />
+          </label>
+        </div>
+        {subscribed && (
+          <div className="sp-row sp-row-info">
+            <span className="sp-row-hint">Push via device browser · iOS requires home screen install</span>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -139,6 +231,8 @@ export function SettingsPanel({ settings, username, onSave, onSignIn, onSignOut,
               </div>
             </div>
           </div>
+
+          <NotificationsSection isAuth={!!username} />
 
           <div className="sp-section">
             <div className="section-label">Data</div>

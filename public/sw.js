@@ -15,6 +15,32 @@ self.addEventListener('activate', e => {
   )
 })
 
+self.addEventListener('push', e => {
+  let data = { title: 'Task', body: '' }
+  try { data = e.data?.json() ?? data } catch {}
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icon-192.png',
+      badge: '/apple-touch-icon.png',
+      tag: data.tag ?? 'task',
+      data: { url: data.url ?? '/' },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close()
+  const target = e.notification.data?.url ?? '/'
+  e.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const existing = list.find(c => c.url.includes(self.location.origin))
+      if (existing) return existing.focus().then(c => c.navigate(target))
+      return clients.openWindow(target)
+    })
+  )
+})
+
 // Network-first: try network, fall back to cache for navigation requests
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return

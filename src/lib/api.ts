@@ -164,6 +164,11 @@ export const api = {
       req<GoalItem>('PUT', `/goals/items/${id}`, data),
     deleteItem: (id: string) => req<void>('DELETE', `/goals/items/${id}`),
   },
+  push: {
+    getVapidKey: () => req<{ key: string }>('GET', '/push/vapid-key'),
+    subscribe: (sub: PushSubscriptionJSON) => req<{ ok: boolean }>('POST', '/push/subscribe', sub),
+    unsubscribe: (endpoint: string) => req<{ ok: boolean }>('DELETE', '/push/unsubscribe', { endpoint }),
+  },
   agentq: {
     submit: (title: string, prompt: string, session?: string) => req<{ id: number }>('POST', '/agentq/tasks', { title, prompt, ...(session ? { session } : {}) }),
     list: () => req<{ tasks: AgentTask[] }>('GET', '/agentq/tasks'),

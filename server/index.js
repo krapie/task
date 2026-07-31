@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { randomUUID, createHash, createHmac } from 'crypto'
 import fetch from 'node-fetch'
+import webpush from 'web-push'
 
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
@@ -15,6 +16,13 @@ const MAIL_BRIDGE_URL = process.env.MAIL_BRIDGE_URL || 'http://localhost:3001'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
 const AGENTQ_URL = process.env.AGENTQ_URL || 'http://192.168.0.17:8888'
 const AGENTQ_JWT_SECRET = process.env.AGENTQ_JWT_SECRET || ''
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@localhost'
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
+}
 
 function b64url(buf) {
   return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -119,12 +127,20 @@ async function initDb() {
       position INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id TEXT PRIMARY KEY,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `)
   await pool.query(`
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('rotateMinute', '0') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('keepBonus', 'false') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('workWeek', 'mon-fri') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('last_mail_push_at', to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')) ON CONFLICT DO NOTHING;
   `)
 }
 
@@ -513,6 +529,82 @@ app.post('/api/import', auth, async (req, res) => {
   res.json({ ok: true })
 })
 
+// ── Push notifications ───────────────────────────────────────────────
+app.get('/api/push/vapid-key', (_req, res) => {
+  if (!VAPID_PUBLIC_KEY) return res.status(503).json({ error: 'Push not configured' })
+  res.json({ key: VAPID_PUBLIC_KEY })
+})
+
+app.post('/api/push/subscribe', auth, async (req, res) => {
+  const { endpoint, keys } = req.body ?? {}
+  if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ error: 'Invalid subscription' })
+  const id = randomUUID()
+  await pool.query(
+    `INSERT INTO push_subscriptions (id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (endpoint) DO UPDATE SET p256dh=$3, auth=$4`,
+    [id, endpoint, keys.p256dh, keys.auth]
+  )
+  res.json({ ok: true })
+})
+
+app.delete('/api/push/unsubscribe', auth, async (req, res) => {
+  const { endpoint } = req.body ?? {}
+  if (!endpoint) return res.status(400).json({ error: 'endpoint required' })
+  await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint])
+  res.json({ ok: true })
+})
+
+async function sendPushToAll(payload) {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return
+  const { rows } = await pool.query('SELECT * FROM push_subscriptions')
+  await Promise.all(rows.map(async row => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
+        JSON.stringify(payload)
+      )
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [row.endpoint])
+      } else {
+        console.error('Push send error:', err.message)
+      }
+    }
+  }))
+}
+
+async function checkAndPushNewMail() {
+  try {
+    const { rows: subRows } = await pool.query('SELECT COUNT(*) FROM push_subscriptions')
+    if (parseInt(subRows[0].count) === 0) return
+
+    const { rows: [setting] } = await pool.query(`SELECT value FROM settings WHERE key = 'last_mail_push_at'`)
+    const since = setting?.value ?? new Date(Date.now() - 6 * 60 * 1000).toISOString()
+
+    const url = `${MAIL_BRIDGE_URL}/internal/items/new?after=${encodeURIComponent(since)}`
+    const res = await fetch(url, { headers: { 'X-Internal-Key': INTERNAL_API_KEY } })
+    if (!res.ok) return
+    const newItems = await res.json()
+    if (!newItems.length) return
+
+    const first = newItems[0]
+    const title = newItems.length === 1
+      ? (first.subject || '(no subject)')
+      : `${newItems.length} new messages`
+    const body = newItems.length === 1
+      ? (first.from_name || first.from_address || '')
+      : newItems.map(i => i.from_name || i.from_address || '').slice(0, 3).join(', ')
+
+    await sendPushToAll({ title, body, tag: 'mail', url: '/?tab=mail' })
+    await pool.query(`UPDATE settings SET value = $1 WHERE key = 'last_mail_push_at'`, [new Date().toISOString()])
+  } catch (err) {
+    console.error('Mail push check error:', err.message)
+  }
+}
+
+// Background mail push poller (every 5 min, offset by 30s to let bridge sync first)
+setTimeout(() => setInterval(checkAndPushNewMail, 5 * 60 * 1000), 30_000)
+
 // ── Mail proxy (forwards to mail-bridge) ────────────────────────────
 async function mailProxy(req, res) {
   try {
@@ -539,7 +631,11 @@ app.get('/api/mail/items', auth, mailProxy)
 app.get('/api/mail/items/:id', auth, mailProxy)
 app.post('/api/mail/items/:id/read', auth, mailProxy)
 app.post('/api/mail/items/:id/flag', auth, mailProxy)
-app.post('/api/mail/sync', auth, mailProxy)
+app.post('/api/mail/sync', auth, async (req, res) => {
+  await mailProxy(req, res)
+  // After sync, check for new mail to push (non-blocking)
+  checkAndPushNewMail().catch(() => {})
+})
 
 // ── Todos ─────────────────────────────────────────────────────────────
 app.get('/api/todos', auth, async (_req, res) => {
