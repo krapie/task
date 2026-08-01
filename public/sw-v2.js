@@ -3,9 +3,7 @@ const PRECACHE = ['/', '/index.html']
 
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(PRECACHE))
-      .then(() => fetch('/api/push/debug', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event: 'sw-install', v: 2 }) }).catch(() => {}))
-      .then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll(PRECACHE)).then(() => self.skipWaiting())
   )
 })
 
@@ -18,9 +16,17 @@ self.addEventListener('activate', e => {
 })
 
 self.addEventListener('push', e => {
-  const title = 'Push received'
-  const body = e.data ? e.data.text() : 'no data'
-  e.waitUntil(self.registration.showNotification(title, { body }))
+  let data = { title: 'Task', body: '' }
+  try { data = e.data?.json() ?? data } catch {}
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icon-192.png',
+      badge: '/apple-touch-icon.png',
+      tag: data.tag ?? 'task',
+      data: { url: data.url ?? '/' },
+    })
+  )
 })
 
 self.addEventListener('notificationclick', e => {
@@ -39,7 +45,6 @@ self.addEventListener('notificationclick', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return
   const url = new URL(e.request.url)
-  // Don't cache API calls
   if (url.pathname.startsWith('/api/')) return
 
   e.respondWith(

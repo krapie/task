@@ -26,6 +26,7 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
   const [subscribed, setSubscribed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
+  const [swVersion, setSwVersion] = useState<string | null>(null)
 
   useEffect(() => {
     setSupported('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window)
@@ -36,6 +37,9 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
         const reg = await navigator.serviceWorker.ready
         const sub = await reg.pushManager.getSubscription()
         setSubscribed(!!sub)
+        // Show which SW script is active so we can confirm updates
+        const url = reg.active?.scriptURL ?? reg.installing?.scriptURL ?? ''
+        setSwVersion(url.split('/').pop() ?? null)
       } catch {}
     }
     if ('serviceWorker' in navigator) checkSubscription()
@@ -100,6 +104,11 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
             <span className="toggle-track" />
           </label>
         </div>
+        {swVersion && (
+          <div className="sp-row sp-row-info">
+            <span className="sp-row-hint">SW: {swVersion}</span>
+          </div>
+        )}
         {subscribed && (
           <div className="sp-row sp-row-info">
             <span className="sp-row-hint">Push via device browser · iOS requires home screen install</span>
