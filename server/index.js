@@ -205,7 +205,7 @@ app.post('/api/auth/login', rateLimit, async (req, res) => {
     await audit('login_fail', req)
     return res.status(401).json({ error: 'Invalid credentials' })
   }
-  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '15m' })
+  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '4h' })
   const refreshToken = jwt.sign({ username }, JWT_REFRESH_SECRET, { expiresIn: '30d' })
   const hash = createHash('sha256').update(refreshToken).digest('hex')
   const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -229,7 +229,7 @@ app.post('/api/auth/refresh', async (req, res) => {
       [hash]
     )
     if (!rows.length) return res.status(401).json({ error: 'Invalid refresh token' })
-    const token = jwt.sign({ username: payload.username }, JWT_SECRET, { expiresIn: '15m' })
+    const token = jwt.sign({ username: payload.username }, JWT_SECRET, { expiresIn: '4h' })
     res.json({ token })
   } catch {
     res.status(401).json({ error: 'Invalid refresh token' })

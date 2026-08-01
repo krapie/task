@@ -12,16 +12,24 @@ function clearToken() {
   localStorage.removeItem('task_token')
 }
 
+let _refreshPromise: Promise<string | null> | null = null
+
 async function refreshAccessToken(): Promise<string | null> {
-  try {
-    const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-    if (!res.ok) return null
-    const { token } = await res.json()
-    setToken(token)
-    return token
-  } catch {
-    return null
-  }
+  if (_refreshPromise) return _refreshPromise
+  _refreshPromise = (async () => {
+    try {
+      const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+      if (!res.ok) return null
+      const { token } = await res.json()
+      setToken(token)
+      return token
+    } catch {
+      return null
+    } finally {
+      _refreshPromise = null
+    }
+  })()
+  return _refreshPromise
 }
 
 function headers(token?: string | null): Record<string, string> {
