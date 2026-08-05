@@ -19,24 +19,15 @@ function mergeNewsItems(existing: NewsItem[], fresh: NewsItem[]): NewsItem[] {
   return [...newItems, ...updatedExisting]
 }
 
-// Plain text preview from server → split into bullet lines
-function PreviewBullets({ text }: { text: string }) {
-  // Each bullet is separated by content that was originally an <li>
-  // The strip leaves sentences run together; split on sentence-ending patterns
-  // The server strips tags so we get lines like "• Foo • Bar" or just flat text.
-  // Split on " • " if present, otherwise show as-is
-  const lines = text
-    .split(/(?<=[음임함됨짐짐])\s+(?=[가-힣A-Za-z])/)  // split after Korean sentence-final endings
-    .flatMap(l => l.split(/\s{2,}/))                    // also split on double spaces
-    .map(l => l.trim())
-    .filter(Boolean)
-
-  if (lines.length <= 1) return <p className="news-item-preview-text">{text}</p>
-
+// Render HTML preview from feed <content> directly
+function NewsPreview({ html }: { html: string }) {
   return (
-    <ul className="news-item-preview-list">
-      {lines.slice(0, 5).map((l, i) => <li key={i}>{l}</li>)}
-    </ul>
+    <div
+      className="news-item-preview"
+      // Content comes from the hada.io Atom feed — trusted source
+      // eslint-disable-next-line react/no-danger
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   )
 }
 
@@ -73,7 +64,7 @@ function NewsItemCard({ item, setItems }: { item: NewsItem; setItems: React.Disp
           aria-label={item.flagged ? 'Unflag' : 'Flag'}
         >★</button>
       </div>
-      {item.preview && <PreviewBullets text={item.preview} />}
+      {item.preview && <NewsPreview html={item.preview} />}
       <div className="news-item-meta">
         <span>{item.author}</span>
         {item.published && <span>{timeAgo(item.published)}</span>}
