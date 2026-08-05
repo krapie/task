@@ -5,6 +5,8 @@ import { api } from '../lib/api'
 interface SettingsPanelProps {
   settings: Settings
   username: string | null
+  theme: string
+  onToggleTheme: () => void
   onSave: (s: Partial<Settings>) => void
   onSignIn: () => void
   onSignOut: () => void
@@ -119,7 +121,7 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
   )
 }
 
-export function SettingsPanel({ settings, username, onSave, onSignIn, onSignOut, onExport, onImport }: SettingsPanelProps) {
+export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave, onSignIn, onSignOut, onExport, onImport }: SettingsPanelProps) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   function handleHourChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -234,6 +236,23 @@ export function SettingsPanel({ settings, username, onSave, onSignIn, onSignOut,
                     type="checkbox"
                     checked={settings.showAgent !== false}
                     onChange={e => onSave({ showAgent: e.target.checked })}
+                  />
+                  <span className="toggle-track" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="sp-section">
+            <div className="section-label">Appearance</div>
+            <div className="sp-rows">
+              <div className="sp-row">
+                <span className="sp-row-label">Dark mode</span>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={theme === 'dark'}
+                    onChange={onToggleTheme}
                   />
                   <span className="toggle-track" />
                 </label>
