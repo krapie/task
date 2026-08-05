@@ -592,8 +592,9 @@ async function checkAndPushNewMail() {
     if (newItems.length === 1) {
       // Gmail style: sender as title, subject + snippet as body
       title = first.from_name || first.from_address || 'New email'
-      const snippet = first.snippet ? first.snippet.slice(0, 100) : ''
-      body = snippet ? `${first.subject || '(no subject)'}\n${snippet}` : (first.subject || '(no subject)')
+      const subject = (first.subject || '(no subject)').trim()
+      const snippet = first.snippet ? first.snippet.trim().slice(0, 100) : ''
+      body = snippet ? `${subject}\n${snippet}` : subject
     } else {
       // Multiple: "N new emails" title, list sender + subject per item
       title = `${newItems.length} new emails`
