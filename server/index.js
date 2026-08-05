@@ -588,12 +588,20 @@ async function checkAndPushNewMail() {
     if (!newItems.length) return
 
     const first = newItems[0]
-    const title = newItems.length === 1
-      ? (first.subject || '(no subject)')
-      : `${newItems.length} new messages`
-    const body = newItems.length === 1
-      ? (first.from_name || first.from_address || '')
-      : newItems.map(i => i.from_name || i.from_address || '').slice(0, 3).join(', ')
+    let title, body
+    if (newItems.length === 1) {
+      // Gmail style: sender as title, subject + snippet as body
+      title = first.from_name || first.from_address || 'New email'
+      const snippet = first.snippet ? first.snippet.slice(0, 100) : ''
+      body = snippet ? `${first.subject || '(no subject)'}\n${snippet}` : (first.subject || '(no subject)')
+    } else {
+      // Multiple: "N new emails" title, list sender + subject per item
+      title = `${newItems.length} new emails`
+      body = newItems.slice(0, 3).map(i => {
+        const sender = i.from_name || i.from_address || ''
+        return sender ? `${sender}: ${i.subject || '(no subject)'}` : (i.subject || '(no subject)')
+      }).join('\n')
+    }
 
     await sendPushToAll({ title, body, tag: 'mail', url: '/?tab=mail' })
     await pool.query(`UPDATE settings SET value = $1 WHERE key = 'last_mail_push_at'`, [new Date().toISOString()])
