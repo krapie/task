@@ -86,7 +86,7 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
 
   return (
     <div className="sp-section">
-      <div className="section-label">Notifications</div>
+      <div className="section-label">Mail</div>
       <div className="sp-rows">
         <div className="sp-row">
           <div className="sp-row-left">
@@ -142,8 +142,10 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
 
       <div className="settings-page-body">
 
-        {/* Left column: Account + Schedule */}
+        {/* Left column: Account + Routine */}
         <div className="sp-col">
+
+          {/* Account — global, not tab-specific */}
           <div className="sp-section">
             <div className="section-label">Account</div>
             <div className="sp-rows">
@@ -158,11 +160,19 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
                   <button className="sp-inline-btn" onClick={onSignIn}>Sign in</button>
                 )}
               </div>
+              <div className="sp-row">
+                <span className="sp-row-label">Dark mode</span>
+                <label className="toggle">
+                  <input type="checkbox" checked={theme === 'dark'} onChange={onToggleTheme} />
+                  <span className="toggle-track" />
+                </label>
+              </div>
             </div>
           </div>
 
+          {/* Routine — all settings for the Routine tab */}
           <div className="sp-section">
-            <div className="section-label">Schedule</div>
+            <div className="section-label">Routine</div>
             <div className="sp-rows">
               <div className="sp-row">
                 <div className="sp-row-left">
@@ -203,15 +213,6 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right column: Tasks + Tabs + Data */}
-        <div className="sp-col">
-          <div className="sp-section">
-            <div className="section-label">Tasks</div>
-            <div className="sp-rows">
               <div className="sp-row">
                 <span className="sp-row-label">Keep bonus tasks after reset</span>
                 <label className="toggle">
@@ -223,50 +224,10 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
                   <span className="toggle-track" />
                 </label>
               </div>
-            </div>
-          </div>
-
-          <div className="sp-section">
-            <div className="section-label">Tabs</div>
-            <div className="sp-rows">
-              <div className="sp-row">
-                <span className="sp-row-label">Show Agent tab</span>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={settings.showAgent !== false}
-                    onChange={e => onSave({ showAgent: e.target.checked })}
-                  />
-                  <span className="toggle-track" />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="sp-section">
-            <div className="section-label">Appearance</div>
-            <div className="sp-rows">
-              <div className="sp-row">
-                <span className="sp-row-label">Dark mode</span>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={theme === 'dark'}
-                    onChange={onToggleTheme}
-                  />
-                  <span className="toggle-track" />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div className="sp-section">
-            <div className="section-label">Task Notifications</div>
-            <div className="sp-rows">
               <div className="sp-row">
                 <div className="sp-row-left">
                   <span className="sp-row-label">Daily task digest</span>
-                  <span className="sp-row-hint">Sends incomplete tasks each morning</span>
+                  <span className="sp-row-hint">Push incomplete tasks each morning</span>
                 </div>
                 <label className="toggle">
                   <input
@@ -281,7 +242,7 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
                 <div className="sp-row">
                   <div className="sp-row-left">
                     <span className="sp-row-label">Notify at</span>
-                    <span className="sp-row-hint">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                    <span className="sp-row-hint">{tz}</span>
                   </div>
                   <div className="time-input-row">
                     <input
@@ -306,9 +267,33 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
               )}
             </div>
           </div>
+        </div>
 
+        {/* Right column: Agent + Mail + Data */}
+        <div className="sp-col">
+
+          {/* Agent — settings for the Agent tab */}
+          <div className="sp-section">
+            <div className="section-label">Agent</div>
+            <div className="sp-rows">
+              <div className="sp-row">
+                <span className="sp-row-label">Show Agent tab</span>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={settings.showAgent !== false}
+                    onChange={e => onSave({ showAgent: e.target.checked })}
+                  />
+                  <span className="toggle-track" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Mail — settings for the Mail tab */}
           <NotificationsSection isAuth={!!username} />
 
+          {/* Data — template management */}
           <div className="sp-section">
             <div className="section-label">Data</div>
             <div className="sp-rows">
