@@ -296,10 +296,11 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
       setSelectedItem(item)
       setPanel('inbox')
       api.mail.markRead(item.id).catch(() => {})
+      const opened = { ...item, read: true }
       setItems(prev => {
         const exists = prev.some(m => m.id === item.id)
-        const updated = prev.map(m => m.id === item.id ? { ...m, read: true, ...item } : m)
-        return exists ? updated : [{ ...item, read: true }, ...prev]
+        const updated = prev.map(m => m.id === item.id ? opened : m)
+        return exists ? updated : [opened, ...prev]
       })
     }).catch(() => {})
   }, [initialMailId, isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
