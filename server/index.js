@@ -587,24 +587,15 @@ async function checkAndPushNewMail() {
     const newItems = await res.json()
     if (!newItems.length) return
 
-    const first = newItems[0]
-    let title, body
-    if (newItems.length === 1) {
-      // Gmail style: sender as title, subject + snippet as body
-      title = first.from_name || first.from_address || 'New email'
-      const subject = (first.subject || '(no subject)').trim()
-      const snippet = first.snippet ? first.snippet.trim().slice(0, 100) : ''
-      body = snippet ? `${subject}\n${snippet}` : subject
-    } else {
-      // Multiple: "N new emails" title, list sender + subject per item
-      title = `${newItems.length} new emails`
-      body = newItems.slice(0, 3).map(i => {
-        const sender = i.from_name || i.from_address || ''
-        return sender ? `${sender}: ${i.subject || '(no subject)'}` : (i.subject || '(no subject)')
-      }).join('\n')
+    // Send one notification per email (Gmail style: sender → title, subject + snippet → body)
+    // Use a unique tag per item so notifications stack instead of replacing each other
+    for (const item of newItems) {
+      const title = item.from_name || item.from_address || 'New email'
+      const subject = (item.subject || '(no subject)').trim()
+      const snippet = item.snippet ? item.snippet.trim().slice(0, 100) : ''
+      const body = snippet ? `${subject}\n${snippet}` : subject
+      await sendPushToAll({ title, body, tag: `mail-${item.id}`, url: '/?tab=mail' })
     }
-
-    await sendPushToAll({ title, body, tag: 'mail', url: '/?tab=mail' })
     await pool.query(`UPDATE settings SET value = $1 WHERE key = 'last_mail_push_at'`, [new Date().toISOString()])
   } catch (err) {
     console.error('Mail push check error:', err.message)
