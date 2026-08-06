@@ -77,6 +77,13 @@ export function formatDayLabel(slotDate: string): string {
   return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 }
 
+// Short date label for tab chips: "Aug 12"
+export function formatShortDate(slotDate: string): string {
+  const [y, m, d] = slotDate.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export function slotFromDate(slotDate: string, workWeek: WorkWeek = 'mon-fri'): Slot {
   const [y, m, d] = slotDate.split('-').map(Number)
   const date = new Date(y, m - 1, d)
