@@ -48,7 +48,7 @@ function formatDue(dateStr: string): { label: string; overdue: boolean } {
   if (diff === 0) return { label: 'Today', overdue: false }
   if (diff === 1) return { label: 'Tomorrow', overdue: false }
   if (diff === -1) return { label: 'Yesterday', overdue: true }
-  if (diff > 0 && diff <= 6) return { label: due.toLocaleDateString('en-US', { weekday: 'short' }), overdue: false }
+  if (diff > 0 && diff <= 6) return { label: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), overdue: false }
   return { label: due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), overdue }
 }
 

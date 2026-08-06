@@ -12,7 +12,7 @@ import { AgentView } from './components/TaskView'
 import { GoalView } from './components/GoalView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
-import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate, formatShortDate } from './lib/slots'
+import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem, AgentTask } from './types'
 
 type Theme = 'light' | 'dark'
@@ -194,14 +194,6 @@ export default function App() {
     : ''
   const selectedDailyData: SlotDailyData = dailyData[selectedSlotDate] ?? { completions: [], additions: [], eventCompletions: [] }
 
-  // Derived: real date labels for each slot tab ("Aug 12" instead of "Wed")
-  const slotDateLabels = useMemo<Record<Slot, string>>(() => {
-    if (!activeSlotDate) return getSlotLabels(settings.workWeek)
-    const order = getSlotOrder(settings.workWeek)
-    return Object.fromEntries(
-      order.map(slot => [slot, formatShortDate(getNextSlotDate(slot, activeSlot, activeSlotDate, settings.workWeek))])
-    ) as Record<Slot, string>
-  }, [activeSlotDate, activeSlot, settings.workWeek])
 
   // Derived: single-day calendar events for selected slot date (board view bonus tasks)
   const selectedEvents: DailyEvent[] = useMemo(() => {
@@ -1003,7 +995,7 @@ export default function App() {
                     selected={selectedSlot}
                     active={activeSlot}
                     onChange={setSelectedSlot}
-                    slotLabels={slotDateLabels}
+                    slotLabels={getSlotLabels(settings.workWeek)}
                     slotOrder={getSlotOrder(settings.workWeek)}
                   />
                   <button
@@ -1031,7 +1023,7 @@ export default function App() {
                     calendarEvents={selectedEvents}
                     rotateHour={settings.rotateHour}
                     rotateMinute={settings.rotateMinute}
-                    slotLabels={slotDateLabels}
+                    slotLabels={getSlotLabels(settings.workWeek)}
                     onToggleTemplate={handleToggleTemplate}
                     onAddTemplate={handleAddTemplate}
                     onDeleteTemplate={handleDeleteTemplate}
