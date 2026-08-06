@@ -177,9 +177,10 @@ interface MailInboxProps {
   isAuth: boolean
   isDark: boolean
   onUnreadCount?: (n: number) => void
+  initialMailId?: string | null
 }
 
-export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
+export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: MailInboxProps) {
   if (!isAuth) {
     return (
       <div className="mail-inbox">
@@ -281,6 +282,27 @@ export function MailInbox({ isAuth, isDark, onUnreadCount }: MailInboxProps) {
     }, 3 * 60 * 1000)
     return () => clearInterval(id)
   }, [loadItems, loadAccounts])
+
+  // Deep-link: open a specific email when initialMailId is set (e.g. from push notification)
+  useEffect(() => {
+    if (!initialMailId || !isAuth) return
+    // Remove ?mail param from URL so re-focusing the tab doesn't reopen it
+    const url = new URL(window.location.href)
+    url.searchParams.delete('mail')
+    window.history.replaceState(null, '', url.toString())
+    // Fetch and open the email
+    api.mail.getItem(initialMailId).then(item => {
+      if (!item) return
+      setSelectedItem(item)
+      setPanel('inbox')
+      api.mail.markRead(item.id).catch(() => {})
+      setItems(prev => {
+        const exists = prev.some(m => m.id === item.id)
+        const updated = prev.map(m => m.id === item.id ? { ...m, read: true, ...item } : m)
+        return exists ? updated : [{ ...item, read: true }, ...prev]
+      })
+    }).catch(() => {})
+  }, [initialMailId, isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSync() {
     setSyncing(true)

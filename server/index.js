@@ -588,13 +588,14 @@ async function checkAndPushNewMail() {
     if (!newItems.length) return
 
     // Send one notification per email (Gmail style: sender → title, subject + snippet → body)
-    // Use a unique tag per item so notifications stack instead of replacing each other
+    // Use a unique tag per item so notifications stack instead of replacing each other.
+    // URL includes ?tab=mail&mail=<id> so tapping opens the specific email directly.
     for (const item of newItems) {
       const title = item.from_name || item.from_address || 'New email'
       const subject = (item.subject || '(no subject)').trim()
       const snippet = item.snippet ? item.snippet.trim().slice(0, 100) : ''
       const body = snippet ? `${subject}\n${snippet}` : subject
-      await sendPushToAll({ title, body, tag: `mail-${item.id}`, url: '/?tab=mail' })
+      await sendPushToAll({ title, body, tag: `mail-${item.id}`, url: `/?tab=mail&mail=${item.id}` })
     }
     await pool.query(`UPDATE settings SET value = $1 WHERE key = 'last_mail_push_at'`, [new Date().toISOString()])
   } catch (err) {

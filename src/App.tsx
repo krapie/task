@@ -166,7 +166,17 @@ export default function App() {
   const [routineTab, setRoutineTab] = useState<'tasks' | 'goals'>('tasks')
 
   // Calendar state
-  const [view, setView] = useState<View>('routine')
+  const [view, setView] = useState<View>(() => {
+    const p = new URLSearchParams(window.location.search)
+    const t = p.get('tab')
+    const valid: View[] = ['routine', 'agent', 'calendar', 'mail', 'news', 'settings']
+    return valid.includes(t as View) ? (t as View) : 'routine'
+  })
+  // Deep-link: ?mail=<id> opens a specific email (set by push notification URL)
+  const [initialMailId] = useState<string | null>(() => {
+    const p = new URLSearchParams(window.location.search)
+    return p.get('mail')
+  })
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
@@ -1058,7 +1068,7 @@ export default function App() {
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
         ) : view === 'mail' ? (
-          <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} />
+          <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} initialMailId={initialMailId} />
         ) : view === 'news' ? (
           <NewsView />
         ) : view === 'settings' ? (
