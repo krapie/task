@@ -27,6 +27,10 @@ export interface Settings {
   keepBonus: boolean
   workWeek: WorkWeek
   showAgent?: boolean
+  taskNotifyEnabled?: boolean
+  taskNotifyHour?: number
+  taskNotifyMinute?: number
+  taskNotifyTz?: string
 }
 
 export interface ExportData {

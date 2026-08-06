@@ -260,6 +260,53 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
             </div>
           </div>
 
+          <div className="sp-section">
+            <div className="section-label">Task Notifications</div>
+            <div className="sp-rows">
+              <div className="sp-row">
+                <div className="sp-row-left">
+                  <span className="sp-row-label">Daily task digest</span>
+                  <span className="sp-row-hint">Sends incomplete tasks each morning</span>
+                </div>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={settings.taskNotifyEnabled ?? false}
+                    onChange={e => onSave({ taskNotifyEnabled: e.target.checked })}
+                  />
+                  <span className="toggle-track" />
+                </label>
+              </div>
+              {(settings.taskNotifyEnabled ?? false) && (
+                <div className="sp-row">
+                  <div className="sp-row-left">
+                    <span className="sp-row-label">Notify at</span>
+                    <span className="sp-row-hint">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
+                  </div>
+                  <div className="time-input-row">
+                    <input
+                      className="time-input"
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={settings.taskNotifyHour ?? 9}
+                      onChange={e => onSave({ taskNotifyHour: Math.min(23, Math.max(0, parseInt(e.target.value) || 0)) })}
+                    />
+                    <span className="time-sep">:</span>
+                    <input
+                      className="time-input"
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={String(settings.taskNotifyMinute ?? 0).padStart(2, '0')}
+                      onChange={e => onSave({ taskNotifyMinute: Math.min(59, Math.max(0, parseInt(e.target.value) || 0)) })}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           <NotificationsSection isAuth={!!username} />
 
           <div className="sp-section">

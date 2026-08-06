@@ -141,6 +141,10 @@ async function initDb() {
     INSERT INTO settings VALUES ('keepBonus', 'false') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('workWeek', 'mon-fri') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('last_mail_push_at', to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')) ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('taskNotifyEnabled', 'false') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('taskNotifyHour', '9') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('taskNotifyMinute', '0') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('taskNotifyTz', 'UTC') ON CONFLICT DO NOTHING;
   `)
 }
 
@@ -438,11 +442,15 @@ app.get('/api/settings', auth, async (_req, res) => {
     rotateMinute: parseInt(s.rotateMinute ?? '0'),
     keepBonus: s.keepBonus === 'true',
     workWeek: s.workWeek ?? 'mon-fri',
+    taskNotifyEnabled: s.taskNotifyEnabled === 'true',
+    taskNotifyHour: parseInt(s.taskNotifyHour ?? '9'),
+    taskNotifyMinute: parseInt(s.taskNotifyMinute ?? '0'),
+    taskNotifyTz: s.taskNotifyTz ?? 'UTC',
   })
 })
 
 app.put('/api/settings', auth, async (req, res) => {
-  const { rotateHour, rotateMinute, keepBonus, workWeek } = req.body ?? {}
+  const { rotateHour, rotateMinute, keepBonus, workWeek, taskNotifyEnabled, taskNotifyHour, taskNotifyMinute, taskNotifyTz } = req.body ?? {}
   const upsert = 'INSERT INTO settings VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'
   const client = await pool.connect()
   try {
@@ -451,6 +459,10 @@ app.put('/api/settings', auth, async (req, res) => {
     if (rotateMinute !== undefined) await client.query(upsert, ['rotateMinute', String(rotateMinute)])
     if (keepBonus !== undefined) await client.query(upsert, ['keepBonus', String(keepBonus)])
     if (workWeek !== undefined) await client.query(upsert, ['workWeek', String(workWeek)])
+    if (taskNotifyEnabled !== undefined) await client.query(upsert, ['taskNotifyEnabled', String(taskNotifyEnabled)])
+    if (taskNotifyHour !== undefined) await client.query(upsert, ['taskNotifyHour', String(taskNotifyHour)])
+    if (taskNotifyMinute !== undefined) await client.query(upsert, ['taskNotifyMinute', String(taskNotifyMinute)])
+    if (taskNotifyTz !== undefined) await client.query(upsert, ['taskNotifyTz', String(taskNotifyTz)])
     await client.query('COMMIT')
   } catch (e) {
     await client.query('ROLLBACK')
@@ -465,6 +477,10 @@ app.put('/api/settings', auth, async (req, res) => {
     rotateMinute: parseInt(s.rotateMinute),
     keepBonus: s.keepBonus === 'true',
     workWeek: s.workWeek ?? 'mon-fri',
+    taskNotifyEnabled: s.taskNotifyEnabled === 'true',
+    taskNotifyHour: parseInt(s.taskNotifyHour ?? '9'),
+    taskNotifyMinute: parseInt(s.taskNotifyMinute ?? '0'),
+    taskNotifyTz: s.taskNotifyTz ?? 'UTC',
   })
 })
 
@@ -605,6 +621,155 @@ async function checkAndPushNewMail() {
 
 // Background mail push poller (every 5 min, offset by 30s to let bridge sync first)
 setTimeout(() => setInterval(checkAndPushNewMail, 5 * 60 * 1000), 30_000)
+
+// ── Task digest push notification ─────────────────────────────────────
+// Maps each workWeek variant's 0-6 (Sun-Sat) day index to a slot name.
+const DAY_TO_SLOT = {
+  'mon-fri': ['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend'],
+  'tue-sat': ['weekend', 'weekend', 'tue', 'wed', 'thu', 'fri', 'mon'],
+  'sun-thu': ['mon',     'tue',    'wed', 'thu', 'fri', 'weekend', 'weekend'],
+}
+
+// Returns { dateStr: 'YYYY-MM-DD', hour, minute, dow } for a given IANA timezone.
+function nowInTz(tz) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: 'numeric', minute: 'numeric', weekday: 'short',
+    hour12: false,
+  }).formatToParts(new Date())
+  const p = Object.fromEntries(parts.map(x => [x.type, x.value]))
+  // en-CA date format: YYYY-MM-DD
+  const dateStr = `${p.year}-${p.month}-${p.day}`
+  const hour = parseInt(p.hour) // 0-23; Intl may return '24' for midnight in some locales
+  const minute = parseInt(p.minute)
+  // weekday 'short' in en-CA: Sun Mon Tue Wed Thu Fri Sat
+  const dowMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  const dow = dowMap[p.weekday] ?? 0
+  return { dateStr, hour: hour === 24 ? 0 : hour, minute, dow }
+}
+
+// Computes the active slot and its anchor date (the date stored in DB for that slot).
+function activeSlotInfo(tz, rotateHour, rotateMinute, workWeek) {
+  const { dateStr, hour, minute, dow } = nowInTz(tz)
+  const nowMins = hour * 60 + minute
+  const rotateMins = rotateHour * 60 + rotateMinute
+  // If before reset, the "active day" is yesterday
+  let activeDow = dow
+  let activeDateStr = dateStr
+  if (nowMins < rotateMins) {
+    const d = new Date(`${dateStr}T12:00:00`) // noon to avoid DST edge
+    d.setDate(d.getDate() - 1)
+    const prev = nowInTz(tz)  // re-derive yesterday's dow via date arithmetic
+    // Compute yesterday's date string directly
+    const [y, m, day] = dateStr.split('-').map(Number)
+    const yesterday = new Date(y, m - 1, day - 1)
+    activeDateStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`
+    // dow for yesterday: (dow + 6) % 7
+    activeDow = (dow + 6) % 7
+  }
+  const dayMap = DAY_TO_SLOT[workWeek] ?? DAY_TO_SLOT['mon-fri']
+  const slot = dayMap[activeDow]
+  // Anchor slotDate: walk back to find the earliest contiguous day with the same slot
+  const [ay, am, ad] = activeDateStr.split('-').map(Number)
+  let anchorDate = new Date(ay, am - 1, ad)
+  for (let i = 1; i <= 6; i++) {
+    const prev = new Date(ay, am - 1, ad - i)
+    if (dayMap[prev.getDay()] !== slot) break
+    anchorDate = prev
+  }
+  const slotDate = `${anchorDate.getFullYear()}-${String(anchorDate.getMonth() + 1).padStart(2, '0')}-${String(anchorDate.getDate()).padStart(2, '0')}`
+  return { slot, slotDate }
+}
+
+async function checkAndPushTasks() {
+  try {
+    const { rows: subRows } = await pool.query('SELECT COUNT(*) FROM push_subscriptions')
+    if (parseInt(subRows[0].count) === 0) return
+
+    const { rows: sRows } = await pool.query('SELECT * FROM settings')
+    const s = Object.fromEntries(sRows.map(r => [r.key, r.value]))
+
+    if (s.taskNotifyEnabled !== 'true') return
+
+    const notifyHour = parseInt(s.taskNotifyHour ?? '9')
+    const notifyMinute = parseInt(s.taskNotifyMinute ?? '0')
+    const tz = s.taskNotifyTz ?? 'UTC'
+    const rotateHour = parseInt(s.rotateHour ?? '6')
+    const rotateMinute = parseInt(s.rotateMinute ?? '0')
+    const workWeek = s.workWeek ?? 'mon-fri'
+
+    const { dateStr: todayStr, hour: curHour, minute: curMinute } = nowInTz(tz)
+
+    // Fire only at the exact configured minute
+    if (curHour !== notifyHour || curMinute !== notifyMinute) return
+    // Fire only once per day
+    if (s.last_task_notify_date === todayStr) return
+
+    const { slot, slotDate } = activeSlotInfo(tz, rotateHour, rotateMinute, workWeek)
+
+    // Incomplete routine templates for this slot
+    const { rows: templates } = await pool.query(`
+      SELECT t.id, t.text FROM templates t
+      WHERE t.slot = $1
+        AND NOT EXISTS (
+          SELECT 1 FROM template_completions tc
+          WHERE tc.template_id = t.id AND tc.slot_date = $2
+        )
+      ORDER BY t.position
+    `, [slot, slotDate])
+
+    // Incomplete bonus additions for this slot date
+    const { rows: additions } = await pool.query(
+      'SELECT id, text FROM daily_additions WHERE slot_date = $1 AND completed = false ORDER BY created_at',
+      [slotDate]
+    )
+
+    // Calendar events covering this slot date not yet completed
+    const { rows: events } = await pool.query(`
+      SELECT e.id, e.title AS text FROM events e
+      WHERE e.start_date <= $1 AND e.end_date >= $1
+        AND NOT EXISTS (
+          SELECT 1 FROM event_completions ec
+          WHERE ec.event_id = e.id AND ec.slot_date = $2
+        )
+      ORDER BY e.time NULLS LAST
+    `, [slotDate, slotDate])
+
+    // Todos due today that are incomplete
+    const { rows: todos } = await pool.query(
+      'SELECT id, text FROM todos WHERE due_date = $1 AND completed = false ORDER BY created_at',
+      [slotDate]
+    )
+
+    const all = [...templates, ...additions, ...events, ...todos]
+    if (all.length === 0) return
+
+    // Format: "Walk · Workout · Read · +N more"
+    const MAX_NAMES = 4
+    const shown = all.slice(0, MAX_NAMES).map(t => t.text)
+    const rest = all.length - shown.length
+    const bodyLine = rest > 0
+      ? shown.join(' · ') + ` · +${rest} more`
+      : shown.join(' · ')
+
+    // Human-friendly date label ("Aug 13")
+    const [dy, dm, dd] = slotDate.split('-').map(Number)
+    const dateLabel = new Date(dy, dm - 1, dd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const title = `Today's Tasks — ${dateLabel}`
+
+    await sendPushToAll({ title, body: bodyLine, tag: 'tasks', url: '/?tab=routine' })
+    await pool.query(
+      `INSERT INTO settings VALUES ('last_task_notify_date', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [todayStr]
+    )
+  } catch (err) {
+    console.error('Task push check error:', err.message)
+  }
+}
+
+// Check every minute whether it's time to send the task digest
+setInterval(checkAndPushTasks, 60_000)
 
 // ── Mail proxy (forwards to mail-bridge) ────────────────────────────
 async function mailProxy(req, res) {

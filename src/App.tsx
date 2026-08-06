@@ -489,7 +489,9 @@ export default function App() {
     setSettings(next)
     storage.setSettings(next)
     if (isAuth) {
-      await api.settings.update(partial).catch(console.error)
+      // Always send the browser timezone so the server can fire notifications at the right local time
+      const payload = { ...partial, taskNotifyTz: Intl.DateTimeFormat().resolvedOptions().timeZone }
+      await api.settings.update(payload).catch(console.error)
     }
     const { slot, slotDate } = getActiveSlotDate(next.rotateHour, next.rotateMinute, next.workWeek)
     if (slotDate !== activeSlotDate) {
