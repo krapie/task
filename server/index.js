@@ -310,13 +310,13 @@ app.delete('/api/templates/:id', auth, async (req, res) => {
 })
 
 // ── Daily ───────────────────────────────────────────────────────────
-const DAY_TO_SLOT = ['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend']
+const DOW_TO_SLOT_MON_FRI = ['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend']
 
 app.get('/api/daily/:slotDate', auth, async (req, res) => {
   const { slotDate } = req.params
   if (!/^\d{4}-\d{2}-\d{2}$/.test(slotDate)) return res.status(400).json({ error: 'Invalid date' })
   const [y, m, d] = slotDate.split('-').map(Number)
-  const slot = DAY_TO_SLOT[new Date(y, m - 1, d).getDay()]
+  const slot = DOW_TO_SLOT_MON_FRI[new Date(y, m - 1, d).getDay()]
   const { rows: templates } = await pool.query('SELECT * FROM templates WHERE slot = $1 ORDER BY position', [slot])
   const { rows: completionRows } = await pool.query(
     'SELECT template_id FROM template_completions WHERE slot_date = $1', [slotDate]
