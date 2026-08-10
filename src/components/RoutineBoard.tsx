@@ -186,10 +186,10 @@ function DatePicker({ value, onChange, placeholder = 'Due date' }: {
   )
 }
 
-function LinkIcon() {
+function GroupIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
     </svg>
   )
 }
@@ -288,7 +288,7 @@ function TodoItemRow({
       <div className="task-item-right">
         {todo.group_id && (
           <span className="todo-group-badge" title="OR-group: completing any task in this group completes all">
-            <LinkIcon />
+            <GroupIcon />
           </span>
         )}
         <button className="task-edit-btn" onClick={e => { e.stopPropagation(); startEdit() }} aria-label="Edit">
@@ -305,8 +305,8 @@ function TodoItemRow({
             onClick={e => { e.stopPropagation(); onUnlink() }}
             aria-label="Unlink from group"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.181 8.68a4.503 4.503 0 0 1 1.903 6.405m-9.768-3.43a4.5 4.5 0 0 1 6.364-6.364l3 3m-4.5 4.5 3 3m-9-3h4.5m7.5 0h-4.5M3 3l18 18" />
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>
           </button>
         ) : (
@@ -317,7 +317,7 @@ function TodoItemRow({
               onClick={e => { e.stopPropagation(); setLinking(v => !v) }}
               aria-label="Link with task"
             >
-              <LinkIcon />
+              <GroupIcon />
             </button>
             {linking && (
               <div className="todo-link-picker">
