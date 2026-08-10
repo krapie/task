@@ -95,6 +95,8 @@ export const api = {
     update: (id: string, text: string) => req<Template>('PUT', `/templates/${id}`, { text }),
     remove: (id: string) => req<void>('DELETE', `/templates/${id}`),
     reorder: (slot: Slot, ids: string[]) => req<void>('PUT', '/templates/reorder', { slot, ids }),
+    link: (id: string, targetId: string) => req<Template[]>('POST', `/templates/${id}/link`, { target_id: targetId }),
+    unlink: (id: string) => req<{ ok: boolean }>('DELETE', `/templates/${id}/link`),
   },
   daily: {
     get: (slotDate: string) => req<DailyData>('GET', `/daily/${slotDate}`),
@@ -104,7 +106,7 @@ export const api = {
       req<Addition>('PUT', `/daily/additions/${id}`, { text }),
     removeAddition: (id: string) => req<void>('DELETE', `/daily/additions/${id}`),
     toggleTemplate: (templateId: string, slotDate: string, completed: boolean) =>
-      req<void>('POST', '/daily/toggle', { type: 'template', id: templateId, slotDate, completed }),
+      req<{ ok: boolean; groupCompleted: string[] }>('POST', '/daily/toggle', { type: 'template', id: templateId, slotDate, completed }),
     toggleAddition: (additionId: string, completed: boolean) =>
       req<void>('POST', '/daily/toggle', { type: 'addition', id: additionId, completed }),
     getAdditionsRange: (from: string, to: string) =>
@@ -150,10 +152,8 @@ export const api = {
     getAll: () => req<TodoItem[]>('GET', '/todos'),
     create: (text: string, due_date?: string) => req<TodoItem>('POST', '/todos', { text, due_date }),
     update: (id: string, data: Partial<Pick<TodoItem, 'text' | 'completed' | 'due_date'>>) =>
-      req<TodoItem & { groupCompleted?: string[] }>('PATCH', `/todos/${id}`, data),
+      req<TodoItem>('PATCH', `/todos/${id}`, data),
     remove: (id: string) => req<void>('DELETE', `/todos/${id}`),
-    link: (id: string, target_id: string) => req<TodoItem[]>('POST', `/todos/${id}/link`, { target_id }),
-    unlink: (id: string) => req<{ ok: boolean }>('DELETE', `/todos/${id}/link`),
   },
   news: {
     getItems: () => req<NewsItem[]>('GET', '/news'),

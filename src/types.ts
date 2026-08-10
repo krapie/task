@@ -6,6 +6,7 @@ export interface Template {
   slot: Slot
   text: string
   position: number
+  group_id: string | null
   created_at: number
 }
 
@@ -99,7 +100,6 @@ export interface TodoItem {
   text: string
   completed: boolean
   due_date: string | null
-  group_id: string | null
   created_at: string
 }
 

@@ -28,8 +28,8 @@ interface RoutineBoardProps {
   onAddTodo: (text: string, dueDate?: string) => void
   onEditTodo: (id: string, text: string, dueDate: string | null) => void
   onDeleteTodo: (id: string) => void
-  onLinkTodo: (id: string, targetId: string) => void
-  onUnlinkTodo: (id: string) => void
+  onLinkTemplate: (id: string, targetId: string) => void
+  onUnlinkTemplate: (id: string) => void
 }
 
 // --- Date helpers for DatePicker ---
@@ -197,37 +197,20 @@ function GroupIcon() {
 // --- Todo row (self-contained edit/reveal state) ---
 function TodoItemRow({
   todo,
-  allTodos,
   onToggle,
   onEdit,
   onDelete,
-  onLink,
-  onUnlink,
 }: {
   todo: TodoItem
-  allTodos: TodoItem[]
   onToggle: () => void
   onEdit: (text: string, dueDate: string | null) => void
   onDelete: () => void
-  onLink: (targetId: string) => void
-  onUnlink: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState(todo.text)
   const [editDue, setEditDue] = useState(todo.due_date ?? '')
   const [revealed, setRevealed] = useState(false)
-  const [linking, setLinking] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const linkRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!linking) return
-    function onDown(e: MouseEvent) {
-      if (!linkRef.current?.contains(e.target as Node)) setLinking(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [linking])
 
   function startEdit() {
     setEditText(todo.text)
@@ -244,10 +227,6 @@ function TodoItemRow({
   }
 
   const due = todo.due_date ? formatDue(todo.due_date) : null
-  // Candidates for linking: todos not already in this group, excluding self
-  const linkCandidates = allTodos.filter(t =>
-    t.id !== todo.id && (!todo.group_id || t.group_id !== todo.group_id)
-  )
 
   if (editing) {
     return (
@@ -286,58 +265,12 @@ function TodoItemRow({
         {todo.text}
       </span>
       <div className="task-item-right">
-        {todo.group_id && (
-          <span className="todo-group-badge" title="OR-group: completing any task in this group completes all">
-            <GroupIcon />
-          </span>
-        )}
         <button className="task-edit-btn" onClick={e => { e.stopPropagation(); startEdit() }} aria-label="Edit">
           <PencilIcon />
         </button>
         <button className="task-delete" onClick={e => { e.stopPropagation(); onDelete() }} aria-label="Delete">
           <TrashIcon />
         </button>
-        {/* Link / Unlink */}
-        {todo.group_id ? (
-          <button
-            className="task-edit-btn todo-unlink-btn"
-            title="Remove from group"
-            onClick={e => { e.stopPropagation(); onUnlink() }}
-            aria-label="Unlink from group"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-            </svg>
-          </button>
-        ) : (
-          <div className="todo-link-wrap" ref={linkRef} onClick={e => e.stopPropagation()}>
-            <button
-              className="task-edit-btn"
-              title="Link with another task (OR-group)"
-              onClick={e => { e.stopPropagation(); setLinking(v => !v) }}
-              aria-label="Link with task"
-            >
-              <GroupIcon />
-            </button>
-            {linking && (
-              <div className="todo-link-picker">
-                {linkCandidates.length === 0 ? (
-                  <div className="todo-link-empty">No other tasks to link</div>
-                ) : (
-                  linkCandidates.map(t => (
-                    <button
-                      key={t.id}
-                      className="todo-link-option"
-                      onClick={() => { onLink(t.id); setLinking(false) }}
-                    >
-                      {t.text}
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
         {due && (
           <span className={`todo-due-badge${due.overdue ? ' todo-due-overdue' : ''}`}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -687,12 +620,23 @@ export function RoutineBoard({
   onAddTodo,
   onEditTodo,
   onDeleteTodo,
-  onLinkTodo,
-  onUnlinkTodo,
+  onLinkTemplate,
+  onUnlinkTemplate,
 }: RoutineBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [revealedId, setRevealedId] = useState<string | null>(null)
+  const [linkingId, setLinkingId] = useState<string | null>(null)
+  const linkPickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!linkingId) return
+    function onDown(e: MouseEvent) {
+      if (!linkPickerRef.current?.contains(e.target as Node)) setLinkingId(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [linkingId])
 
   const completedCount = templates.filter(t => t.completed).length + additions.filter(a => a.completed).length + calendarEvents.filter(e => e.completed).length
   const totalCount = templates.length + additions.length + calendarEvents.length
@@ -754,12 +698,60 @@ export function RoutineBoard({
                     )}
                     {editingId !== t.id && (
                       <>
+                        {t.group_id && (
+                          <span className="todo-group-badge" title="OR-group: completing any task in this group completes all">
+                            <GroupIcon />
+                          </span>
+                        )}
                         <button className="task-edit-btn" onClick={() => startEdit(t.id)} aria-label="Edit">
                           <PencilIcon />
                         </button>
                         <button className="task-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
                           <TrashIcon />
                         </button>
+                        {/* OR-group link / unlink */}
+                        {t.group_id ? (
+                          <button
+                            className="task-edit-btn todo-unlink-btn"
+                            title="Remove from OR-group"
+                            onClick={() => onUnlinkTemplate(t.id)}
+                            aria-label="Unlink from group"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <div className="todo-link-wrap" ref={linkingId === t.id ? linkPickerRef : null}>
+                            <button
+                              className="task-edit-btn"
+                              title="Link with another daily task (OR-group)"
+                              onClick={() => setLinkingId(prev => prev === t.id ? null : t.id)}
+                              aria-label="Link with task"
+                            >
+                              <GroupIcon />
+                            </button>
+                            {linkingId === t.id && (
+                              <div className="todo-link-picker">
+                                {templates.filter(x => x.id !== t.id && (!t.group_id || x.group_id !== t.group_id)).length === 0 ? (
+                                  <div className="todo-link-empty">No other tasks to link</div>
+                                ) : (
+                                  templates
+                                    .filter(x => x.id !== t.id && (!t.group_id || x.group_id !== t.group_id))
+                                    .map(x => (
+                                      <button
+                                        key={x.id}
+                                        className="todo-link-option"
+                                        onClick={() => { onLinkTemplate(t.id, x.id); setLinkingId(null) }}
+                                      >
+                                        {x.text}
+                                      </button>
+                                    ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div className="task-reorder">
                           <button
                             className="task-reorder-btn"
@@ -881,12 +873,9 @@ export function RoutineBoard({
                   <TodoItemRow
                     key={t.id}
                     todo={t}
-                    allTodos={todos}
                     onToggle={() => onToggleTodo(t.id)}
                     onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
                     onDelete={() => onDeleteTodo(t.id)}
-                    onLink={(targetId) => onLinkTodo(t.id, targetId)}
-                    onUnlink={() => onUnlinkTodo(t.id)}
                   />
                 ))}
               </div>

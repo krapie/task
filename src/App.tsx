@@ -508,27 +508,7 @@ export default function App() {
     const todo = todos.find(t => t.id === id)
     if (!todo) return
     const updated = await api.todos.update(id, { completed: !todo.completed }).catch(() => null)
-    if (updated) {
-      const { groupCompleted = [], ...todoData } = updated
-      setTodos(prev => prev.map(t => {
-        if (t.id === id) return todoData
-        if (groupCompleted.includes(t.id)) return { ...t, completed: true }
-        return t
-      }))
-    }
-  }
-
-  async function handleLinkTodo(id: string, targetId: string) {
-    const updated = await api.todos.link(id, targetId).catch(() => null)
-    if (updated) setTodos(prev => prev.map(t => {
-      const u = updated.find(r => r.id === t.id)
-      return u ?? t
-    }))
-  }
-
-  async function handleUnlinkTodo(id: string) {
-    await api.todos.unlink(id).catch(console.error)
-    setTodos(prev => prev.map(t => t.id === id ? { ...t, group_id: null } : t))
+    if (updated) setTodos(prev => prev.map(t => t.id === id ? updated : t))
   }
 
   async function handleEditTodo(id: string, text: string, due_date: string | null) {
@@ -552,7 +532,7 @@ export default function App() {
     for (const slot of slots) {
       if (isAuth) {
         const tempId = `temp-${crypto.randomUUID()}`
-        const tempTemplate: Template = { id: tempId, slot, text, position: templates[slot].length, created_at: Date.now() }
+        const tempTemplate: Template = { id: tempId, slot, text, position: templates[slot].length, group_id: null, created_at: Date.now() }
         setTemplates(prev => ({ ...prev, [slot]: [...prev[slot], tempTemplate] }))
         try {
           const t = await api.templates.create(slot, text)
@@ -565,7 +545,7 @@ export default function App() {
         }
       } else {
         setTemplates(prev => {
-          const t: Template = { id: crypto.randomUUID(), slot, text, position: prev[slot].length, created_at: Date.now() }
+          const t: Template = { id: crypto.randomUUID(), slot, text, position: prev[slot].length, group_id: null, created_at: Date.now() }
           const next = { ...prev, [slot]: [...prev[slot], t] }
           storage.setTemplates(next)
           return next
@@ -649,7 +629,14 @@ export default function App() {
     const slotDate = activeSlotDate
     const current = dailyData[slotDate]?.completions ?? []
     const done = current.includes(id)
-    const next = done ? current.filter(c => c !== id) : [...current, id]
+    // Optimistically include OR-group members when marking complete
+    const tmpl = templates[activeSlot]?.find(t => t.id === id)
+    const groupMemberIds = !done && tmpl?.group_id
+      ? (templates[activeSlot] ?? []).filter(t => t.group_id === tmpl.group_id && t.id !== id).map(t => t.id)
+      : []
+    const next = done
+      ? current.filter(c => c !== id)
+      : [...new Set([...current, id, ...groupMemberIds])]
     setDailyData(prev => ({
       ...prev,
       [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), completions: next },
@@ -660,6 +647,32 @@ export default function App() {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, { ...d, completions: next })
     }
+  }
+
+  async function handleLinkTemplate(id: string, targetId: string) {
+    const updated = await api.templates.link(id, targetId).catch(() => null)
+    if (!updated) return
+    setTemplates(prev => {
+      const result = { ...prev } as Record<Slot, Template[]>
+      for (const slot of Object.keys(result) as Slot[]) {
+        result[slot] = result[slot].map(t => {
+          const u = updated.find(r => r.id === t.id)
+          return u ? { ...t, group_id: u.group_id } : t
+        })
+      }
+      return result
+    })
+  }
+
+  async function handleUnlinkTemplate(id: string) {
+    await api.templates.unlink(id).catch(console.error)
+    setTemplates(prev => {
+      const result = { ...prev } as Record<Slot, Template[]>
+      for (const slot of Object.keys(result) as Slot[]) {
+        result[slot] = result[slot].map(t => t.id === id ? { ...t, group_id: null } : t)
+      }
+      return result
+    })
   }
 
   // Bonus task handlers
@@ -1059,8 +1072,8 @@ export default function App() {
                     onAddTodo={handleAddTodo}
                     onEditTodo={handleEditTodo}
                     onDeleteTodo={handleDeleteTodo}
-                    onLinkTodo={handleLinkTodo}
-                    onUnlinkTodo={handleUnlinkTodo}
+                    onLinkTemplate={handleLinkTemplate}
+                    onUnlinkTemplate={handleUnlinkTemplate}
                   />
                 </div>
                 <div className="board-footer">

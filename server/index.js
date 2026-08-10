@@ -43,8 +43,10 @@ async function initDb() {
       slot TEXT NOT NULL,
       text TEXT NOT NULL,
       position INTEGER NOT NULL DEFAULT 0,
+      group_id UUID DEFAULT NULL,
       created_at BIGINT NOT NULL
     );
+    ALTER TABLE templates ADD COLUMN IF NOT EXISTS group_id UUID DEFAULT NULL;
     CREATE TABLE IF NOT EXISTS daily_additions (
       id TEXT PRIMARY KEY,
       slot_date TEXT NOT NULL,
@@ -311,6 +313,24 @@ app.delete('/api/templates/:id', auth, async (req, res) => {
   res.json({ ok: true })
 })
 
+// Link two templates into an OR-group
+app.post('/api/templates/:id/link', auth, async (req, res) => {
+  const { target_id } = req.body ?? {}
+  if (!target_id) return res.status(400).json({ error: 'target_id required' })
+  const { rows } = await pool.query('SELECT id, group_id FROM templates WHERE id = ANY($1)', [[req.params.id, target_id]])
+  if (rows.length < 2) return res.status(404).json({ error: 'One or both templates not found' })
+  const existingGroup = rows.find(r => r.group_id)?.group_id ?? randomUUID()
+  await pool.query('UPDATE templates SET group_id = $1 WHERE id = ANY($2)', [existingGroup, [req.params.id, target_id]])
+  const { rows: updated } = await pool.query('SELECT * FROM templates WHERE id = ANY($1)', [[req.params.id, target_id]])
+  res.json(updated)
+})
+
+// Remove a template from its OR-group
+app.delete('/api/templates/:id/link', auth, async (req, res) => {
+  await pool.query('UPDATE templates SET group_id = NULL WHERE id = $1', [req.params.id])
+  res.json({ ok: true })
+})
+
 // ── Daily ───────────────────────────────────────────────────────────
 const DOW_TO_SLOT_MON_FRI = ['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend']
 
@@ -369,13 +389,28 @@ app.post('/api/daily/toggle', auth, async (req, res) => {
       await pool.query(
         'INSERT INTO template_completions VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, slotDate]
       )
+      // Propagate to OR-group members
+      const { rows: [tmpl] } = await pool.query('SELECT group_id FROM templates WHERE id = $1', [id])
+      let groupCompleted = []
+      if (tmpl?.group_id) {
+        const { rows: members } = await pool.query(
+          'SELECT id FROM templates WHERE group_id = $1 AND id != $2', [tmpl.group_id, id]
+        )
+        for (const m of members) {
+          await pool.query(
+            'INSERT INTO template_completions VALUES ($1, $2) ON CONFLICT DO NOTHING', [m.id, slotDate]
+          )
+        }
+        groupCompleted = members.map(m => m.id)
+      }
+      return res.json({ ok: true, groupCompleted })
     } else {
       await pool.query('DELETE FROM template_completions WHERE template_id = $1 AND slot_date = $2', [id, slotDate])
     }
   } else {
     await pool.query('UPDATE daily_additions SET completed = $1 WHERE id = $2', [completed, id])
   }
-  res.json({ ok: true })
+  res.json({ ok: true, groupCompleted: [] })
 })
 
 app.get('/api/daily/additions/range', auth, async (req, res) => {
@@ -836,44 +871,12 @@ app.patch('/api/todos/:id', auth, async (req, res) => {
     params
   )
   if (!rows.length) return res.status(404).json({ error: 'Not found' })
-  const todo = rows[0]
-  // If marking complete and todo belongs to a group, complete all group members
-  let groupCompleted = []
-  if (completed === true && todo.group_id) {
-    const { rows: groupRows } = await pool.query(
-      'UPDATE todos SET completed = true WHERE group_id = $1 AND id != $2 RETURNING id',
-      [todo.group_id, todo.id]
-    )
-    groupCompleted = groupRows.map(r => r.id)
-  }
-  res.json({ ...todo, groupCompleted })
+  res.json(rows[0])
 })
 
 app.delete('/api/todos/:id', auth, async (req, res) => {
   await pool.query('DELETE FROM todos WHERE id = $1', [req.params.id])
   res.json({})
-})
-
-// Link two todos into a shared OR-group (completing any one completes all)
-app.post('/api/todos/:id/link', auth, async (req, res) => {
-  const { target_id } = req.body ?? {}
-  if (!target_id) return res.status(400).json({ error: 'target_id required' })
-  const { rows: bothRows } = await pool.query(
-    'SELECT id, group_id FROM todos WHERE id = ANY($1)',
-    [[req.params.id, target_id]]
-  )
-  if (bothRows.length < 2) return res.status(404).json({ error: 'One or both todos not found' })
-  // Use existing group_id if either already has one, otherwise create new
-  const existingGroup = bothRows.find(r => r.group_id)?.group_id ?? randomUUID()
-  await pool.query('UPDATE todos SET group_id = $1 WHERE id = ANY($2)', [existingGroup, [req.params.id, target_id]])
-  const { rows: updated } = await pool.query('SELECT * FROM todos WHERE id = ANY($1)', [[req.params.id, target_id]])
-  res.json(updated)
-})
-
-// Remove a todo from its group
-app.delete('/api/todos/:id/link', auth, async (req, res) => {
-  await pool.query('UPDATE todos SET group_id = NULL WHERE id = $1', [req.params.id])
-  res.json({ ok: true })
 })
 
 // agentq proxy — signs JWT server-side, forwards to agentq host process
