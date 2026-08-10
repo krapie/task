@@ -150,8 +150,10 @@ export const api = {
     getAll: () => req<TodoItem[]>('GET', '/todos'),
     create: (text: string, due_date?: string) => req<TodoItem>('POST', '/todos', { text, due_date }),
     update: (id: string, data: Partial<Pick<TodoItem, 'text' | 'completed' | 'due_date'>>) =>
-      req<TodoItem>('PATCH', `/todos/${id}`, data),
+      req<TodoItem & { groupCompleted?: string[] }>('PATCH', `/todos/${id}`, data),
     remove: (id: string) => req<void>('DELETE', `/todos/${id}`),
+    link: (id: string, target_id: string) => req<TodoItem[]>('POST', `/todos/${id}/link`, { target_id }),
+    unlink: (id: string) => req<{ ok: boolean }>('DELETE', `/todos/${id}/link`),
   },
   news: {
     getItems: () => req<NewsItem[]>('GET', '/news'),

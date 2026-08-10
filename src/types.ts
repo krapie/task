@@ -99,6 +99,7 @@ export interface TodoItem {
   text: string
   completed: boolean
   due_date: string | null
+  group_id: string | null
   created_at: string
 }
 

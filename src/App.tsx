@@ -508,7 +508,27 @@ export default function App() {
     const todo = todos.find(t => t.id === id)
     if (!todo) return
     const updated = await api.todos.update(id, { completed: !todo.completed }).catch(() => null)
-    if (updated) setTodos(prev => prev.map(t => t.id === id ? updated : t))
+    if (updated) {
+      const { groupCompleted = [], ...todoData } = updated
+      setTodos(prev => prev.map(t => {
+        if (t.id === id) return todoData
+        if (groupCompleted.includes(t.id)) return { ...t, completed: true }
+        return t
+      }))
+    }
+  }
+
+  async function handleLinkTodo(id: string, targetId: string) {
+    const updated = await api.todos.link(id, targetId).catch(() => null)
+    if (updated) setTodos(prev => prev.map(t => {
+      const u = updated.find(r => r.id === t.id)
+      return u ?? t
+    }))
+  }
+
+  async function handleUnlinkTodo(id: string) {
+    await api.todos.unlink(id).catch(console.error)
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, group_id: null } : t))
   }
 
   async function handleEditTodo(id: string, text: string, due_date: string | null) {
@@ -1039,6 +1059,8 @@ export default function App() {
                     onAddTodo={handleAddTodo}
                     onEditTodo={handleEditTodo}
                     onDeleteTodo={handleDeleteTodo}
+                    onLinkTodo={handleLinkTodo}
+                    onUnlinkTodo={handleUnlinkTodo}
                   />
                 </div>
                 <div className="board-footer">

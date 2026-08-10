@@ -92,8 +92,10 @@ async function initDb() {
       text TEXT NOT NULL,
       completed BOOLEAN NOT NULL DEFAULT false,
       due_date TEXT,
+      group_id UUID DEFAULT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE todos ADD COLUMN IF NOT EXISTS group_id UUID DEFAULT NULL;
     CREATE TABLE IF NOT EXISTS news_saved (
       link TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -834,12 +836,44 @@ app.patch('/api/todos/:id', auth, async (req, res) => {
     params
   )
   if (!rows.length) return res.status(404).json({ error: 'Not found' })
-  res.json(rows[0])
+  const todo = rows[0]
+  // If marking complete and todo belongs to a group, complete all group members
+  let groupCompleted = []
+  if (completed === true && todo.group_id) {
+    const { rows: groupRows } = await pool.query(
+      'UPDATE todos SET completed = true WHERE group_id = $1 AND id != $2 RETURNING id',
+      [todo.group_id, todo.id]
+    )
+    groupCompleted = groupRows.map(r => r.id)
+  }
+  res.json({ ...todo, groupCompleted })
 })
 
 app.delete('/api/todos/:id', auth, async (req, res) => {
   await pool.query('DELETE FROM todos WHERE id = $1', [req.params.id])
   res.json({})
+})
+
+// Link two todos into a shared OR-group (completing any one completes all)
+app.post('/api/todos/:id/link', auth, async (req, res) => {
+  const { target_id } = req.body ?? {}
+  if (!target_id) return res.status(400).json({ error: 'target_id required' })
+  const { rows: bothRows } = await pool.query(
+    'SELECT id, group_id FROM todos WHERE id = ANY($1)',
+    [[req.params.id, target_id]]
+  )
+  if (bothRows.length < 2) return res.status(404).json({ error: 'One or both todos not found' })
+  // Use existing group_id if either already has one, otherwise create new
+  const existingGroup = bothRows.find(r => r.group_id)?.group_id ?? randomUUID()
+  await pool.query('UPDATE todos SET group_id = $1 WHERE id = ANY($2)', [existingGroup, [req.params.id, target_id]])
+  const { rows: updated } = await pool.query('SELECT * FROM todos WHERE id = ANY($1)', [[req.params.id, target_id]])
+  res.json(updated)
+})
+
+// Remove a todo from its group
+app.delete('/api/todos/:id/link', auth, async (req, res) => {
+  await pool.query('UPDATE todos SET group_id = NULL WHERE id = $1', [req.params.id])
+  res.json({ ok: true })
 })
 
 // agentq proxy — signs JWT server-side, forwards to agentq host process

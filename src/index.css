@@ -2949,6 +2949,67 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 
 
+/* ── Todo group / link UI ──────────────────────────────── */
+.todo-group-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--kp-fg-3);
+  flex-shrink: 0;
+}
+
+.todo-link-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.todo-link-picker {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 200;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--kp-surface);
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-link-option {
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: var(--kp-radius-sm);
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.todo-link-option:hover {
+  background: var(--kp-hover-bg);
+}
+
+.todo-link-empty {
+  padding: 6px 10px;
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg-4);
+}
+
+.todo-unlink-btn {
+  color: var(--kp-fg-3);
+}
+.todo-unlink-btn:hover {
+  color: var(--kp-fg);
+}
+
 /* ── Todo bars in calendar ─────────────────────────────── */
 .event-bar.is-todo {
   background: transparent;
