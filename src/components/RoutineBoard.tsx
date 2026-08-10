@@ -788,24 +788,28 @@ export function RoutineBoard({
           /></div>
         </div>
 
-        {/* Tasks (todos) */}
+        {/* Tasks (todos) — completed items whose due date has passed are hidden */}
         <div className="task-section">
           <div className="section-label">Tasks</div>
-          {todos.length === 0 ? (
-            <div className="empty-state">No tasks yet.</div>
-          ) : (
-            <div className="task-list">
-              {todos.map(t => (
-                <TodoItemRow
-                  key={t.id}
-                  todo={t}
-                  onToggle={() => onToggleTodo(t.id)}
-                  onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
-                  onDelete={() => onDeleteTodo(t.id)}
-                />
-              ))}
-            </div>
-          )}
+          {(() => {
+            const today = todayDateStr()
+            const visible = todos.filter(t => !(t.completed && t.due_date && t.due_date < today))
+            return visible.length === 0 ? (
+              <div className="empty-state">No tasks yet.</div>
+            ) : (
+              <div className="task-list">
+                {visible.map(t => (
+                  <TodoItemRow
+                    key={t.id}
+                    todo={t}
+                    onToggle={() => onToggleTodo(t.id)}
+                    onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
+                    onDelete={() => onDeleteTodo(t.id)}
+                  />
+                ))}
+              </div>
+            )
+          })()}
           <div className="desktop-add"><AddTodoInput onAdd={onAddTodo} /></div>
         </div>
         </div>{/* end task-board-right */}
