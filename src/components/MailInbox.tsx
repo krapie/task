@@ -4,6 +4,14 @@ import type { MailAccount, MailItem } from '../types'
 
 type Panel = 'inbox' | 'accounts'
 
+function LanguageIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m10.5 21 5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 0 1 6-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502m9.334-12.138c.896.061 1.785.147 2.666.257m-4.589 8.495a18.023 18.023 0 0 1-3.827-5.802" />
+    </svg>
+  )
+}
+
 function mergeMailItems(existing: MailItem[], fresh: MailItem[]): MailItem[] {
   const existingMap = new Map(existing.map(m => [m.id, m]))
   const freshMap = new Map(fresh.map(m => [m.id, m]))
@@ -201,6 +209,10 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
   const [showFlagged, setShowFlagged] = useState(false)
   const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
+  const [translating, setTranslating] = useState(false)
+  const [showTranslated, setShowTranslated] = useState(false)
+  const [translateTarget, setTranslateTarget] = useState<'ko' | 'en'>('ko')
+  const [translateError, setTranslateError] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
   const [searchQuery, setSearchQuery] = useState('')
   const [hasMore, setHasMore] = useState(false)
@@ -337,6 +349,36 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     await api.mail.removeAccount(id).catch(console.error)
     setAccounts(prev => prev.filter(a => a.id !== id))
     if (activeAccount === id) setActiveAccount(null)
+  }
+
+  // Opening a different email should show its own original text, not the
+  // previous email's translation left over in showTranslated state.
+  useEffect(() => {
+    setShowTranslated(false)
+    setTranslateError(null)
+  }, [selectedItem?.id])
+
+  async function handleTranslate(target: 'ko' | 'en') {
+    if (!selectedItem) return
+    setTranslateTarget(target)
+    setTranslateError(null)
+    // Already translated to this language (cached on the item from a previous call) — just show it.
+    if (selectedItem.translated_lang === target && selectedItem.translated_body) {
+      setShowTranslated(true)
+      return
+    }
+    setTranslating(true)
+    try {
+      const { translated, lang } = await api.mail.translate(selectedItem.id, target)
+      const patch = { translated_body: translated, translated_lang: lang }
+      setSelectedItem(prev => prev?.id === selectedItem.id ? { ...prev, ...patch } : prev)
+      setItems(prev => prev.map(m => m.id === selectedItem.id ? { ...m, ...patch } : m))
+      setShowTranslated(true)
+    } catch (err) {
+      setTranslateError(err instanceof Error ? err.message : 'Translation failed')
+    } finally {
+      setTranslating(false)
+    }
   }
 
   async function handleItemClick(item: MailItem) {
@@ -600,6 +642,32 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
               </svg>
             </button>
             <h3 className="mail-detail-subject">{selectedItem.subject}</h3>
+            {showTranslated ? (
+              <>
+                <button
+                  className="translate-btn"
+                  onClick={() => handleTranslate(translateTarget === 'ko' ? 'en' : 'ko')}
+                  disabled={translating}
+                  aria-label="Switch translation language"
+                >
+                  {translating ? '번역 중…' : translateTarget === 'ko' ? 'English로' : '한국어로'}
+                </button>
+                <button className="translate-btn" onClick={() => setShowTranslated(false)} aria-label="Show original">
+                  원문 보기
+                </button>
+              </>
+            ) : (
+              <button
+                className="translate-btn icon-btn"
+                onClick={() => handleTranslate(translateTarget)}
+                disabled={translating || (!selectedItem.body && !bodyLoading)}
+                aria-label="Translate"
+                title="번역"
+              >
+                <LanguageIcon />
+                {translating && '…'}
+              </button>
+            )}
             <button
               className={`flag-btn${selectedItem.flagged ? ' flag-btn-active' : ''}`}
               onClick={e => handleToggleFlag(selectedItem, e)}
@@ -610,9 +678,12 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
             <span>From: {selectedItem.from_name ? `${selectedItem.from_name} <${selectedItem.from_address}>` : selectedItem.from_address}</span>
             <span>{new Date(selectedItem.received_at).toLocaleString()}</span>
           </div>
+          {translateError && <div className="mail-translate-error">{translateError}</div>}
           <div className="mail-detail-body">
             {bodyLoading ? (
               <div className="mail-empty">Loading…</div>
+            ) : showTranslated && selectedItem.translated_body ? (
+              <pre className="mail-detail-plain mail-detail-translated">{selectedItem.translated_body}</pre>
             ) : selectedItem.html_body ? (
               <AutoIframe srcdoc={buildSrcdoc(selectedItem.html_body, isDark)} />
             ) : selectedItem.body ? (

@@ -93,6 +93,8 @@ export interface MailItem {
   snippet: string | null
   body?: string | null
   html_body?: string | null
+  translated_body?: string | null
+  translated_lang?: string | null
 }
 
 export interface TodoItem {

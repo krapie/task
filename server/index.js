@@ -19,6 +19,9 @@ const AGENTQ_JWT_SECRET = process.env.AGENTQ_JWT_SECRET || ''
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@localhost'
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
+const TRANSLATE_MODEL = 'claude-haiku-4-5-20251001'
+const MAX_TRANSLATE_CHARS = 8000
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
@@ -838,6 +841,68 @@ app.post('/api/mail/sync', auth, async (req, res) => {
   await mailProxy(req, res)
   // After sync, check for new mail to push (non-blocking)
   checkAndPushNewMail().catch(() => {})
+})
+
+// On-demand email translation (English/Japanese -> Korean, or vice versa).
+// Never called from the sync path — only when the user clicks the button —
+// so a busy inbox never burns API budget on its own.
+app.post('/api/mail/items/:id/translate', auth, async (req, res) => {
+  const { target } = req.body ?? {}
+  if (target !== 'ko' && target !== 'en') {
+    return res.status(400).json({ error: 'target must be "ko" or "en"' })
+  }
+  if (!ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'Translation is not configured' })
+  }
+  try {
+    const itemRes = await fetch(`${MAIL_BRIDGE_URL}/internal/items/${req.params.id}`, {
+      headers: { 'X-Internal-Key': INTERNAL_API_KEY },
+    })
+    if (!itemRes.ok) return res.status(itemRes.status).json({ error: 'Mail item not found' })
+    const item = await itemRes.json()
+
+    if (item.translated_lang === target && item.translated_body) {
+      return res.json({ translated: item.translated_body, lang: target, cached: true })
+    }
+
+    const source = (item.body || '').slice(0, MAX_TRANSLATE_CHARS)
+    if (!source.trim()) return res.status(400).json({ error: 'Nothing to translate' })
+
+    const targetName = target === 'ko' ? 'Korean' : 'English'
+    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: TRANSLATE_MODEL,
+        max_tokens: 4096,
+        system: `Translate the given email body into ${targetName}. Output only the translated text — no preamble, no notes, no explanations. Preserve the original paragraph and line breaks. If the text is already in ${targetName}, return it unchanged.`,
+        messages: [{ role: 'user', content: source }],
+      }),
+    })
+    if (!aiRes.ok) {
+      console.error('Anthropic translate error:', aiRes.status, await aiRes.text().catch(() => ''))
+      return res.status(502).json({ error: 'Translation service error' })
+    }
+    const aiJson = await aiRes.json()
+    const translated = (aiJson.content ?? []).map(b => b.text ?? '').join('').trim()
+    if (!translated) return res.status(502).json({ error: 'Empty translation' })
+
+    // Cache for next time — best-effort, don't fail the request over it.
+    fetch(`${MAIL_BRIDGE_URL}/internal/items/${req.params.id}/translate-cache`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_API_KEY },
+      body: JSON.stringify({ lang: target, text: translated }),
+    }).catch(() => {})
+
+    res.json({ translated, lang: target, cached: false })
+  } catch (err) {
+    console.error('Translate error:', err.message)
+    res.status(500).json({ error: 'Translation failed' })
+  }
 })
 
 // ── Todos ─────────────────────────────────────────────────────────────

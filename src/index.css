@@ -2684,6 +2684,38 @@ a { color: var(--kp-fg); text-decoration: none; }
 .flag-btn-active { color: #f0a500; }
 .flag-btn-active:hover { color: #c88800; }
 
+/* Translate button — mail detail header */
+.translate-btn {
+  background: none;
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--kp-fg-2);
+  padding: 5px 10px;
+  line-height: 1;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color var(--kp-dur-fast) var(--kp-ease), border-color var(--kp-dur-fast) var(--kp-ease);
+}
+.translate-btn:hover:not(:disabled) { color: var(--kp-fg); border-color: var(--kp-fg-3); }
+.translate-btn:disabled { opacity: 0.5; cursor: default; }
+.translate-btn.icon-btn { min-width: 32px; min-height: 32px; padding: 0; justify-content: center; }
+
+.mail-translate-error {
+  padding: 8px 20px;
+  font-size: 12px;
+  color: var(--kp-danger);
+  border-bottom: 1px solid var(--kp-border);
+  flex-shrink: 0;
+}
+
+.mail-detail-translated {
+  background: var(--kp-bg-subtle);
+}
+
 /* News view */
 .news-view {
   display: flex;

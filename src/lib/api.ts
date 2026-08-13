@@ -147,6 +147,8 @@ export const api = {
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
     toggleFlag: (id: string) => req<{ flagged: boolean }>('POST', `/mail/items/${id}/flag`),
     sync: (account_id?: string) => req<{ synced: number }>('POST', '/mail/sync', account_id ? { account_id } : {}),
+    translate: (id: string, target: 'ko' | 'en') =>
+      req<{ translated: string; lang: string; cached: boolean }>('POST', `/mail/items/${id}/translate`, { target }),
   },
   todos: {
     getAll: () => req<TodoItem[]>('GET', '/todos'),
