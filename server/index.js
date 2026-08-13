@@ -871,6 +871,7 @@ async function translatePlainText(text, target) {
     body: JSON.stringify({
       model: TRANSLATE_MODEL,
       max_tokens: 4096,
+      temperature: 0,
       system: `Translate the given email body into ${targetName}. Output only the translated text — no preamble, no notes, no explanations. Preserve the original paragraph and line breaks. If the text is already in ${targetName}, return it unchanged.`,
       messages: [{ role: 'user', content: text }],
     }),
@@ -909,24 +910,34 @@ async function translateFragments(fragments, target) {
     body: JSON.stringify({
       model: TRANSLATE_MODEL,
       max_tokens: 8192,
-      system: `You translate email text fragments into ${targetName}. You receive a JSON array of unique text fragments extracted from an HTML email. Call return_translations with an array of the SAME LENGTH, in the SAME ORDER, where each element is the ${targetName} translation of the fragment at that index. Each translation is a literal drop-in replacement for its fragment — don't merge, split, or add commentary. If a fragment is already in ${targetName} or has no translatable content (a code, a name, a URL), return it unchanged.`,
+      // Deterministic output matters more than fluency variety here — every
+      // degree of freedom the model takes (merging fragments, skipping ones
+      // it considers untranslatable) is a fragment we can't place back.
+      temperature: 0,
+      system: `You translate email text fragments into ${targetName}. You receive a JSON array of unique text fragments extracted from an HTML email, each with its index. Call return_translations once per fragment, tagging each with the SAME index it came in with — you do not need to return them in order, and you may skip a fragment entirely if it has no translatable content (a code, a name, a URL). Each translation is a literal drop-in replacement for its fragment — don't merge fragments together or add commentary. If a fragment is already in ${targetName}, return it unchanged.`,
       tools: [{
         name: 'return_translations',
-        description: 'Return the translated text fragments',
+        description: 'Return the translated text fragments, each tagged with its original index',
         input_schema: {
           type: 'object',
           properties: {
             translations: {
               type: 'array',
-              items: { type: 'string' },
-              description: 'Translations in the same order as the input fragments',
+              items: {
+                type: 'object',
+                properties: {
+                  index: { type: 'integer', description: 'Zero-based index of the input fragment this is a translation of' },
+                  text: { type: 'string', description: 'The translation' },
+                },
+                required: ['index', 'text'],
+              },
             },
           },
           required: ['translations'],
         },
       }],
       tool_choice: { type: 'tool', name: 'return_translations' },
-      messages: [{ role: 'user', content: JSON.stringify(uniqueFragments) }],
+      messages: [{ role: 'user', content: JSON.stringify(uniqueFragments.map((text, index) => ({ index, text }))) }],
     }),
   })
   if (!aiRes.ok) {
@@ -935,12 +946,27 @@ async function translateFragments(fragments, target) {
   }
   const aiJson = await aiRes.json()
   const toolUse = (aiJson.content ?? []).find(b => b.type === 'tool_use')
-  const translations = toolUse?.input?.translations
-  if (!Array.isArray(translations) || translations.length !== uniqueFragments.length) {
-    console.error('HTML translate: shape mismatch from model, falling back')
+  const items = toolUse?.input?.translations
+  if (!Array.isArray(items)) {
+    console.error('HTML translate: malformed tool response, falling back')
     return null
   }
-  const byFragment = new Map(uniqueFragments.map((f, i) => [f, translations[i]]))
+  // Per-index lookup rather than a strict same-length array: a fragment the
+  // model skipped or mis-indexed just stays untranslated instead of
+  // discarding the whole batch over one bad entry.
+  const translatedUnique = [...uniqueFragments]
+  let hits = 0
+  for (const item of items) {
+    if (typeof item?.index === 'number' && item.index >= 0 && item.index < uniqueFragments.length && typeof item.text === 'string') {
+      translatedUnique[item.index] = item.text
+      hits++
+    }
+  }
+  if (hits === 0) {
+    console.error('HTML translate: model returned zero usable translations, falling back')
+    return null
+  }
+  const byFragment = new Map(uniqueFragments.map((f, i) => [f, translatedUnique[i]]))
   return fragments.map(f => byFragment.get(f))
 }
 
