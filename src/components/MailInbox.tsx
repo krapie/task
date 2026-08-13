@@ -363,14 +363,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     setTranslateTarget(target)
     setTranslateError(null)
     // Already translated to this language (cached on the item from a previous call) — just show it.
-    if (selectedItem.translated_lang === target && selectedItem.translated_body) {
+    if (selectedItem.translated_lang === target && (selectedItem.translated_html || selectedItem.translated_body)) {
       setShowTranslated(true)
       return
     }
     setTranslating(true)
     try {
-      const { translated, lang } = await api.mail.translate(selectedItem.id, target)
-      const patch = { translated_body: translated, translated_lang: lang }
+      const { translated, html, lang } = await api.mail.translate(selectedItem.id, target)
+      const patch = { translated_body: translated, translated_html: html, translated_lang: lang }
       setSelectedItem(prev => prev?.id === selectedItem.id ? { ...prev, ...patch } : prev)
       setItems(prev => prev.map(m => m.id === selectedItem.id ? { ...m, ...patch } : m))
       setShowTranslated(true)
@@ -682,6 +682,8 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
           <div className="mail-detail-body">
             {bodyLoading ? (
               <div className="mail-empty">Loading…</div>
+            ) : showTranslated && selectedItem.translated_html ? (
+              <AutoIframe srcdoc={buildSrcdoc(selectedItem.translated_html, isDark)} />
             ) : showTranslated && selectedItem.translated_body ? (
               <pre className="mail-detail-plain mail-detail-translated">{selectedItem.translated_body}</pre>
             ) : selectedItem.html_body ? (

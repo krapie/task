@@ -94,6 +94,7 @@ export interface MailItem {
   body?: string | null
   html_body?: string | null
   translated_body?: string | null
+  translated_html?: string | null
   translated_lang?: string | null
 }
 

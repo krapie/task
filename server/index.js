@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken'
 import { randomUUID, createHash, createHmac } from 'crypto'
 import fetch from 'node-fetch'
 import webpush from 'web-push'
+import { load as loadHtml } from 'cheerio'
 
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
@@ -22,6 +23,10 @@ const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@localhost'
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ''
 const TRANSLATE_MODEL = 'claude-haiku-4-5-20251001'
 const MAX_TRANSLATE_CHARS = 8000
+// Higher than MAX_TRANSLATE_CHARS because this only counts actual text-node
+// content (markup, scripts, styles already excluded), so the same cap would
+// be needlessly strict here.
+const MAX_HTML_TRANSLATE_CHARS = 12000
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
@@ -843,6 +848,137 @@ app.post('/api/mail/sync', auth, async (req, res) => {
   checkAndPushNewMail().catch(() => {})
 })
 
+// ── Translation helpers ─────────────────────────────────────────────
+const TRANSLATE_TARGET_NAME = { ko: 'Korean', en: 'English' }
+// Tags whose text content is never user-visible copy (script/style bodies,
+// <head> metadata) — skip these when walking text nodes.
+const HTML_SKIP_TAGS = new Set(['script', 'style', 'head', 'title', 'noscript'])
+// Any Unicode letter. Filters out nodes that are pure whitespace, numbers,
+// punctuation, or symbols (prices, separators, dates) — nothing worth
+// spending tokens translating, and mistranslating a price is worse than
+// leaving it alone.
+const HAS_LETTER_RE = /\p{L}/u
+
+async function translatePlainText(text, target) {
+  const targetName = TRANSLATE_TARGET_NAME[target]
+  const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: TRANSLATE_MODEL,
+      max_tokens: 4096,
+      system: `Translate the given email body into ${targetName}. Output only the translated text — no preamble, no notes, no explanations. Preserve the original paragraph and line breaks. If the text is already in ${targetName}, return it unchanged.`,
+      messages: [{ role: 'user', content: text }],
+    }),
+  })
+  if (!aiRes.ok) {
+    console.error('Anthropic translate error:', aiRes.status, await aiRes.text().catch(() => ''))
+    return null
+  }
+  const aiJson = await aiRes.json()
+  const translated = (aiJson.content ?? []).map(b => b.text ?? '').join('').trim()
+  return translated || null
+}
+
+// Translates a batch of text fragments in one call via forced tool use, so
+// the model must return a same-length, same-order JSON array instead of
+// freeform text we'd have to split back apart (fragile if a translation
+// happens to contain whatever delimiter we picked).
+async function translateFragments(fragments, target) {
+  const targetName = TRANSLATE_TARGET_NAME[target]
+  const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: TRANSLATE_MODEL,
+      max_tokens: 8192,
+      system: `You translate email text fragments into ${targetName}. You receive a JSON array of text fragments extracted from an HTML email, in document order. Call return_translations with an array of the SAME LENGTH, in the SAME ORDER, where each element is the ${targetName} translation of the fragment at that index. Each translation is a literal drop-in replacement for its fragment — don't merge, split, or add commentary. If a fragment is already in ${targetName} or has no translatable content (a code, a name, a URL), return it unchanged.`,
+      tools: [{
+        name: 'return_translations',
+        description: 'Return the translated text fragments',
+        input_schema: {
+          type: 'object',
+          properties: {
+            translations: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Translations in the same order as the input fragments',
+            },
+          },
+          required: ['translations'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'return_translations' },
+      messages: [{ role: 'user', content: JSON.stringify(fragments) }],
+    }),
+  })
+  if (!aiRes.ok) {
+    console.error('Anthropic HTML-translate error:', aiRes.status, await aiRes.text().catch(() => ''))
+    return null
+  }
+  const aiJson = await aiRes.json()
+  const toolUse = (aiJson.content ?? []).find(b => b.type === 'tool_use')
+  const translations = toolUse?.input?.translations
+  if (!Array.isArray(translations) || translations.length !== fragments.length) {
+    console.error('HTML translate: shape mismatch from model, falling back')
+    return null
+  }
+  return translations
+}
+
+// Translates only the text nodes of an HTML email, leaving every tag and
+// attribute untouched, so the client can render it in an iframe exactly
+// like the original — same layout, images, links — with translated copy.
+// Returns null (caller falls back to plain-text translation) on anything
+// that doesn't look safely reversible: no translatable text, oversized
+// content, or a malformed model response.
+async function translateHtml(html, target) {
+  try {
+    const $ = loadHtml(html)
+    const nodes = []
+    $('*').contents().each((_, el) => {
+      if (el.type !== 'text') return
+      // htmlparser2 gives <script>/<style> element nodes their own node
+      // .type ('script'/'style', not 'tag'), so check .name directly rather
+      // than gating on .type === 'tag' — that would let their contents slip
+      // through unfiltered.
+      const parentTag = el.parent?.name ?? null
+      if (parentTag && HTML_SKIP_TAGS.has(parentTag)) return
+      if (!el.data || !HAS_LETTER_RE.test(el.data)) return
+      nodes.push(el)
+    })
+    if (!nodes.length) return null
+
+    const totalLen = nodes.reduce((sum, n) => sum + n.data.length, 0)
+    if (totalLen > MAX_HTML_TRANSLATE_CHARS) return null
+
+    const fragments = nodes.map(n => n.data)
+    const translations = await translateFragments(fragments, target)
+    if (!translations) return null
+
+    nodes.forEach((node, i) => {
+      // Keep the original fragment's surrounding whitespace so inline
+      // spacing (word gaps across <span> boundaries etc.) doesn't collapse.
+      const leading = node.data.match(/^\s*/)[0]
+      const trailing = node.data.match(/\s*$/)[0]
+      node.data = leading + translations[i].trim() + trailing
+    })
+
+    return { html: $.html(), plainFallback: translations.join('\n') }
+  } catch (err) {
+    console.error('HTML translate error:', err.message)
+    return null
+  }
+}
+
 // On-demand email translation (English/Japanese -> Korean, or vice versa).
 // Never called from the sync path — only when the user clicks the button —
 // so a busy inbox never burns API budget on its own.
@@ -861,44 +997,43 @@ app.post('/api/mail/items/:id/translate', auth, async (req, res) => {
     if (!itemRes.ok) return res.status(itemRes.status).json({ error: 'Mail item not found' })
     const item = await itemRes.json()
 
-    if (item.translated_lang === target && item.translated_body) {
-      return res.json({ translated: item.translated_body, lang: target, cached: true })
+    if (item.translated_lang === target && (item.translated_html || item.translated_body)) {
+      return res.json({
+        translated: item.translated_body,
+        html: item.translated_html ?? null,
+        lang: target,
+        cached: true,
+      })
     }
 
-    const source = (item.body || '').slice(0, MAX_TRANSLATE_CHARS)
-    if (!source.trim()) return res.status(400).json({ error: 'Nothing to translate' })
+    let translated = null
+    let html = null
 
-    const targetName = target === 'ko' ? 'Korean' : 'English'
-    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: TRANSLATE_MODEL,
-        max_tokens: 4096,
-        system: `Translate the given email body into ${targetName}. Output only the translated text — no preamble, no notes, no explanations. Preserve the original paragraph and line breaks. If the text is already in ${targetName}, return it unchanged.`,
-        messages: [{ role: 'user', content: source }],
-      }),
-    })
-    if (!aiRes.ok) {
-      console.error('Anthropic translate error:', aiRes.status, await aiRes.text().catch(() => ''))
-      return res.status(502).json({ error: 'Translation service error' })
+    if (item.html_body) {
+      const htmlResult = await translateHtml(item.html_body, target)
+      if (htmlResult) {
+        html = htmlResult.html
+        translated = htmlResult.plainFallback
+      }
     }
-    const aiJson = await aiRes.json()
-    const translated = (aiJson.content ?? []).map(b => b.text ?? '').join('').trim()
-    if (!translated) return res.status(502).json({ error: 'Empty translation' })
+
+    // No html_body, or the HTML path bailed out (too big, malformed, model
+    // response didn't line up) — fall back to translating the plain body.
+    if (!translated) {
+      const source = (item.body || '').slice(0, MAX_TRANSLATE_CHARS)
+      if (!source.trim()) return res.status(400).json({ error: 'Nothing to translate' })
+      translated = await translatePlainText(source, target)
+      if (!translated) return res.status(502).json({ error: 'Translation service error' })
+    }
 
     // Cache for next time — best-effort, don't fail the request over it.
     fetch(`${MAIL_BRIDGE_URL}/internal/items/${req.params.id}/translate-cache`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Internal-Key': INTERNAL_API_KEY },
-      body: JSON.stringify({ lang: target, text: translated }),
+      body: JSON.stringify({ lang: target, text: translated, html }),
     }).catch(() => {})
 
-    res.json({ translated, lang: target, cached: false })
+    res.json({ translated, html, lang: target, cached: false })
   } catch (err) {
     console.error('Translate error:', err.message)
     res.status(500).json({ error: 'Translation failed' })
