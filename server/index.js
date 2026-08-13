@@ -888,8 +888,17 @@ async function translatePlainText(text, target) {
 // the model must return a same-length, same-order JSON array instead of
 // freeform text we'd have to split back apart (fragile if a translation
 // happens to contain whatever delimiter we picked).
+//
+// De-duplicates before calling the model and maps translations back to every
+// occurrence afterward. This isn't just a cost optimization (marketing email
+// HTML routinely repeats the same string — a hidden preheader mirroring the
+// visible heading, footer boilerplate): a same-length response is only
+// guaranteed if we never ask the model to translate the same input twice,
+// because it reliably collapses duplicate entries in its output even when
+// explicitly told to preserve them 1:1.
 async function translateFragments(fragments, target) {
   const targetName = TRANSLATE_TARGET_NAME[target]
+  const uniqueFragments = [...new Set(fragments)]
   const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -900,7 +909,7 @@ async function translateFragments(fragments, target) {
     body: JSON.stringify({
       model: TRANSLATE_MODEL,
       max_tokens: 8192,
-      system: `You translate email text fragments into ${targetName}. You receive a JSON array of text fragments extracted from an HTML email, in document order. Call return_translations with an array of the SAME LENGTH, in the SAME ORDER, where each element is the ${targetName} translation of the fragment at that index. Each translation is a literal drop-in replacement for its fragment — don't merge, split, or add commentary. If a fragment is already in ${targetName} or has no translatable content (a code, a name, a URL), return it unchanged.`,
+      system: `You translate email text fragments into ${targetName}. You receive a JSON array of unique text fragments extracted from an HTML email. Call return_translations with an array of the SAME LENGTH, in the SAME ORDER, where each element is the ${targetName} translation of the fragment at that index. Each translation is a literal drop-in replacement for its fragment — don't merge, split, or add commentary. If a fragment is already in ${targetName} or has no translatable content (a code, a name, a URL), return it unchanged.`,
       tools: [{
         name: 'return_translations',
         description: 'Return the translated text fragments',
@@ -917,7 +926,7 @@ async function translateFragments(fragments, target) {
         },
       }],
       tool_choice: { type: 'tool', name: 'return_translations' },
-      messages: [{ role: 'user', content: JSON.stringify(fragments) }],
+      messages: [{ role: 'user', content: JSON.stringify(uniqueFragments) }],
     }),
   })
   if (!aiRes.ok) {
@@ -927,11 +936,12 @@ async function translateFragments(fragments, target) {
   const aiJson = await aiRes.json()
   const toolUse = (aiJson.content ?? []).find(b => b.type === 'tool_use')
   const translations = toolUse?.input?.translations
-  if (!Array.isArray(translations) || translations.length !== fragments.length) {
+  if (!Array.isArray(translations) || translations.length !== uniqueFragments.length) {
     console.error('HTML translate: shape mismatch from model, falling back')
     return null
   }
-  return translations
+  const byFragment = new Map(uniqueFragments.map((f, i) => [f, translations[i]]))
+  return fragments.map(f => byFragment.get(f))
 }
 
 // Translates only the text nodes of an HTML email, leaving every tag and
