@@ -21,7 +21,7 @@ node server/index.js
 - **Multi-day add** — add a daily task to multiple day slots at once from the quick-add input
 - **Calendar** — monthly view with event management; supports weekly, monthly, and yearly recurring events
 - **Agent** — queue coding tasks for a local [agentq](https://github.com/krapie/agentq) daemon and track run status, session, and PR link in real time
-- **Mail** — IMAP inbox: add multiple accounts, read HTML email in a sandboxed iframe with dark mode, mark read/unread, mark all read
+- **Mail** — IMAP inbox: add multiple accounts, read HTML email in a sandboxed iframe with dark mode, mark read/unread, mark all read. Syncs `INBOX` plus a `청구·결제` (bills/payments) folder where present, since some providers (Naver) auto-file statements there instead of INBOX
 - **News** — GeekNews feed reader with article preview expansion and a flag/save-for-later list
 - **Guest mode** — fully functional with no account; all state stored in localStorage
 - **Sync** — sign in to persist data server-side and sync across devices
