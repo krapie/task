@@ -133,10 +133,14 @@ export interface GoalCategory {
   items: GoalItem[]
 }
 
+export type GoalPeriodKind = 'half' | 'general'
+
 export interface GoalPeriod {
   id: string
-  year: number
-  half: 1 | 2
+  kind: GoalPeriodKind
+  // Only set when kind === 'half'; the singleton 'general' period has both null.
+  year: number | null
+  half: 1 | 2 | null
   categories: GoalCategory[]
 }
 

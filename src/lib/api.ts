@@ -167,6 +167,7 @@ export const api = {
   goals: {
     getAll: () => req<GoalPeriod[]>('GET', '/goals'),
     createPeriod: (year: number, half: 1 | 2) => req<GoalPeriod>('POST', '/goals/periods', { year, half }),
+    getOrCreateGeneral: () => req<GoalPeriod>('POST', '/goals/periods/general'),
     deletePeriod: (id: string) => req<void>('DELETE', `/goals/periods/${id}`),
     createCategory: (period_id: string, name: string) => req<GoalCategory>('POST', '/goals/categories', { period_id, name }),
     updateCategory: (id: string, name: string) => req<GoalCategory>('PUT', `/goals/categories/${id}`, { name }),

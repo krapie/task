@@ -20,7 +20,16 @@ export function GoalView({ isAuth }: GoalViewProps) {
   useEffect(() => {
     if (!isAuth) { setLoading(false); return }
     api.goals.getAll()
-      .then(setPeriods)
+      .then(async loaded => {
+        setPeriods(loaded)
+        // The general (bucket-list) period is always shown next to the
+        // half-year goals, so make sure it exists from the first visit
+        // instead of requiring an explicit "initialize" step.
+        if (!loaded.some(p => p.kind === 'general')) {
+          const general = await api.goals.getOrCreateGeneral()
+          setPeriods(prev => [...prev, general])
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [isAuth])
@@ -33,17 +42,18 @@ export function GoalView({ isAuth }: GoalViewProps) {
     )
   }
 
-  const period = periods.find(p => p.year === selectedYear && p.half === selectedHalf) ?? null
+  const halfPeriod = periods.find(p => p.kind === 'half' && p.year === selectedYear && p.half === selectedHalf) ?? null
+  const generalPeriod = periods.find(p => p.kind === 'general') ?? null
 
   const allYears = Array.from(new Set([
-    ...periods.map(p => p.year),
+    ...periods.filter(p => p.kind === 'half').map(p => p.year as number),
     currentHalf().year,
   ])).sort((a, b) => b - a)
 
   async function handleCreatePeriod() {
     try {
       const p = await api.goals.createPeriod(selectedYear, selectedHalf)
-      setPeriods(prev => [p, ...prev].sort((a, b) => b.year - a.year || b.half - a.half))
+      setPeriods(prev => [p, ...prev].sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.half ?? 0) - (a.half ?? 0)))
     } catch (e) { console.error(e) }
   }
 
@@ -53,41 +63,59 @@ export function GoalView({ isAuth }: GoalViewProps) {
 
   return (
     <div className="goal-view">
-      <div className="goal-period-bar">
-        <div className="goal-year-tabs">
-          {allYears.map(y => (
-            <button
-              key={y}
-              className={`goal-year-btn${y === selectedYear ? ' goal-year-active' : ''}`}
-              onClick={() => setSelectedYear(y)}
-            >{y}</button>
-          ))}
-        </div>
-        <div className="goal-half-tabs">
-          <button
-            className={`goal-half-btn${selectedHalf === 1 ? ' goal-half-active' : ''}`}
-            onClick={() => setSelectedHalf(1)}
-          >H1</button>
-          <button
-            className={`goal-half-btn${selectedHalf === 2 ? ' goal-half-active' : ''}`}
-            onClick={() => setSelectedHalf(2)}
-          >H2</button>
-        </div>
-      </div>
-
-      <div className="goal-body">
-        {loading ? (
-          <div className="goal-empty">Loading…</div>
-        ) : !period ? (
-          <div className="goal-empty-state">
-            <p className="goal-empty-label">No goals for {selectedYear} H{selectedHalf}</p>
-            <button className="goal-init-btn" onClick={handleCreatePeriod}>
-              Initialize {selectedYear} H{selectedHalf}
-            </button>
+      <div className="goal-columns">
+        <div className="goal-half-column">
+          <div className="goal-period-bar">
+            <div className="goal-year-tabs">
+              {allYears.map(y => (
+                <button
+                  key={y}
+                  className={`goal-year-btn${y === selectedYear ? ' goal-year-active' : ''}`}
+                  onClick={() => setSelectedYear(y)}
+                >{y}</button>
+              ))}
+            </div>
+            <div className="goal-half-tabs">
+              <button
+                className={`goal-half-btn${selectedHalf === 1 ? ' goal-half-active' : ''}`}
+                onClick={() => setSelectedHalf(1)}
+              >H1</button>
+              <button
+                className={`goal-half-btn${selectedHalf === 2 ? ' goal-half-active' : ''}`}
+                onClick={() => setSelectedHalf(2)}
+              >H2</button>
+            </div>
           </div>
-        ) : (
-          <PeriodContent period={period} onUpdate={updatePeriod} />
-        )}
+
+          <div className="goal-body">
+            {loading ? (
+              <div className="goal-empty">Loading…</div>
+            ) : !halfPeriod ? (
+              <div className="goal-empty-state">
+                <p className="goal-empty-label">No goals for {selectedYear} H{selectedHalf}</p>
+                <button className="goal-init-btn" onClick={handleCreatePeriod}>
+                  Initialize {selectedYear} H{selectedHalf}
+                </button>
+              </div>
+            ) : (
+              <PeriodContent period={halfPeriod} onUpdate={updatePeriod} />
+            )}
+          </div>
+        </div>
+
+        <div className="goal-general-column">
+          <div className="goal-period-bar goal-general-bar">
+            <span className="goal-general-label">General goals</span>
+          </div>
+
+          <div className="goal-body">
+            {loading || !generalPeriod ? (
+              <div className="goal-empty">Loading…</div>
+            ) : (
+              <PeriodContent period={generalPeriod} onUpdate={updatePeriod} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

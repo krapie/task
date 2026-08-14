@@ -122,6 +122,12 @@ async function initDb() {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(year, half)
     );
+    -- 'general' is a single always-present bucket-list period, separate from
+    -- the half-year ones (kind='half'). Its year/half are NULL.
+    ALTER TABLE goal_periods ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'half';
+    ALTER TABLE goal_periods ALTER COLUMN year DROP NOT NULL;
+    ALTER TABLE goal_periods ALTER COLUMN half DROP NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS goal_periods_general_uniq ON goal_periods (kind) WHERE kind = 'general';
     CREATE TABLE IF NOT EXISTS goal_categories (
       id TEXT PRIMARY KEY,
       period_id TEXT NOT NULL REFERENCES goal_periods(id) ON DELETE CASCADE,
@@ -1166,8 +1172,31 @@ app.get('/api/agentq/tasks/:id', auth, async (req, res) => {
 })
 
 // ── Goals ─────────────────────────────────────────────────────────────
+// Loads a period's categories + items nested, in display order.
+async function loadPeriodCategories(periodId) {
+  const { rows: categories } = await pool.query(
+    'SELECT * FROM goal_categories WHERE period_id = $1 ORDER BY position ASC, created_at ASC',
+    [periodId]
+  )
+  const catIds = categories.map(c => c.id)
+  const items = catIds.length
+    ? (await pool.query(
+        'SELECT * FROM goal_items WHERE category_id = ANY($1) ORDER BY position ASC, created_at ASC',
+        [catIds]
+      )).rows
+    : []
+  const itemsByCategory = {}
+  for (const item of items) {
+    if (!itemsByCategory[item.category_id]) itemsByCategory[item.category_id] = []
+    itemsByCategory[item.category_id].push(item)
+  }
+  return categories.map(c => ({ ...c, items: itemsByCategory[c.id] ?? [] }))
+}
+
 app.get('/api/goals', auth, async (_req, res) => {
-  const { rows: periods } = await pool.query('SELECT * FROM goal_periods ORDER BY year DESC, half DESC')
+  const { rows: periods } = await pool.query(
+    "SELECT * FROM goal_periods ORDER BY kind ASC, year DESC NULLS LAST, half DESC NULLS LAST"
+  )
   const { rows: categories } = await pool.query('SELECT * FROM goal_categories ORDER BY position ASC, created_at ASC')
   const { rows: items } = await pool.query('SELECT * FROM goal_items ORDER BY position ASC, created_at ASC')
   const itemsByCategory = {}
@@ -1188,10 +1217,28 @@ app.post('/api/goals/periods', auth, async (req, res) => {
   if (!year || ![1, 2].includes(half)) return res.status(400).json({ error: 'year and half (1|2) required' })
   const id = randomUUID()
   const { rows } = await pool.query(
-    'INSERT INTO goal_periods (id, year, half) VALUES ($1,$2,$3) ON CONFLICT (year, half) DO UPDATE SET year=$2 RETURNING *',
+    "INSERT INTO goal_periods (id, kind, year, half) VALUES ($1,'half',$2,$3) ON CONFLICT (year, half) DO UPDATE SET year=$2 RETURNING *",
     [id, year, half]
   )
   res.json({ ...rows[0], categories: [] })
+})
+
+// Get-or-create the single always-present "general" (bucket-list) period,
+// shown alongside the half-year goals rather than swapped in via a tab.
+// TODO: once general goals can be "promoted" into a half-year period, add a
+// PUT /api/goals/items/:id/promote (or extend the existing PUT handler with
+// a target category_id) that moves the item's category_id — no schema
+// change needed since items are already only linked via category_id.
+app.post('/api/goals/periods/general', auth, async (_req, res) => {
+  const { rows: existing } = await pool.query("SELECT * FROM goal_periods WHERE kind = 'general' LIMIT 1")
+  let period = existing[0]
+  if (!period) {
+    const id = randomUUID()
+    const { rows } = await pool.query("INSERT INTO goal_periods (id, kind) VALUES ($1, 'general') RETURNING *", [id])
+    period = rows[0]
+  }
+  const categories = await loadPeriodCategories(period.id)
+  res.json({ ...period, categories })
 })
 
 app.delete('/api/goals/periods/:id', auth, async (req, res) => {

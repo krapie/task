@@ -372,6 +372,47 @@ a { color: var(--kp-fg); text-decoration: none; }
   flex-direction: column;
   overflow: hidden;
 }
+/* Half-year goals and general (bucket-list) goals shown side by side,
+   stacking vertically on narrow screens. */
+.goal-columns {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.goal-half-column,
+.goal-general-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.goal-general-column {
+  border-left: 1px solid var(--kp-border);
+}
+.goal-general-bar {
+  justify-content: flex-start;
+}
+.goal-general-label {
+  font-size: var(--kp-text-xs);
+  font-weight: 500;
+  color: var(--kp-fg-3);
+}
+@media (max-width: 900px) {
+  .goal-columns {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .goal-half-column,
+  .goal-general-column {
+    flex: none;
+    overflow: visible;
+  }
+  .goal-general-column {
+    border-left: none;
+    border-top: 1px solid var(--kp-border);
+  }
+}
 .goal-period-bar {
   display: flex;
   align-items: center;

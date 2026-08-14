@@ -69,20 +69,40 @@ function buildSrcdoc(html: string, isDark: boolean): string {
 </html>`
 }
 
-// Auto-resize iframe to its content height
+// Auto-resize iframe to its content height. Remote images (and any other
+// async-loading resources) inside the email HTML finish loading well after
+// `onLoad` fires, growing the document height — a one-shot measurement on
+// `onLoad` alone leaves the iframe looking truncated until something else
+// happens to trigger a reflow. A ResizeObserver on the content document
+// keeps the height in sync for as long as the iframe is mounted.
 function AutoIframe({ srcdoc }: { srcdoc: string }) {
   const ref = useRef<HTMLIFrameElement>(null)
+  const observerRef = useRef<ResizeObserver | null>(null)
 
   function onLoad() {
     const iframe = ref.current
     if (!iframe) return
     try {
-      const height = iframe.contentDocument?.documentElement?.scrollHeight
-      if (height) iframe.style.height = `${height}px`
+      const doc = iframe.contentDocument
+      const root = doc?.documentElement
+      if (!root) return
+
+      const resize = () => {
+        const height = root.scrollHeight
+        if (height) iframe.style.height = `${height}px`
+      }
+      resize()
+
+      observerRef.current?.disconnect()
+      const observer = new ResizeObserver(resize)
+      observer.observe(root)
+      observerRef.current = observer
     } catch {
       // cross-origin or sandboxed — leave height as-is
     }
   }
+
+  useEffect(() => () => observerRef.current?.disconnect(), [])
 
   return (
     <iframe
