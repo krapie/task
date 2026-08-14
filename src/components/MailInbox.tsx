@@ -69,40 +69,62 @@ function buildSrcdoc(html: string, isDark: boolean): string {
 </html>`
 }
 
-// Auto-resize iframe to its content height. Remote images (and any other
-// async-loading resources) inside the email HTML finish loading well after
-// `onLoad` fires, growing the document height — a one-shot measurement on
-// `onLoad` alone leaves the iframe looking truncated until something else
-// happens to trigger a reflow. A ResizeObserver on the content document
-// keeps the height in sync for as long as the iframe is mounted.
+// Auto-resize iframe to its content height. The native iframe `load` event
+// only fires once EVERY sub-resource is done — including every remote image
+// — so for image-heavy marketing emails it can be seconds to minutes before
+// a `load`-gated resize handler runs at all, leaving the iframe looking
+// truncated (with its own nested scrollbar) the whole time. Instead, start
+// tracking as soon as the srcdoc document itself has parsed (independent of
+// its images), then keep the height in sync via ResizeObserver plus a
+// per-image 'load' listener so each image expands the box the instant it
+// resolves, not just whenever the next resize tick happens to notice.
 function AutoIframe({ srcdoc }: { srcdoc: string }) {
   const ref = useRef<HTMLIFrameElement>(null)
-  const observerRef = useRef<ResizeObserver | null>(null)
 
-  function onLoad() {
+  useEffect(() => {
     const iframe = ref.current
     if (!iframe) return
-    try {
+
+    let stopped = false
+    let timerId: number | undefined
+    let observer: ResizeObserver | null = null
+
+    const attach = () => {
+      if (stopped) return
+      const win = iframe.contentWindow
       const doc = iframe.contentDocument
-      const root = doc?.documentElement
-      if (!root) return
+      // Freshly created/reused iframes start on a placeholder about:blank
+      // document before the srcdoc navigation commits — wait for the real
+      // one so we don't latch onto (and stop polling for) the wrong doc.
+      if (!win || !doc || win.location.href !== 'about:srcdoc' || !doc.body) {
+        timerId = window.setTimeout(attach, 50)
+        return
+      }
 
       const resize = () => {
-        const height = root.scrollHeight
+        const height = doc.documentElement.scrollHeight
         if (height) iframe.style.height = `${height}px`
       }
       resize()
 
-      observerRef.current?.disconnect()
-      const observer = new ResizeObserver(resize)
-      observer.observe(root)
-      observerRef.current = observer
-    } catch {
-      // cross-origin or sandboxed — leave height as-is
-    }
-  }
+      observer = new ResizeObserver(resize)
+      observer.observe(doc.body)
 
-  useEffect(() => () => observerRef.current?.disconnect(), [])
+      for (const img of Array.from(doc.images)) {
+        if (!img.complete) {
+          img.addEventListener('load', resize, { once: true })
+          img.addEventListener('error', resize, { once: true })
+        }
+      }
+    }
+
+    attach()
+    return () => {
+      stopped = true
+      if (timerId) window.clearTimeout(timerId)
+      observer?.disconnect()
+    }
+  }, [srcdoc])
 
   return (
     <iframe
@@ -110,7 +132,6 @@ function AutoIframe({ srcdoc }: { srcdoc: string }) {
       srcDoc={srcdoc}
       sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
       title="Email content"
-      onLoad={onLoad}
       style={{ width: '100%', minHeight: '200px', border: 'none', display: 'block' }}
     />
   )
@@ -703,11 +724,11 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
             {bodyLoading ? (
               <div className="mail-empty">Loading…</div>
             ) : showTranslated && selectedItem.translated_html ? (
-              <AutoIframe srcdoc={buildSrcdoc(selectedItem.translated_html, isDark)} />
+              <AutoIframe key={`${selectedItem.id}-translated`} srcdoc={buildSrcdoc(selectedItem.translated_html, isDark)} />
             ) : showTranslated && selectedItem.translated_body ? (
               <pre className="mail-detail-plain mail-detail-translated">{selectedItem.translated_body}</pre>
             ) : selectedItem.html_body ? (
-              <AutoIframe srcdoc={buildSrcdoc(selectedItem.html_body, isDark)} />
+              <AutoIframe key={`${selectedItem.id}-original`} srcdoc={buildSrcdoc(selectedItem.html_body, isDark)} />
             ) : selectedItem.body ? (
               <pre className="mail-detail-plain">{selectedItem.body}</pre>
             ) : (
