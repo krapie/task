@@ -6,8 +6,17 @@ marked.use({ breaks: true, gfm: true })
 
 const TERMINAL: AgentTaskStatus[] = ['done', 'failed', 'canceled']
 
-function timeAgo(isoStr: string): string {
-  const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000)
+// Accepts either an ISO date string or a raw unix timestamp (seconds or ms) —
+// the agentq API is expected to send ISO strings, but has previously shipped
+// raw unix-second integers, which `new Date()` misreads as milliseconds and
+// lands near epoch (1970), showing ~20000+ days ago for every task.
+function timeAgo(value: string): string {
+  const trimmed = value.trim()
+  const asNumber = Number(trimmed)
+  const ms = /^-?\d+$/.test(trimmed)
+    ? (Math.abs(asNumber) < 1e12 ? asNumber * 1000 : asNumber)
+    : new Date(trimmed).getTime()
+  const diff = Math.floor((Date.now() - ms) / 1000)
   if (diff < 60) return 'just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
