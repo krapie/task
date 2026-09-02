@@ -7,6 +7,41 @@ function currentHalf(): { year: number; half: 1 | 2 } {
   return { year: now.getFullYear(), half: now.getMonth() < 6 ? 1 : 2 }
 }
 
+// Category names are matched loosely so an annual "Career" and a half-year
+// "career " roll up under one heading in the consolidated Year view.
+const normName = (s: string) => s.trim().toLowerCase()
+
+interface RollupItem {
+  item: GoalItem
+  half: 1 | 2
+}
+
+// Groups the selected year's H1/H2 goal items by category name for the Year
+// column: `byName` merges into matching annual categories, `extras` are
+// half-only categories rendered read-only after the annual ones.
+function buildYearRollup(
+  annual: GoalPeriod | null,
+  h1: GoalPeriod | null,
+  h2: GoalPeriod | null,
+): { byName: Map<string, RollupItem[]>; extras: { name: string; items: RollupItem[] }[] } {
+  const byName = new Map<string, RollupItem[]>()
+  const displayName = new Map<string, string>()
+  for (const [p, half] of [[h1, 1], [h2, 2]] as const) {
+    if (!p) continue
+    for (const cat of p.categories) {
+      const key = normName(cat.name)
+      if (!byName.has(key)) { byName.set(key, []); displayName.set(key, cat.name) }
+      const arr = byName.get(key)!
+      for (const it of cat.items) arr.push({ item: it, half })
+    }
+  }
+  const annualKeys = new Set((annual?.categories ?? []).map(c => normName(c.name)))
+  const extras = [...byName.entries()]
+    .filter(([key]) => !annualKeys.has(key))
+    .map(([key, items]) => ({ name: displayName.get(key)!, items }))
+  return { byName, extras }
+}
+
 interface GoalViewProps {
   isAuth: boolean
 }
@@ -18,7 +53,14 @@ export function GoalView({ isAuth }: GoalViewProps) {
   const [selectedYear, setSelectedYear] = useState(() => currentHalf().year)
   const [selectedHalf, setSelectedHalf] = useState<1 | 2>(() => currentHalf().half)
   const [mobileTab, setMobileTab] = useState<MobileTab>('half')
+  const [addingYear, setAddingYear] = useState(false)
+  const [newYearVal, setNewYearVal] = useState('')
   const [loading, setLoading] = useState(true)
+  const yearInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (addingYear) yearInputRef.current?.focus()
+  }, [addingYear])
 
   useEffect(() => {
     if (!isAuth) { setLoading(false); return }
@@ -47,12 +89,14 @@ export function GoalView({ isAuth }: GoalViewProps) {
 
   const halfPeriod = periods.find(p => p.kind === 'half' && p.year === selectedYear && p.half === selectedHalf) ?? null
   const yearPeriod = periods.find(p => p.kind === 'year' && p.year === selectedYear) ?? null
+  const h1Period = periods.find(p => p.kind === 'half' && p.year === selectedYear && p.half === 1) ?? null
+  const h2Period = periods.find(p => p.kind === 'half' && p.year === selectedYear && p.half === 2) ?? null
   const generalPeriod = periods.find(p => p.kind === 'general') ?? null
 
   const allYears = Array.from(new Set([
     ...periods.filter(p => p.kind === 'half' || p.kind === 'year').map(p => p.year as number),
     currentHalf().year,
-  ])).sort((a, b) => b - a)
+  ])).sort((a, b) => a - b)
 
   function insertPeriod(p: GoalPeriod) {
     setPeriods(prev => [p, ...prev].sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.half ?? 0) - (a.half ?? 0)))
@@ -68,6 +112,20 @@ export function GoalView({ isAuth }: GoalViewProps) {
     try {
       insertPeriod(await api.goals.createPeriod(selectedYear))
     } catch (e) { console.error(e) }
+  }
+
+  async function handleAddYear(e: React.FormEvent) {
+    e.preventDefault()
+    const year = parseInt(newYearVal, 10)
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) return
+    try {
+      if (!periods.some(p => (p.kind === 'half' || p.kind === 'year') && p.year === year)) {
+        insertPeriod(await api.goals.createPeriod(year))
+      }
+      setSelectedYear(year)
+      setNewYearVal('')
+      setAddingYear(false)
+    } catch (err) { console.error(err) }
   }
 
   function updatePeriod(updated: GoalPeriod) {
@@ -87,6 +145,27 @@ export function GoalView({ isAuth }: GoalViewProps) {
     return <PeriodContent period={period} onUpdate={updatePeriod} />
   }
 
+  function renderYearBody() {
+    if (loading) return <div className="goal-empty">Loading…</div>
+    if (!yearPeriod) {
+      return (
+        <div className="goal-empty-state">
+          <p className="goal-empty-label">No goals for {selectedYear}</p>
+          <button className="goal-init-btn" onClick={handleCreateYear}>Initialize {selectedYear}</button>
+        </div>
+      )
+    }
+    const rollup = buildYearRollup(yearPeriod, h1Period, h2Period)
+    return (
+      <PeriodContent
+        period={yearPeriod}
+        onUpdate={updatePeriod}
+        rollupByName={rollup.byName}
+        readOnlyExtras={rollup.extras}
+      />
+    )
+  }
+
   const mobileTabs: { key: MobileTab; label: string }[] = [
     { key: 'general', label: 'General' },
     { key: 'year', label: 'Year' },
@@ -104,6 +183,26 @@ export function GoalView({ isAuth }: GoalViewProps) {
               onClick={() => setSelectedYear(y)}
             >{y}</button>
           ))}
+          {addingYear ? (
+            <form className="goal-add-year-form" onSubmit={handleAddYear}>
+              <input
+                ref={yearInputRef}
+                className="goal-add-year-input"
+                type="number"
+                value={newYearVal}
+                onChange={e => setNewYearVal(e.target.value)}
+                placeholder="Year"
+                onBlur={() => { setAddingYear(false); setNewYearVal('') }}
+                onKeyDown={e => { if (e.key === 'Escape') { setAddingYear(false); setNewYearVal('') } }}
+              />
+            </form>
+          ) : (
+            <button
+              className="goal-add-year-btn"
+              onClick={() => setAddingYear(true)}
+              title="Add year"
+            >+</button>
+          )}
         </div>
       </div>
 
@@ -136,7 +235,7 @@ export function GoalView({ isAuth }: GoalViewProps) {
             <span className="goal-general-label">Year · {selectedYear}</span>
           </div>
           <div className="goal-body">
-            {renderScopedBody(yearPeriod, `${selectedYear}`, handleCreateYear)}
+            {renderYearBody()}
           </div>
         </div>
 
@@ -166,9 +265,13 @@ export function GoalView({ isAuth }: GoalViewProps) {
 interface PeriodContentProps {
   period: GoalPeriod
   onUpdate: (p: GoalPeriod) => void
+  // Year column only: read-only half-year items merged in by category name,
+  // plus half-only categories rendered after the editable ones.
+  rollupByName?: Map<string, RollupItem[]>
+  readOnlyExtras?: { name: string; items: RollupItem[] }[]
 }
 
-function PeriodContent({ period, onUpdate }: PeriodContentProps) {
+function PeriodContent({ period, onUpdate, rollupByName, readOnlyExtras }: PeriodContentProps) {
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCatName, setNewCatName] = useState('')
   const catInputRef = useRef<HTMLInputElement>(null)
@@ -207,6 +310,18 @@ function PeriodContent({ period, onUpdate }: PeriodContentProps) {
           category={cat}
           onUpdate={updateCategory}
           onDelete={() => handleDeleteCategory(cat.id)}
+          rollupItems={rollupByName?.get(normName(cat.name))}
+        />
+      ))}
+
+      {readOnlyExtras?.map(ex => (
+        <CategoryBlock
+          key={`ro-${ex.name}`}
+          readOnly
+          category={{ id: `ro-${ex.name}`, period_id: period.id, name: ex.name, position: 0, items: [] }}
+          onUpdate={() => {}}
+          onDelete={() => {}}
+          rollupItems={ex.items}
         />
       ))}
 
@@ -236,9 +351,13 @@ interface CategoryBlockProps {
   category: GoalCategory
   onUpdate: (c: GoalCategory) => void
   onDelete: () => void
+  // Read-only half-year items shown under this category in the Year column.
+  rollupItems?: RollupItem[]
+  // Half-only category: no name edit, delete, or add-item; rollupItems only.
+  readOnly?: boolean
 }
 
-function CategoryBlock({ category, onUpdate, onDelete }: CategoryBlockProps) {
+function CategoryBlock({ category, onUpdate, onDelete, rollupItems, readOnly }: CategoryBlockProps) {
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal] = useState(category.name)
   const [addingItem, setAddingItem] = useState(false)
@@ -280,9 +399,9 @@ function CategoryBlock({ category, onUpdate, onDelete }: CategoryBlockProps) {
   }
 
   return (
-    <div className="goal-category">
+    <div className={`goal-category${readOnly ? ' goal-category-readonly' : ''}`}>
       <div className="goal-cat-header">
-        {editingName ? (
+        {editingName && !readOnly ? (
           <input
             ref={nameRef}
             className="goal-cat-name-input"
@@ -291,16 +410,20 @@ function CategoryBlock({ category, onUpdate, onDelete }: CategoryBlockProps) {
             onBlur={saveName}
             onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setEditingName(false); setNameVal(category.name) } }}
           />
+        ) : readOnly ? (
+          <span className="section-label goal-cat-name-btn goal-cat-name-static">{category.name}</span>
         ) : (
           <button className="section-label goal-cat-name-btn" onClick={() => setEditingName(true)}>
             {category.name}
           </button>
         )}
-        <button className="goal-cat-delete icon-btn" onClick={onDelete} title="Delete category">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
-        </button>
+        {!readOnly && (
+          <button className="goal-cat-delete icon-btn" onClick={onDelete} title="Delete category">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className="goal-items">
@@ -313,7 +436,11 @@ function CategoryBlock({ category, onUpdate, onDelete }: CategoryBlockProps) {
           />
         ))}
 
-        {addingItem ? (
+        {rollupItems?.map(({ item, half }) => (
+          <RollupRow key={item.id} item={item} half={half} />
+        ))}
+
+        {!readOnly && (addingItem ? (
           <form className="goal-add-item-form" onSubmit={handleAddItem}>
             <input
               ref={itemRef}
@@ -330,8 +457,28 @@ function CategoryBlock({ category, onUpdate, onDelete }: CategoryBlockProps) {
           <button className="goal-add-item-btn" onClick={() => setAddingItem(true)}>
             + Add item
           </button>
-        )}
+        ))}
       </div>
+    </div>
+  )
+}
+
+// Read-only mirror of a half-year goal item shown in the consolidated Year
+// column. Reflects completed/crossed-out state but has no interactions.
+function RollupRow({ item, half }: RollupItem) {
+  return (
+    <div className={`goal-item goal-item-readonly${item.completed ? ' goal-item-done' : ''}${item.crossed_out ? ' goal-item-crossed' : ''}`}>
+      <label className="goal-item-check">
+        <input type="checkbox" checked={item.completed} disabled readOnly />
+        <span className="goal-check-box" />
+      </label>
+      <div className="goal-item-body">
+        <span className={`goal-item-text${item.crossed_out ? ' goal-text-strike' : ''}`}>
+          {item.text}
+        </span>
+        {item.note && <span className="goal-rollup-note">{item.note}</span>}
+      </div>
+      <span className="goal-rollup-badge">H{half}</span>
     </div>
   )
 }

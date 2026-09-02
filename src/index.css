@@ -701,6 +701,61 @@ a { color: var(--kp-fg); text-decoration: none; }
 .goal-add-item-btn:hover, .goal-add-cat-btn:hover { color: var(--kp-fg-2); }
 .goal-add-cat-btn { margin-top: 4px; }
 
+/* Add-year control in the shared year bar. */
+.goal-add-year-btn {
+  height: 26px;
+  width: 26px;
+  border-radius: 5px;
+  font-size: var(--kp-text-sm);
+  color: var(--kp-fg-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.1s, background 0.1s;
+}
+.goal-add-year-btn:hover { color: var(--kp-fg-2); background: var(--kp-hover-bg); }
+.goal-add-year-form { display: flex; align-items: center; }
+.goal-add-year-input {
+  width: 62px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: var(--kp-text-xs);
+  font-family: var(--kp-font-mono);
+  color: var(--kp-fg);
+  background: var(--kp-bg-muted);
+  border: 1px solid var(--kp-border);
+  border-radius: 5px;
+  outline: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.goal-add-year-input::-webkit-outer-spin-button,
+.goal-add-year-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Consolidated Year column: read-only half-year roll-up rows. */
+.goal-category-readonly .goal-cat-name-static { cursor: default; color: var(--kp-fg-4); }
+.goal-category-readonly .goal-cat-name-btn:hover { opacity: 1; }
+.goal-item-readonly .goal-check-box { border-color: var(--kp-border); }
+.goal-item-readonly .goal-item-text { color: var(--kp-fg-3); }
+.goal-item-readonly .goal-item-check { cursor: default; }
+.goal-rollup-note {
+  font-size: var(--kp-text-xs);
+  font-family: var(--kp-font-mono);
+  color: var(--kp-fg-4);
+}
+.goal-rollup-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-family: var(--kp-font-mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--kp-fg-4);
+  background: var(--kp-bg-muted);
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-top: 2px;
+}
+
 .goal-add-item-form, .goal-add-cat-form {
   display: flex;
   align-items: center;

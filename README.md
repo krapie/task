@@ -20,7 +20,7 @@ node server/index.js
 - **Tasks** — global todo list with optional due dates shown alongside the routine board
 - **Multi-day add** — add a daily task to multiple day slots at once from the quick-add input
 - **Calendar** — monthly view with event management; supports weekly, monthly, and yearly recurring events
-- **Goals** — three side-by-side columns of categorized goal lists: General (bucket list), Year (annual, per selected year), and Half (H1/H2 of the selected year). Items support completion, strikethrough, and inline comments. Narrow screens collapse the columns into a General/Year/Half tab switcher
+- **Goals** — three side-by-side columns of categorized goal lists: General (bucket list), Year, and Half (H1/H2 of the selected year), driven by a shared year selector with an add-year control. The Year column consolidates the selected year's half-year goals into its annual list by category name (shown read-only with an H1/H2 badge). Items support completion, strikethrough, and inline comments. Narrow screens collapse the columns into a General/Year/Half tab switcher
 - **Agent** — queue coding tasks for a local [agentq](https://github.com/krapie/agentq) daemon and track run status, session, and PR link in real time
 - **Mail** — IMAP inbox: add multiple accounts, read HTML email in a sandboxed iframe with dark mode, mark read/unread, mark all read. Syncs `INBOX` plus a `청구·결제` (bills/payments) folder where present, since some providers (Naver) auto-file statements there instead of INBOX
 - **News** — GeekNews feed reader with article preview expansion and a flag/save-for-later list
