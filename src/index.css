@@ -372,22 +372,37 @@ a { color: var(--kp-fg); text-decoration: none; }
   flex-direction: column;
   overflow: hidden;
 }
-/* Half-year goals and general (bucket-list) goals shown side by side,
-   stacking vertically on narrow screens. */
+/* Shared year selector spanning all three goal columns. */
+.goal-year-bar {
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  height: 44px;
+  border-bottom: 1px solid var(--kp-border);
+  flex-shrink: 0;
+}
+
+/* Mobile-only tab switcher; collapses the three columns to one at a time. */
+.goal-mobile-switcher { display: none; }
+
+/* General (bucket-list), annual, and half-year goals shown side by side on
+   wide screens; a single switchable column on narrow ones. */
 .goal-columns {
   flex: 1;
   display: flex;
   overflow: hidden;
 }
-.goal-half-column,
-.goal-general-column {
+.goal-general-column,
+.goal-year-column,
+.goal-half-column {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-.goal-general-column {
+.goal-year-column,
+.goal-half-column {
   border-left: 1px solid var(--kp-border);
 }
 .goal-general-bar {
@@ -399,18 +414,40 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-3);
 }
 @media (max-width: 900px) {
-  .goal-columns {
-    flex-direction: column;
-    overflow-y: auto;
+  .goal-mobile-switcher {
+    display: flex;
+    gap: 2px;
+    padding: 8px 22px;
+    border-bottom: 1px solid var(--kp-border);
+    flex-shrink: 0;
   }
-  .goal-half-column,
-  .goal-general-column {
-    flex: none;
-    overflow: visible;
+  .goal-mobile-tab {
+    flex: 1;
+    height: 30px;
+    border-radius: 5px;
+    font-size: var(--kp-text-xs);
+    font-weight: 500;
+    color: var(--kp-fg-4);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: color 0.1s, background 0.1s;
   }
-  .goal-general-column {
+  .goal-mobile-tab:hover { color: var(--kp-fg-2); background: var(--kp-hover-bg); }
+  .goal-mobile-tab-active {
+    color: var(--kp-fg);
+    background: var(--kp-bg-muted);
+  }
+  .goal-general-column,
+  .goal-year-column,
+  .goal-half-column {
+    display: none;
     border-left: none;
-    border-top: 1px solid var(--kp-border);
+  }
+  .goal-mobile-general .goal-general-column,
+  .goal-mobile-year .goal-year-column,
+  .goal-mobile-half .goal-half-column {
+    display: flex;
   }
 }
 .goal-period-bar {

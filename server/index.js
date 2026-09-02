@@ -124,10 +124,14 @@ async function initDb() {
     );
     -- 'general' is a single always-present bucket-list period, separate from
     -- the half-year ones (kind='half'). Its year/half are NULL.
+    -- 'year' is one annual period per year (half NULL); shown between General
+    -- and the half-year column.
     ALTER TABLE goal_periods ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'half';
     ALTER TABLE goal_periods ALTER COLUMN year DROP NOT NULL;
     ALTER TABLE goal_periods ALTER COLUMN half DROP NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS goal_periods_general_uniq ON goal_periods (kind) WHERE kind = 'general';
+    -- half is NULL for year periods, so UNIQUE(year, half) does not dedupe them.
+    CREATE UNIQUE INDEX IF NOT EXISTS goal_periods_year_uniq ON goal_periods (year) WHERE kind = 'year';
     CREATE TABLE IF NOT EXISTS goal_categories (
       id TEXT PRIMARY KEY,
       period_id TEXT NOT NULL REFERENCES goal_periods(id) ON DELETE CASCADE,
@@ -1214,7 +1218,26 @@ app.get('/api/goals', auth, async (_req, res) => {
 
 app.post('/api/goals/periods', auth, async (req, res) => {
   const { year, half } = req.body ?? {}
-  if (!year || ![1, 2].includes(half)) return res.status(400).json({ error: 'year and half (1|2) required' })
+  if (!year) return res.status(400).json({ error: 'year required' })
+
+  // half omitted/null -> the annual (kind='year') period for that year.
+  if (half == null) {
+    const { rows: existing } = await pool.query(
+      "SELECT * FROM goal_periods WHERE kind = 'year' AND year = $1 LIMIT 1",
+      [year]
+    )
+    if (existing[0]) {
+      const categories = await loadPeriodCategories(existing[0].id)
+      return res.json({ ...existing[0], categories })
+    }
+    const { rows } = await pool.query(
+      "INSERT INTO goal_periods (id, kind, year) VALUES ($1,'year',$2) RETURNING *",
+      [randomUUID(), year]
+    )
+    return res.json({ ...rows[0], categories: [] })
+  }
+
+  if (![1, 2].includes(half)) return res.status(400).json({ error: 'half must be 1 or 2' })
   const id = randomUUID()
   const { rows } = await pool.query(
     "INSERT INTO goal_periods (id, kind, year, half) VALUES ($1,'half',$2,$3) ON CONFLICT (year, half) DO UPDATE SET year=$2 RETURNING *",

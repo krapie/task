@@ -11,10 +11,13 @@ interface GoalViewProps {
   isAuth: boolean
 }
 
+type MobileTab = 'general' | 'year' | 'half'
+
 export function GoalView({ isAuth }: GoalViewProps) {
   const [periods, setPeriods] = useState<GoalPeriod[]>([])
   const [selectedYear, setSelectedYear] = useState(() => currentHalf().year)
   const [selectedHalf, setSelectedHalf] = useState<1 | 2>(() => currentHalf().half)
+  const [mobileTab, setMobileTab] = useState<MobileTab>('half')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -43,17 +46,27 @@ export function GoalView({ isAuth }: GoalViewProps) {
   }
 
   const halfPeriod = periods.find(p => p.kind === 'half' && p.year === selectedYear && p.half === selectedHalf) ?? null
+  const yearPeriod = periods.find(p => p.kind === 'year' && p.year === selectedYear) ?? null
   const generalPeriod = periods.find(p => p.kind === 'general') ?? null
 
   const allYears = Array.from(new Set([
-    ...periods.filter(p => p.kind === 'half').map(p => p.year as number),
+    ...periods.filter(p => p.kind === 'half' || p.kind === 'year').map(p => p.year as number),
     currentHalf().year,
   ])).sort((a, b) => b - a)
 
-  async function handleCreatePeriod() {
+  function insertPeriod(p: GoalPeriod) {
+    setPeriods(prev => [p, ...prev].sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.half ?? 0) - (a.half ?? 0)))
+  }
+
+  async function handleCreateHalf() {
     try {
-      const p = await api.goals.createPeriod(selectedYear, selectedHalf)
-      setPeriods(prev => [p, ...prev].sort((a, b) => (b.year ?? 0) - (a.year ?? 0) || (b.half ?? 0) - (a.half ?? 0)))
+      insertPeriod(await api.goals.createPeriod(selectedYear, selectedHalf))
+    } catch (e) { console.error(e) }
+  }
+
+  async function handleCreateYear() {
+    try {
+      insertPeriod(await api.goals.createPeriod(selectedYear))
     } catch (e) { console.error(e) }
   }
 
@@ -61,20 +74,75 @@ export function GoalView({ isAuth }: GoalViewProps) {
     setPeriods(prev => prev.map(p => p.id === updated.id ? updated : p))
   }
 
+  function renderScopedBody(period: GoalPeriod | null, label: string, onInit: () => void) {
+    if (loading) return <div className="goal-empty">Loading…</div>
+    if (!period) {
+      return (
+        <div className="goal-empty-state">
+          <p className="goal-empty-label">No goals for {label}</p>
+          <button className="goal-init-btn" onClick={onInit}>Initialize {label}</button>
+        </div>
+      )
+    }
+    return <PeriodContent period={period} onUpdate={updatePeriod} />
+  }
+
+  const mobileTabs: { key: MobileTab; label: string }[] = [
+    { key: 'general', label: 'General' },
+    { key: 'year', label: 'Year' },
+    { key: 'half', label: 'Half' },
+  ]
+
   return (
     <div className="goal-view">
-      <div className="goal-columns">
+      <div className="goal-year-bar">
+        <div className="goal-year-tabs">
+          {allYears.map(y => (
+            <button
+              key={y}
+              className={`goal-year-btn${y === selectedYear ? ' goal-year-active' : ''}`}
+              onClick={() => setSelectedYear(y)}
+            >{y}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="goal-mobile-switcher">
+        {mobileTabs.map(t => (
+          <button
+            key={t.key}
+            className={`goal-mobile-tab${mobileTab === t.key ? ' goal-mobile-tab-active' : ''}`}
+            onClick={() => setMobileTab(t.key)}
+          >{t.label}</button>
+        ))}
+      </div>
+
+      <div className={`goal-columns goal-mobile-${mobileTab}`}>
+        <div className="goal-general-column">
+          <div className="goal-period-bar goal-general-bar">
+            <span className="goal-general-label">General goals</span>
+          </div>
+          <div className="goal-body">
+            {loading || !generalPeriod ? (
+              <div className="goal-empty">Loading…</div>
+            ) : (
+              <PeriodContent period={generalPeriod} onUpdate={updatePeriod} />
+            )}
+          </div>
+        </div>
+
+        <div className="goal-year-column">
+          <div className="goal-period-bar goal-general-bar">
+            <span className="goal-general-label">Year · {selectedYear}</span>
+          </div>
+          <div className="goal-body">
+            {renderScopedBody(yearPeriod, `${selectedYear}`, handleCreateYear)}
+          </div>
+        </div>
+
         <div className="goal-half-column">
           <div className="goal-period-bar">
-            <div className="goal-year-tabs">
-              {allYears.map(y => (
-                <button
-                  key={y}
-                  className={`goal-year-btn${y === selectedYear ? ' goal-year-active' : ''}`}
-                  onClick={() => setSelectedYear(y)}
-                >{y}</button>
-              ))}
-            </div>
+            <span className="goal-general-label">Half</span>
             <div className="goal-half-tabs">
               <button
                 className={`goal-half-btn${selectedHalf === 1 ? ' goal-half-active' : ''}`}
@@ -86,34 +154,8 @@ export function GoalView({ isAuth }: GoalViewProps) {
               >H2</button>
             </div>
           </div>
-
           <div className="goal-body">
-            {loading ? (
-              <div className="goal-empty">Loading…</div>
-            ) : !halfPeriod ? (
-              <div className="goal-empty-state">
-                <p className="goal-empty-label">No goals for {selectedYear} H{selectedHalf}</p>
-                <button className="goal-init-btn" onClick={handleCreatePeriod}>
-                  Initialize {selectedYear} H{selectedHalf}
-                </button>
-              </div>
-            ) : (
-              <PeriodContent period={halfPeriod} onUpdate={updatePeriod} />
-            )}
-          </div>
-        </div>
-
-        <div className="goal-general-column">
-          <div className="goal-period-bar goal-general-bar">
-            <span className="goal-general-label">General goals</span>
-          </div>
-
-          <div className="goal-body">
-            {loading || !generalPeriod ? (
-              <div className="goal-empty">Loading…</div>
-            ) : (
-              <PeriodContent period={generalPeriod} onUpdate={updatePeriod} />
-            )}
+            {renderScopedBody(halfPeriod, `${selectedYear} H${selectedHalf}`, handleCreateHalf)}
           </div>
         </div>
       </div>
