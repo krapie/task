@@ -7,6 +7,8 @@ interface EventPanelProps {
   dayTodos: TodoItem[]
   dayAdditions?: Addition[]
   onAddAddition?: (text: string) => void
+  onDeleteAddition?: (id: string) => void
+  onToggleAddition?: (id: string) => void
   focusEventId?: string | null
   onClose: () => void
   onAdd: (data: { title: string; start_date: string; end_date: string; time?: string; recurrence?: Recurrence }) => void
@@ -145,7 +147,7 @@ function EventForm({ defaultDate, initial, onSave, onCancel }: EventFormProps) {
   )
 }
 
-export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], onAddAddition, focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
+export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], onAddAddition, onDeleteAddition, onToggleAddition, focusEventId, onClose, onAdd, onEdit, onDelete, onToggleTodo }: EventPanelProps) {
   const [showForm, setShowForm] = useState(false)
   const [showBonusForm, setShowBonusForm] = useState(false)
   const [bonusText, setBonusText] = useState('')
@@ -265,7 +267,23 @@ export function EventPanel({ date, dayEvents, dayTodos, dayAdditions = [], onAdd
               <div className="cal-todo-label">Bonus tasks</div>
               {dayAdditions.map(a => (
                 <div key={a.id} className={`cal-todo-item${a.completed ? ' cal-todo-done' : ''}`}>
+                  {onToggleAddition && (
+                    <button
+                      className={`task-checkbox${a.completed ? ' checked' : ''}`}
+                      onClick={() => onToggleAddition(a.id)}
+                      aria-label={a.completed ? 'Mark incomplete' : 'Mark complete'}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                      </svg>
+                    </button>
+                  )}
                   <span className={`task-text${a.completed ? ' done' : ''}`}>{a.text}</span>
+                  {onDeleteAddition && (
+                    <button className="task-delete" onClick={() => onDeleteAddition(a.id)} aria-label="Delete">
+                      <TrashIcon />
+                    </button>
+                  )}
                 </div>
               ))}
               {onAddAddition && (showBonusForm ? (

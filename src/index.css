@@ -3216,6 +3216,14 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .cal-todo-done { opacity: 0.55; }
 
+/* Bonus-task delete: always shown on touch, hover-revealed on pointer devices.
+   `display: flex` (specificity 0,2,0) overrides the mobile `.task-delete { display: none }` reveal pattern. */
+.cal-todo-item .task-delete { margin-left: auto; display: flex; opacity: 1; }
+@media (hover: hover) {
+  .cal-todo-item .task-delete { opacity: 0; }
+  .cal-todo-item:hover .task-delete { opacity: 1; }
+}
+
 /* ── Board "Due" section ───────────────────────────────── */
 .event-task-icon {
   width: 14px;

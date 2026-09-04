@@ -740,6 +740,42 @@ export default function App() {
     }
   }
 
+  // Calendar-scoped variants — operate on `calendarAdditions` rather than the routine `dailyData`
+  async function handleDeleteAdditionForDate(id: string) {
+    const target = calendarAdditions.find(a => a.id === id)
+    if (!target) return
+    setCalendarAdditions(prev => prev.filter(a => a.id !== id))
+    if (isAuth) {
+      if (!id.startsWith('temp-')) {
+        try {
+          await api.daily.removeAddition(id)
+        } catch {
+          setCalendarAdditions(prev => [...prev, target])
+        }
+      }
+    } else {
+      const d = storage.getDaily(target.slot_date)
+      storage.setDaily(target.slot_date, { ...d, additions: d.additions.filter(a => a.id !== id) })
+    }
+  }
+
+  async function handleToggleAdditionForDate(id: string) {
+    const target = calendarAdditions.find(a => a.id === id)
+    if (!target) return
+    setCalendarAdditions(prev => prev.map(a => a.id === id ? { ...a, completed: !a.completed } : a))
+    if (isAuth) {
+      if (!id.startsWith('temp-')) {
+        await api.daily.toggleAddition(id, !target.completed).catch(console.error)
+      }
+    } else {
+      const d = storage.getDaily(target.slot_date)
+      storage.setDaily(target.slot_date, {
+        ...d,
+        additions: d.additions.map(a => a.id === id ? { ...a, completed: !a.completed } : a),
+      })
+    }
+  }
+
   async function handleDeleteAddition(id: string) {
     const slotDate = selectedSlotDate
     if (isAuth) {
@@ -1136,6 +1172,8 @@ export default function App() {
           dayTodos={calendarDayTodos}
           dayAdditions={calendarDayAdditions}
           onAddAddition={text => handleAddAdditionForDate(selectedCalendarDate, text)}
+          onDeleteAddition={handleDeleteAdditionForDate}
+          onToggleAddition={handleToggleAdditionForDate}
           focusEventId={editingEventId}
           onClose={() => { setSelectedCalendarDate(null); setEditingEventId(null) }}
           onAdd={handleAddEvent}
