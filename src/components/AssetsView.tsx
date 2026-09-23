@@ -346,14 +346,19 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       {notify && (
         <div className="assets-section">
           <h3 className="assets-section-title">월간 알림</h3>
-          <label className="assets-toggle-row">
-            <input
-              type="checkbox"
-              checked={notify.financeNotifyEnabled === 'true'}
-              onChange={e => updateNotify({ financeNotifyEnabled: String(e.target.checked) })}
-            />
-            매월 {notify.financeNotifyDay}일 {notify.financeNotifyHour.padStart(2, '0')}:{notify.financeNotifyMinute.padStart(2, '0')}
-          </label>
+          <div className="toggle-row">
+            <span className="toggle-label">
+              매월 {notify.financeNotifyDay}일 {notify.financeNotifyHour.padStart(2, '0')}:{notify.financeNotifyMinute.padStart(2, '0')}
+            </span>
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={notify.financeNotifyEnabled === 'true'}
+                onChange={e => updateNotify({ financeNotifyEnabled: String(e.target.checked) })}
+              />
+              <span className="toggle-track" />
+            </label>
+          </div>
         </div>
       )}
 
