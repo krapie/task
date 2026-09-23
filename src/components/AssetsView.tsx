@@ -8,6 +8,18 @@ function formatKRW(n: number): string {
   return `₩${n.toLocaleString('ko-KR')}`
 }
 
+// Rough device label from the UA string, used instead of prompting for a
+// name — see the focus-loss note in handleRegister.
+function guessDeviceName(): string {
+  const ua = navigator.userAgent
+  if (/iPhone/.test(ua)) return 'iPhone'
+  if (/iPad/.test(ua)) return 'iPad'
+  if (/Macintosh/.test(ua)) return 'Mac'
+  if (/Android/.test(ua)) return 'Android'
+  if (/Windows/.test(ua)) return 'Windows'
+  return '기기'
+}
+
 function LockIcon() {
   return (
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -138,8 +150,11 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
     setBusy(true)
     setError(null)
     try {
-      const name = window.prompt('이 기기의 이름 (예: iPhone, MacBook)') || undefined
-      await api.passkey.register(name)
+      // No window.prompt() (or any blocking dialog) before this call —
+      // WebAuthn's navigator.credentials.create() throws "document is not
+      // focused" if the document lost focus just before it runs, which a
+      // native prompt() reliably does. Device name is auto-detected instead.
+      await api.passkey.register(guessDeviceName())
       setCredentials(await api.passkey.listCredentials())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Passkey registration failed')
