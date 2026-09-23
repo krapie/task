@@ -162,3 +162,33 @@ export interface AgentTask {
   started_at: string | null
   finished_at: string | null
 }
+
+export interface AssetSummary {
+  netWorth: number
+  totalAssets: number
+  totalDebt: number
+  creditScore: number | null
+  categoryBreakdown: { category: string; amount: number }[]
+  investment: { principal: number; value: number; pnl: number }
+  thisMonth: { income: number; expense: number; netSavings: number }
+}
+
+export interface FinanceStatus {
+  lastIngest: { source_file: string; ingested_at: string; rows_total: number; rows_new: number; rows_updated: number } | null
+  transactionCount: number
+  dateRange: [string | null, string | null]
+}
+
+export interface PasskeyCredential {
+  id: string
+  device_name: string | null
+  created_at: string
+  last_used_at: string | null
+}
+
+export interface FinanceNotifySettings {
+  financeNotifyEnabled: string
+  financeNotifyDay: string
+  financeNotifyHour: string
+  financeNotifyMinute: string
+}

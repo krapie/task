@@ -10,13 +10,14 @@ import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
 import { AgentView } from './components/TaskView'
 import { GoalView } from './components/GoalView'
+import AssetsView from './components/AssetsView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem, AgentTask } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'routine' | 'agent' | 'calendar' | 'mail' | 'news' | 'settings'
+type View = 'routine' | 'agent' | 'calendar' | 'mail' | 'news' | 'assets' | 'settings'
 
 const SLOT_DAY_NAMES: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
@@ -169,7 +170,7 @@ export default function App() {
   const [view, setView] = useState<View>(() => {
     const p = new URLSearchParams(window.location.search)
     const t = p.get('tab')
-    const valid: View[] = ['routine', 'agent', 'calendar', 'mail', 'news', 'settings']
+    const valid: View[] = ['routine', 'agent', 'calendar', 'mail', 'news', 'assets', 'settings']
     return valid.includes(t as View) ? (t as View) : 'routine'
   })
   // Deep-link: ?mail=<id> opens a specific email (set by push notification URL)
@@ -1009,6 +1010,14 @@ export default function App() {
           </svg>
         </button>
         <button
+          className={`rail-btn${view === 'assets' ? ' rail-btn-active' : ''}`}
+          onClick={() => setView('assets')} title="Assets"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
+          </svg>
+        </button>
+        <button
           className={`rail-btn${view === 'settings' ? ' rail-btn-active' : ''}`}
           onClick={() => setView('settings')} title="Settings"
         >
@@ -1145,6 +1154,8 @@ export default function App() {
           <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} initialMailId={initialMailId} />
         ) : view === 'news' ? (
           <NewsView />
+        ) : view === 'assets' ? (
+          <AssetsView isAuth={isAuth} />
         ) : view === 'settings' ? (
           <SettingsPanel
             settings={settings}
@@ -1231,6 +1242,12 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
           <span>News</span>
+        </button>
+        <button className={`bottom-nav-btn${view === 'assets' ? ' bottom-nav-active' : ''}`} onClick={() => setView('assets')}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
+          </svg>
+          <span>Assets</span>
         </button>
         <button className={`bottom-nav-btn${view === 'settings' ? ' bottom-nav-active' : ''}`} onClick={() => setView('settings')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

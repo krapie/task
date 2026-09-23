@@ -1,4 +1,5 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, AgentTask, GoalPeriod, GoalCategory, GoalItem } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, AgentTask, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, PasskeyCredential, FinanceNotifySettings } from '../types'
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
 
 function getToken(): string | null {
   return localStorage.getItem('task_token')
@@ -68,6 +69,51 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     return retry.json() as Promise<T>
   }
 
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error((err as { error?: string }).error ?? res.statusText)
+  }
+  return res.json() as Promise<T>
+}
+
+// The asset-scope token is deliberately memory-only, never localStorage —
+// unlike the regular session token, a leaked copy of this one grants
+// financial data directly with no further check. A page reload forces a
+// fresh passkey prompt, which is the intended tradeoff for a 10-minute,
+// high-sensitivity scope. AssetsView also clears this proactively on
+// backgrounding (visibilitychange) and after 5 minutes idle.
+let _assetToken: string | null = null
+let _assetTokenExpiresAt = 0
+
+export function setAssetToken(token: string, expiresInSec: number) {
+  _assetToken = token
+  _assetTokenExpiresAt = Date.now() + expiresInSec * 1000
+}
+export function clearAssetToken() {
+  _assetToken = null
+  _assetTokenExpiresAt = 0
+}
+export function hasAssetToken(): boolean {
+  return Boolean(_assetToken) && Date.now() < _assetTokenExpiresAt
+}
+export function assetTokenRemainingMs(): number {
+  return Math.max(0, _assetTokenExpiresAt - Date.now())
+}
+
+async function assetReq<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (!hasAssetToken()) {
+    clearAssetToken()
+    throw new Error('ASSET_SESSION_EXPIRED')
+  }
+  const res = await fetch(`/api${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${_assetToken}` },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  if (res.status === 401) {
+    clearAssetToken()
+    throw new Error('ASSET_SESSION_EXPIRED')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error((err as { error?: string }).error ?? res.statusText)
@@ -186,5 +232,44 @@ export const api = {
     submit: (title: string, prompt: string, session?: string) => req<{ id: number }>('POST', '/agentq/tasks', { title, prompt, ...(session ? { session } : {}) }),
     list: () => req<{ tasks: AgentTask[] }>('GET', '/agentq/tasks'),
     get: (id: number) => req<AgentTask>('GET', `/agentq/tasks/${id}`),
+  },
+  passkey: {
+    listCredentials: () => req<PasskeyCredential[]>('GET', '/auth/passkey/credentials'),
+    removeCredential: (id: string) => req<void>('DELETE', `/auth/passkey/credentials/${id}`),
+    // Registers a new passkey for THIS browser/device. Requires a normal
+    // session only — this is how the asset scope is bootstrapped in the
+    // first place, so it can't itself require an asset token.
+    register: async (deviceName?: string) => {
+      const optionsJSON = await req<Parameters<typeof startRegistration>[0]['optionsJSON']>(
+        'POST', '/auth/passkey/register/options'
+      )
+      const response = await startRegistration({ optionsJSON })
+      await req<{ ok: boolean }>('POST', '/auth/passkey/register/verify', { ...response, deviceName })
+    },
+    // Runs the passkey ceremony (Face ID / fingerprint / security key) and,
+    // on success, stores the resulting 10-minute asset-scope token in
+    // memory. Throws if the user cancels or verification fails.
+    authenticate: async () => {
+      const optionsJSON = await req<Parameters<typeof startAuthentication>[0]['optionsJSON']>(
+        'POST', '/auth/passkey/authenticate/options'
+      )
+      const response = await startAuthentication({ optionsJSON })
+      const { assetToken, expiresIn } = await req<{ assetToken: string; expiresIn: number }>(
+        'POST', '/auth/passkey/authenticate/verify', response
+      )
+      setAssetToken(assetToken, expiresIn)
+    },
+  },
+  assets: {
+    hasToken: hasAssetToken,
+    clearToken: clearAssetToken,
+    remainingMs: assetTokenRemainingMs,
+    getSummary: () => assetReq<AssetSummary>('GET', '/assets/summary'),
+    getStatus: () => assetReq<FinanceStatus>('GET', '/assets/status'),
+    sync: () => assetReq<{ rowsTotal: number; rowsNew: number; rowsUpdated: number; sourceFile: string }>('POST', '/assets/sync'),
+    getPasswordStatus: () => assetReq<{ isSet: boolean }>('GET', '/assets/password'),
+    setPassword: (password: string) => assetReq<{ ok: boolean }>('POST', '/assets/password', { password }),
+    getNotifySettings: () => assetReq<FinanceNotifySettings>('GET', '/assets/notify-settings'),
+    updateNotifySettings: (s: Partial<FinanceNotifySettings>) => assetReq<{ ok: boolean }>('POST', '/assets/notify-settings', s),
   },
 }

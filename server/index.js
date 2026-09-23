@@ -7,14 +7,29 @@ import { randomUUID, createHash, createHmac } from 'crypto'
 import fetch from 'node-fetch'
 import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
+import {
+  generateRegistrationOptions, verifyRegistrationResponse,
+  generateAuthenticationOptions, verifyAuthenticationResponse,
+} from '@simplewebauthn/server'
 
 const PORT = process.env.PORT || 3000
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me'
+const JWT_ASSET_SECRET = process.env.JWT_ASSET_SECRET || 'dev-asset-secret-change-me'
 const TASK_USERNAME = process.env.TASK_USERNAME || 'admin'
 const TASK_PASSWORD = process.env.TASK_PASSWORD || ''
 const MAIL_BRIDGE_URL = process.env.MAIL_BRIDGE_URL || 'http://localhost:3001'
+const FINANCE_URL = process.env.FINANCE_URL || 'http://finance-svc:3002'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
+// WebAuthn relying party — rpID must be the bare hostname the browser is on
+// (no scheme/port), and expectedOrigin must be the exact scheme+host the
+// credential ceremony ran on, or every verify call fails closed.
+const RP_ID = process.env.RP_ID || 'task.kevinprk.com'
+const RP_ORIGIN = process.env.RP_ORIGIN || `https://${RP_ID}`
+const RP_NAME = 'Task — Assets'
+// Stable, non-secret WebAuthn "user handle": derived from TASK_USERNAME so
+// it survives restarts without a users table (this app is single-user).
+const WEBAUTHN_USER_ID = createHash('sha256').update(TASK_USERNAME).digest()
 const AGENTQ_URL = process.env.AGENTQ_URL || 'http://192.168.0.17:8888'
 const AGENTQ_JWT_SECRET = process.env.AGENTQ_JWT_SECRET || ''
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
@@ -156,6 +171,19 @@ async function initDb() {
       auth TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    -- Passkeys for the asset-tab step-up (see assetAuth). public_key/id are
+    -- base64 text, not bytea — keeps the whole credential JSON-round-trippable
+    -- without a driver-level bytea decode step, and these are never queried
+    -- by content, only fetched by id.
+    CREATE TABLE IF NOT EXISTS webauthn_credentials (
+      id TEXT PRIMARY KEY,
+      public_key TEXT NOT NULL,
+      counter BIGINT NOT NULL DEFAULT 0,
+      device_name TEXT,
+      transports TEXT[],
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_used_at TIMESTAMPTZ
+    );
   `)
   await pool.query(`
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
@@ -167,6 +195,10 @@ async function initDb() {
     INSERT INTO settings VALUES ('taskNotifyHour', '9') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('taskNotifyMinute', '0') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('taskNotifyTz', 'UTC') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('financeNotifyEnabled', 'false') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('financeNotifyDay', '1') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('financeNotifyHour', '9') ON CONFLICT DO NOTHING;
+    INSERT INTO settings VALUES ('financeNotifyMinute', '0') ON CONFLICT DO NOTHING;
   `)
 }
 
@@ -212,6 +244,205 @@ function auth(req, res, next) {
   }
 }
 
+// ── Asset auth (passkey step-up) ───────────────────────────────────────
+// Two-tier trust boundary: a normal `auth` session (username/password,
+// above) never reaches /api/assets/*. Only a passkey ceremony completed
+// *within* that session issues a short-lived, separately-signed token that
+// does. A stolen refresh cookie alone can't touch financial data.
+const pendingChallenges = new Map() // purpose -> { challenge, expires }
+const CHALLENGE_TTL_MS = 5 * 60_000
+
+function putChallenge(purpose, challenge) {
+  pendingChallenges.set(purpose, { challenge, expires: Date.now() + CHALLENGE_TTL_MS })
+}
+function takeChallenge(purpose) {
+  const entry = pendingChallenges.get(purpose)
+  pendingChallenges.delete(purpose)
+  if (!entry || entry.expires < Date.now()) return null
+  return entry.challenge
+}
+
+function assetAuth(req, res, next) {
+  const header = req.headers.authorization
+  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Asset session required' })
+  try {
+    const payload = jwt.verify(header.slice(7), JWT_ASSET_SECRET)
+    if (payload.scope !== 'asset') throw new Error('wrong scope')
+    req.assetUser = payload
+    next()
+  } catch {
+    res.status(401).json({ error: 'Asset session expired or invalid' })
+  }
+}
+
+// Passkey ceremony endpoints sit under regular `auth` only — completing one
+// is how an asset-scoped token is obtained in the first place, so they
+// can't themselves require assetAuth.
+app.post('/api/auth/passkey/register/options', auth, async (req, res) => {
+  const { rows } = await pool.query('SELECT id, transports FROM webauthn_credentials')
+  const options = await generateRegistrationOptions({
+    rpName: RP_NAME,
+    rpID: RP_ID,
+    userID: WEBAUTHN_USER_ID,
+    userName: req.user.username,
+    attestationType: 'none',
+    excludeCredentials: rows.map(r => ({ id: r.id, transports: r.transports ?? undefined })),
+    authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+  })
+  putChallenge('register', options.challenge)
+  res.json(options)
+})
+
+app.post('/api/auth/passkey/register/verify', auth, async (req, res) => {
+  const expectedChallenge = takeChallenge('register')
+  if (!expectedChallenge) return res.status(400).json({ error: 'Registration ceremony expired — try again' })
+  try {
+    const verification = await verifyRegistrationResponse({
+      response: req.body,
+      expectedChallenge,
+      expectedOrigin: RP_ORIGIN,
+      expectedRPID: RP_ID,
+    })
+    if (!verification.verified || !verification.registrationInfo) {
+      return res.status(400).json({ error: 'Passkey verification failed' })
+    }
+    const { credential } = verification.registrationInfo
+    await pool.query(
+      `INSERT INTO webauthn_credentials (id, public_key, counter, device_name, transports)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        credential.id,
+        Buffer.from(credential.publicKey).toString('base64'),
+        credential.counter,
+        req.body.deviceName || null,
+        credential.transports ?? null,
+      ]
+    )
+    await audit('passkey_register', req)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('passkey register verify error:', err.message)
+    res.status(400).json({ error: 'Passkey verification failed' })
+  }
+})
+
+app.get('/api/auth/passkey/credentials', auth, async (_req, res) => {
+  const { rows } = await pool.query(
+    'SELECT id, device_name, created_at, last_used_at FROM webauthn_credentials ORDER BY created_at'
+  )
+  res.json(rows)
+})
+
+app.delete('/api/auth/passkey/credentials/:id', auth, async (req, res) => {
+  await pool.query('DELETE FROM webauthn_credentials WHERE id = $1', [req.params.id])
+  res.json({ ok: true })
+})
+
+app.post('/api/auth/passkey/authenticate/options', auth, rateLimit, async (_req, res) => {
+  const { rows } = await pool.query('SELECT id, transports FROM webauthn_credentials')
+  if (!rows.length) return res.status(400).json({ error: 'No passkey registered yet' })
+  const options = await generateAuthenticationOptions({
+    rpID: RP_ID,
+    userVerification: 'preferred',
+    allowCredentials: rows.map(r => ({ id: r.id, transports: r.transports ?? undefined })),
+  })
+  putChallenge('authenticate', options.challenge)
+  res.json(options)
+})
+
+app.post('/api/auth/passkey/authenticate/verify', auth, rateLimit, async (req, res) => {
+  const expectedChallenge = takeChallenge('authenticate')
+  if (!expectedChallenge) {
+    await audit('asset_step_up_fail', req)
+    return res.status(400).json({ error: 'Authentication ceremony expired — try again' })
+  }
+  const { rows } = await pool.query('SELECT * FROM webauthn_credentials WHERE id = $1', [req.body.id])
+  if (!rows.length) {
+    await audit('asset_step_up_fail', req)
+    return res.status(400).json({ error: 'Unknown passkey' })
+  }
+  const stored = rows[0]
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response: req.body,
+      expectedChallenge,
+      expectedOrigin: RP_ORIGIN,
+      expectedRPID: RP_ID,
+      credential: {
+        id: stored.id,
+        publicKey: new Uint8Array(Buffer.from(stored.public_key, 'base64')),
+        counter: Number(stored.counter),
+        transports: stored.transports ?? undefined,
+      },
+    })
+    if (!verification.verified) {
+      await audit('asset_step_up_fail', req)
+      return res.status(400).json({ error: 'Passkey verification failed' })
+    }
+    await pool.query(
+      'UPDATE webauthn_credentials SET counter = $1, last_used_at = NOW() WHERE id = $2',
+      [verification.authenticationInfo.newCounter, stored.id]
+    )
+    const assetToken = jwt.sign({ username: req.user.username, scope: 'asset' }, JWT_ASSET_SECRET, { expiresIn: '10m' })
+    await audit('asset_step_up_success', req)
+    res.json({ assetToken, expiresIn: 600 })
+  } catch (err) {
+    console.error('passkey auth verify error:', err.message)
+    await audit('asset_step_up_fail', req)
+    res.status(400).json({ error: 'Passkey verification failed' })
+  }
+})
+
+// ── Assets (finance) proxy ──────────────────────────────────────────────
+// Everything below requires BOTH a normal session (auth) and a live
+// passkey-issued asset token (assetAuth) — the actual amounts live in the
+// finance service, this just forwards after both checks pass.
+async function financeProxy(req, res, path, init = {}) {
+  try {
+    const r = await fetch(`${FINANCE_URL}${path}`, {
+      ...init,
+      headers: { 'x-internal-key': INTERNAL_API_KEY, 'Content-Type': 'application/json', ...init.headers },
+    })
+    const body = await r.json().catch(() => ({}))
+    res.status(r.status).json(body)
+  } catch (err) {
+    res.status(502).json({ error: 'finance service unreachable', detail: err.message })
+  }
+}
+
+app.get('/api/assets/summary', assetAuth, async (req, res) => {
+  await audit('asset_tab_view', req)
+  await financeProxy(req, res, '/internal/summary')
+})
+app.get('/api/assets/status', assetAuth, (req, res) => financeProxy(req, res, '/internal/status'))
+app.post('/api/assets/sync', assetAuth, async (req, res) => {
+  await audit('asset_sync', req)
+  await financeProxy(req, res, '/internal/sync', { method: 'POST' })
+})
+app.get('/api/assets/password', assetAuth, (req, res) => financeProxy(req, res, '/internal/password'))
+app.post('/api/assets/password', assetAuth, async (req, res) => {
+  await audit('asset_password_set', req)
+  await financeProxy(req, res, '/internal/password', { method: 'POST', body: JSON.stringify(req.body) })
+})
+
+// Monthly reminder settings — kept in task's own settings table (the
+// scheduler that reads them lives here too), not proxied to finance.
+app.get('/api/assets/notify-settings', assetAuth, async (_req, res) => {
+  const { rows } = await pool.query(
+    `SELECT key, value FROM settings WHERE key IN ('financeNotifyEnabled','financeNotifyDay','financeNotifyHour','financeNotifyMinute')`
+  )
+  res.json(Object.fromEntries(rows.map(r => [r.key, r.value])))
+})
+app.post('/api/assets/notify-settings', assetAuth, async (req, res) => {
+  const { financeNotifyEnabled, financeNotifyDay, financeNotifyHour, financeNotifyMinute } = req.body ?? {}
+  const upsert = 'INSERT INTO settings VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value'
+  if (financeNotifyEnabled !== undefined) await pool.query(upsert, ['financeNotifyEnabled', String(financeNotifyEnabled)])
+  if (financeNotifyDay !== undefined) await pool.query(upsert, ['financeNotifyDay', String(financeNotifyDay)])
+  if (financeNotifyHour !== undefined) await pool.query(upsert, ['financeNotifyHour', String(financeNotifyHour)])
+  if (financeNotifyMinute !== undefined) await pool.query(upsert, ['financeNotifyMinute', String(financeNotifyMinute)])
+  res.json({ ok: true })
+})
+
 // ── Health ──────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
@@ -232,9 +463,12 @@ app.post('/api/auth/login', rateLimit, async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' })
   }
   const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '4h' })
-  const refreshToken = jwt.sign({ username }, JWT_REFRESH_SECRET, { expiresIn: '30d' })
+  // 7d, not 30 — this session now reaches financial data (the asset tab, via
+  // a separate passkey-gated scope on top of this session), so a stolen
+  // refresh cookie has a much shorter window than it used to.
+  const refreshToken = jwt.sign({ username }, JWT_REFRESH_SECRET, { expiresIn: '7d' })
   const hash = createHash('sha256').update(refreshToken).digest('hex')
-  const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   await pool.query(
     'INSERT INTO refresh_tokens (token_hash, username, expires_at) VALUES ($1, $2, $3) ON CONFLICT (token_hash) DO NOTHING',
     [hash, username, expires]
@@ -825,6 +1059,68 @@ async function checkAndPushTasks() {
 
 // Check every minute whether it's time to send the task digest
 setInterval(checkAndPushTasks, 60_000)
+
+// ── Finance reminder (own scheduler, not routed through events/recurrence —
+// see the recurrence bug noted in checkAndPushTasks' event query above) ──
+// Two independent triggers sharing one settings toggle:
+//   (a) scheduled monthly nudge on a configured day/hour/minute — "do it"
+//   (b) a 35-day-since-last-ingest safety net — "you forgot", fires at most
+//       once/month regardless of the schedule in (a)
+// Push bodies never include amounts — lock-screen visible.
+async function checkAndPushFinanceReminder() {
+  try {
+    const { rows: subRows } = await pool.query('SELECT COUNT(*) FROM push_subscriptions')
+    if (parseInt(subRows[0].count) === 0) return
+
+    const { rows: sRows } = await pool.query(
+      `SELECT key, value FROM settings WHERE key IN
+       ('financeNotifyEnabled','financeNotifyDay','financeNotifyHour','financeNotifyMinute',
+        'last_finance_notify_date','last_finance_stale_alert_month')`
+    )
+    const s = Object.fromEntries(sRows.map(r => [r.key, r.value]))
+    if (s.financeNotifyEnabled !== 'true') return
+
+    const day = parseInt(s.financeNotifyDay ?? '1')
+    const hour = parseInt(s.financeNotifyHour ?? '9')
+    const minute = parseInt(s.financeNotifyMinute ?? '0')
+    const { dateStr: todayStr, hour: curHour, minute: curMinute } = nowInTz('Asia/Seoul')
+    const curDay = parseInt(todayStr.split('-')[2])
+    const curMonth = todayStr.slice(0, 7)
+
+    let lastTxnDate = null
+    try {
+      const r = await fetch(`${FINANCE_URL}/internal/status`, { headers: { 'x-internal-key': INTERNAL_API_KEY } })
+      if (r.ok) {
+        const body = await r.json()
+        lastTxnDate = body?.dateRange?.[1] ?? null
+      }
+    } catch {
+      // finance service being down shouldn't break task's own scheduler
+    }
+
+    if (curDay === day && curHour === hour && curMinute === minute && s.last_finance_notify_date !== todayStr) {
+      await sendPushToAll({ title: '뱅크샐러드 내보내기 할 시간입니다', body: '이번 달 가계부 데이터를 내보내주세요', tag: 'finance', url: '/?tab=assets' })
+      await pool.query(
+        `INSERT INTO settings VALUES ('last_finance_notify_date', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [todayStr]
+      )
+    }
+
+    if (lastTxnDate) {
+      const daysSince = Math.floor((Date.now() - new Date(lastTxnDate).getTime()) / 86_400_000)
+      if (daysSince >= 35 && s.last_finance_stale_alert_month !== curMonth) {
+        await sendPushToAll({ title: '⚠️ 자산 동기화가 오래됐습니다', body: `${daysSince}일간 새 데이터가 없습니다`, tag: 'finance-stale', url: '/?tab=assets' })
+        await pool.query(
+          `INSERT INTO settings VALUES ('last_finance_stale_alert_month', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+          [curMonth]
+        )
+      }
+    }
+  } catch (err) {
+    console.error('Finance push check error:', err.message)
+  }
+}
+setInterval(checkAndPushFinanceReminder, 60_000)
 
 // ── Mail proxy (forwards to mail-bridge) ────────────────────────────
 async function mailProxy(req, res) {
