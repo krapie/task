@@ -282,7 +282,7 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
             </div>
             <div className="assets-stat">
               <span className="assets-stat-label">신용점수</span>
-              <span className="assets-stat-value">{summary.creditScore ?? '—'}</span>
+              <span className="assets-stat-value">{masked ? '••••' : (summary.creditScore ?? '—')}</span>
             </div>
           </div>
 
