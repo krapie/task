@@ -130,6 +130,7 @@ interface SlotDailyData {
   completions: string[]
   additions: Addition[]
   eventCompletions: string[]
+  skips?: string[]
 }
 
 export default function App() {
@@ -331,10 +332,11 @@ export default function App() {
       const serverCompletions = d.completionIds ?? d.templates.filter(t => t.completed).map(t => t.id)
       const serverAdditions = d.additions
       const serverEventCompletions = d.eventCompletions ?? []
+      const serverSkips = d.skipIds ?? []
       setDailyData(prev => {
         const existing = prev[slotDate]
         if (!existing) {
-          return { ...prev, [slotDate]: { completions: serverCompletions, additions: serverAdditions, eventCompletions: serverEventCompletions } }
+          return { ...prev, [slotDate]: { completions: serverCompletions, additions: serverAdditions, eventCompletions: serverEventCompletions, skips: serverSkips } }
         }
         const serverIds = new Set(serverAdditions.map(a => a.id))
         const localOnly = existing.additions.filter(a => !serverIds.has(a.id) && !a.id.startsWith('temp-'))
@@ -344,6 +346,7 @@ export default function App() {
             completions: serverCompletions,
             additions: [...serverAdditions, ...localOnly],
             eventCompletions: serverEventCompletions,
+            skips: serverSkips,
           },
         }
       })
@@ -650,6 +653,24 @@ export default function App() {
     }
   }
 
+  // Hide/unhide a routine for the active day only; it reappears after the next rotation
+  async function handleSkipTemplate(id: string) {
+    const slotDate = activeSlotDate
+    const current = dailyData[slotDate]?.skips ?? []
+    const skipped = current.includes(id)
+    const next = skipped ? current.filter(s => s !== id) : [...current, id]
+    setDailyData(prev => ({
+      ...prev,
+      [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), skips: next },
+    }))
+    if (isAuth) {
+      await api.daily.skipTemplate(id, slotDate, !skipped).catch(console.error)
+    } else {
+      const d = storage.getDaily(slotDate)
+      storage.setDaily(slotDate, { ...d, skips: next })
+    }
+  }
+
   async function handleLinkTemplate(id: string, targetId: string) {
     const updated = await api.templates.link(id, targetId).catch(() => null)
     if (!updated) return
@@ -949,12 +970,14 @@ export default function App() {
   const selectedTemplates: TemplateWithState[] = (templates[selectedSlot] ?? []).map(t => ({
     ...t,
     completed: selectedDailyData.completions.includes(t.id),
+    skipped: selectedDailyData.skips?.includes(t.id) ?? false,
   }))
+  const visibleTemplates = selectedTemplates.filter(t => !t.skipped)
 
-  const boardDone = selectedTemplates.filter(t => t.completed).length
+  const boardDone = visibleTemplates.filter(t => t.completed).length
     + selectedDailyData.additions.filter(a => a.completed).length
     + selectedEvents.filter(e => e.completed).length
-  const boardTotal = selectedTemplates.length
+  const boardTotal = visibleTemplates.length
     + selectedDailyData.additions.length
     + selectedEvents.length
 
@@ -1103,6 +1126,7 @@ export default function App() {
                     rotateMinute={settings.rotateMinute}
                     slotLabels={getSlotLabels(settings.workWeek)}
                     onToggleTemplate={handleToggleTemplate}
+                    onSkipTemplate={handleSkipTemplate}
                     onAddTemplate={handleAddTemplate}
                     onDeleteTemplate={handleDeleteTemplate}
                     onMoveTemplate={handleMoveTemplate}

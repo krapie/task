@@ -9,7 +9,7 @@ const KEYS = {
 }
 
 type StoredTemplates = Record<Slot, Template[]>
-type StoredDailyEntry = { additions: Addition[]; completions: string[] }
+type StoredDailyEntry = { additions: Addition[]; completions: string[]; skips?: string[] }
 type StoredDaily = Record<string, StoredDailyEntry>
 
 const DEFAULT_SETTINGS: Settings = { rotateHour: 6, rotateMinute: 0, keepBonus: false, workWeek: 'mon-fri' }

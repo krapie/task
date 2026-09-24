@@ -153,6 +153,8 @@ export const api = {
     removeAddition: (id: string) => req<void>('DELETE', `/daily/additions/${id}`),
     toggleTemplate: (templateId: string, slotDate: string, completed: boolean) =>
       req<{ ok: boolean; groupCompleted: string[] }>('POST', '/daily/toggle', { type: 'template', id: templateId, slotDate, completed }),
+    skipTemplate: (templateId: string, slotDate: string, skipped: boolean) =>
+      req<{ ok: boolean }>('POST', '/daily/skip', { id: templateId, slotDate, skipped }),
     toggleAddition: (additionId: string, completed: boolean) =>
       req<void>('POST', '/daily/toggle', { type: 'addition', id: additionId, completed }),
     getAdditionsRange: (from: string, to: string) =>

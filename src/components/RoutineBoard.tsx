@@ -13,6 +13,7 @@ interface RoutineBoardProps {
   rotateMinute: number
   slotLabels: Record<Slot, string>
   onToggleTemplate: (id: string) => void
+  onSkipTemplate: (id: string) => void
   onAddTemplate: (text: string, slots: Slot[]) => void
   onDeleteTemplate: (id: string) => void
   onEditTemplate: (id: string, text: string) => void
@@ -330,6 +331,23 @@ function PencilIcon() {
   )
 }
 
+function EyeSlashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+    </svg>
+  )
+}
+
+function EyeIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+    </svg>
+  )
+}
+
 function ChevronUpIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -605,6 +623,7 @@ export function RoutineBoard({
   rotateMinute,
   slotLabels,
   onToggleTemplate,
+  onSkipTemplate,
   calendarEvents,
   onAddTemplate,
   onDeleteTemplate,
@@ -627,6 +646,7 @@ export function RoutineBoard({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [revealedId, setRevealedId] = useState<string | null>(null)
   const [linkingId, setLinkingId] = useState<string | null>(null)
+  const [showHidden, setShowHidden] = useState(false)
   const linkPickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -638,8 +658,11 @@ export function RoutineBoard({
     return () => document.removeEventListener('mousedown', onDown)
   }, [linkingId])
 
-  const completedCount = templates.filter(t => t.completed).length + additions.filter(a => a.completed).length + calendarEvents.filter(e => e.completed).length
-  const totalCount = templates.length + additions.length + calendarEvents.length
+  // Hiding only applies to the active day; upcoming slots always show every routine
+  const hiddenTemplates = isActive ? templates.filter(t => t.skipped) : []
+  const visibleCount = templates.length - hiddenTemplates.length
+  const completedCount = templates.filter(t => t.completed && !hiddenTemplates.includes(t)).length + additions.filter(a => a.completed).length + calendarEvents.filter(e => e.completed).length
+  const totalCount = visibleCount + additions.length + calendarEvents.length
 
   function startEdit(id: string) { setEditingId(id); setRevealedId(null) }
   function cancelEdit() { setEditingId(null) }
@@ -670,9 +693,10 @@ export function RoutineBoard({
         {/* Daily Tasks */}
         <div className="task-section">
           <div className="section-label">Daily Tasks</div>
-          {templates.length > 0 ? (
+          {visibleCount > 0 ? (
             <div className="task-list">
               {templates.map((t, i) => {
+                if (hiddenTemplates.includes(t)) return null
                 const done = isActive ? t.completed : false
                 return (
                   <div key={t.id} className={`task-item${revealedId === t.id ? ' revealed' : ''}`}>
@@ -706,6 +730,11 @@ export function RoutineBoard({
                         <button className="task-edit-btn" onClick={() => startEdit(t.id)} aria-label="Edit">
                           <PencilIcon />
                         </button>
+                        {isActive && (
+                          <button className="task-edit-btn" title="Hide for today" onClick={() => { onSkipTemplate(t.id); setRevealedId(null) }} aria-label="Hide for today">
+                            <EyeSlashIcon />
+                          </button>
+                        )}
                         <button className="task-delete" onClick={() => onDeleteTemplate(t.id)} aria-label="Delete">
                           <TrashIcon />
                         </button>
@@ -777,7 +806,29 @@ export function RoutineBoard({
               })}
             </div>
           ) : (
-            <div className="empty-state">No daily tasks yet. Add one below.</div>
+            <div className="empty-state">
+              {templates.length > 0 ? 'All daily tasks hidden today.' : 'No daily tasks yet. Add one below.'}
+            </div>
+          )}
+          {hiddenTemplates.length > 0 && (
+            <div className="task-hidden">
+              <button className="task-hidden-toggle" onClick={() => setShowHidden(v => !v)} aria-expanded={showHidden}>
+                Hidden today ({hiddenTemplates.length})
+                {showHidden ? <ChevronUpIcon /> : <ChevronDownIcon />}
+              </button>
+              {showHidden && (
+                <div className="task-list">
+                  {hiddenTemplates.map(t => (
+                    <div key={t.id} className="task-item task-item-hidden">
+                      <span className="task-text">{t.text}</span>
+                      <button className="task-unhide-btn" title="Show again" onClick={() => onSkipTemplate(t.id)} aria-label="Show again">
+                        <EyeIcon />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
           <div className="desktop-add"><DailyTaskAddInput slot={slot} onAdd={onAddTemplate} slotLabels={slotLabels} /></div>
         </div>

@@ -82,6 +82,11 @@ async function initDb() {
       slot_date TEXT NOT NULL,
       PRIMARY KEY (template_id, slot_date)
     );
+    CREATE TABLE IF NOT EXISTS template_skips (
+      template_id TEXT NOT NULL,
+      slot_date TEXT NOT NULL,
+      PRIMARY KEY (template_id, slot_date)
+    );
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -562,6 +567,7 @@ app.put('/api/templates/:id', auth, async (req, res) => {
 app.delete('/api/templates/:id', auth, async (req, res) => {
   await pool.query('DELETE FROM templates WHERE id = $1', [req.params.id])
   await pool.query('DELETE FROM template_completions WHERE template_id = $1', [req.params.id])
+  await pool.query('DELETE FROM template_skips WHERE template_id = $1', [req.params.id])
   res.json({ ok: true })
 })
 
@@ -602,6 +608,9 @@ app.get('/api/daily/:slotDate', auth, async (req, res) => {
   const { rows: ecRows } = await pool.query(
     'SELECT event_id FROM event_completions WHERE slot_date = $1', [slotDate]
   )
+  const { rows: skipRows } = await pool.query(
+    'SELECT template_id FROM template_skips WHERE slot_date = $1', [slotDate]
+  )
   res.json({
     slotDate,
     slot,
@@ -609,7 +618,20 @@ app.get('/api/daily/:slotDate', auth, async (req, res) => {
     completionIds: completionRows.map(r => r.template_id),
     additions,
     eventCompletions: ecRows.map(r => r.event_id),
+    skipIds: skipRows.map(r => r.template_id),
   })
+})
+
+// Hide a routine template for a single slot date
+app.post('/api/daily/skip', auth, async (req, res) => {
+  const { id, slotDate, skipped } = req.body ?? {}
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(slotDate ?? '')) return res.status(400).json({ error: 'Missing fields' })
+  if (skipped) {
+    await pool.query('INSERT INTO template_skips VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, slotDate])
+  } else {
+    await pool.query('DELETE FROM template_skips WHERE template_id = $1 AND slot_date = $2', [id, slotDate])
+  }
+  res.json({ ok: true })
 })
 
 app.post('/api/daily/additions', auth, async (req, res) => {
@@ -805,6 +827,7 @@ app.post('/api/import', auth, async (req, res) => {
     if (mode === 'replace') {
       await client.query('DELETE FROM templates')
       await client.query('DELETE FROM template_completions')
+      await client.query('DELETE FROM template_skips')
     }
     for (const slot of VALID) {
       for (const t of data.templates[slot] ?? []) {
@@ -1004,6 +1027,10 @@ async function checkAndPushTasks() {
         AND NOT EXISTS (
           SELECT 1 FROM template_completions tc
           WHERE tc.template_id = t.id AND tc.slot_date = $2
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM template_skips ts
+          WHERE ts.template_id = t.id AND ts.slot_date = $2
         )
       ORDER BY t.position
     `, [slot, slotDate])

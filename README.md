@@ -15,7 +15,7 @@ node server/index.js
 
 ## Features
 
-- **Routine board** — 6 day slots (Mon–Fri + Weekend) with recurring daily tasks that auto-reset at a configurable hour; drag to reorder
+- **Routine board** — 6 day slots (Mon–Fri + Weekend) with recurring daily tasks that auto-reset at a configurable hour; drag to reorder; hide a routine for just the active day (it reappears at the next reset, is excluded from progress and the daily reminder, and can be restored from the collapsible "Hidden today" list)
 - **Bonus tasks** — one-off task additions per day slot, separate from the recurring routine
 - **Tasks** — global todo list with optional due dates shown alongside the routine board
 - **Multi-day add** — add a daily task to multiple day slots at once from the quick-add input

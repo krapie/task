@@ -12,6 +12,7 @@ export interface Template {
 
 export interface TemplateWithState extends Template {
   completed: boolean
+  skipped: boolean
 }
 
 export interface Addition {
@@ -48,6 +49,7 @@ export interface DailyData {
   completionIds: string[]
   additions: Addition[]
   eventCompletions: string[]
+  skipIds?: string[]
 }
 
 export type Recurrence = 'weekly' | 'monthly' | 'yearly'

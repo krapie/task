@@ -1045,6 +1045,27 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .task-edit-btn:hover { color: var(--kp-fg-2); }
 
+/* Routines hidden for the active day */
+.task-hidden { margin-top: var(--kp-space-2); }
+.task-hidden-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--kp-space-1);
+  padding: var(--kp-space-1) 0;
+  font-size: var(--kp-text-xs);
+  color: var(--kp-fg-4);
+  transition: color var(--kp-dur-fast) var(--kp-ease);
+}
+.task-hidden-toggle:hover { color: var(--kp-fg-2); }
+.task-item-hidden .task-text { color: var(--kp-fg-4); }
+.task-unhide-btn {
+  display: flex;
+  align-items: center;
+  color: var(--kp-fg-4);
+  transition: color var(--kp-dur-fast) var(--kp-ease);
+}
+.task-unhide-btn:hover { color: var(--kp-fg-2); }
+
 .task-edit-input {
   flex: 1;
   height: 22px;
