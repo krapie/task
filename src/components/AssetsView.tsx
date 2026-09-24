@@ -220,16 +220,6 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
     await api.assets.updateNotifySettings(patch).catch(() => {})
   }
 
-  if (!isAuth) {
-    return (
-      <div className="assets-locked">
-        <LockIcon />
-        <p className="assets-locked-title">로그인이 필요합니다</p>
-        <p className="assets-locked-sub">자산 탭은 게스트 모드에서 사용할 수 없습니다</p>
-      </div>
-    )
-  }
-
   if (locked) {
     return (
       <div className="assets-locked">

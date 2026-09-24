@@ -79,14 +79,6 @@ export function GoalView({ isAuth }: GoalViewProps) {
       .finally(() => setLoading(false))
   }, [isAuth])
 
-  if (!isAuth) {
-    return (
-      <div className="goal-view">
-        <div className="goal-empty">Sign in to view goals</div>
-      </div>
-    )
-  }
-
   const halfPeriod = periods.find(p => p.kind === 'half' && p.year === selectedYear && p.half === selectedHalf) ?? null
   const yearPeriod = periods.find(p => p.kind === 'year' && p.year === selectedYear) ?? null
   const h1Period = periods.find(p => p.kind === 'half' && p.year === selectedYear && p.half === 1) ?? null

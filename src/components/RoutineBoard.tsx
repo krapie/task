@@ -31,6 +31,7 @@ interface RoutineBoardProps {
   onDeleteTodo: (id: string) => void
   onLinkTemplate: (id: string, targetId: string) => void
   onUnlinkTemplate: (id: string) => void
+  isAuth: boolean
 }
 
 // --- Date helpers for DatePicker ---
@@ -486,6 +487,7 @@ function MobileAddInput({
   onAddAddition,
   onAddTodo,
   slotLabels,
+  allowTodos,
 }: {
   slot: Slot
   isActive: boolean
@@ -493,6 +495,7 @@ function MobileAddInput({
   onAddAddition: (text: string) => void
   onAddTodo: (text: string, dueDate?: string) => void
   slotLabels: Record<Slot, string>
+  allowTodos: boolean
 }) {
   const [text, setText] = useState('')
   const [type, setType] = useState<'daily' | 'bonus' | 'task'>('daily')
@@ -501,6 +504,8 @@ function MobileAddInput({
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { setSelectedDays([slot]) }, [slot])
+  // Guests can't add todos; fall back if the Task type was selected before signing out
+  useEffect(() => { if (!allowTodos && type === 'task') setType('daily') }, [allowTodos, type])
 
   function switchType(t: 'daily' | 'bonus' | 'task') {
     setType(t)
@@ -536,7 +541,7 @@ function MobileAddInput({
   return (
     <div className="mobile-add">
       <div className="mobile-add-toggle">
-        {(['daily', 'bonus', 'task'] as const).map(t => (
+        {(allowTodos ? ['daily', 'bonus', 'task'] as const : ['daily', 'bonus'] as const).map(t => (
           <button
             key={t}
             type="button"
@@ -641,6 +646,7 @@ export function RoutineBoard({
   onDeleteTodo,
   onLinkTemplate,
   onUnlinkTemplate,
+  isAuth,
 }: RoutineBoardProps) {
   const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -910,8 +916,8 @@ export function RoutineBoard({
           /></div>
         </div>
 
-        {/* Tasks (todos) — completed items whose due date has passed are hidden */}
-        <div className="task-section">
+        {/* Tasks (todos) — server-only, so hidden in guest mode; completed items whose due date has passed are hidden */}
+        {isAuth && <div className="task-section">
           <div className="section-label">Tasks</div>
           {(() => {
             const today = todayDateStr()
@@ -933,7 +939,7 @@ export function RoutineBoard({
             )
           })()}
           <div className="desktop-add"><AddTodoInput onAdd={onAddTodo} /></div>
-        </div>
+        </div>}
         </div>{/* end task-board-right */}
       </div>
 
@@ -944,6 +950,7 @@ export function RoutineBoard({
         onAddAddition={onAddAddition}
         onAddTodo={onAddTodo}
         slotLabels={slotLabels}
+        allowTodos={isAuth}
       />
     </div>
   )

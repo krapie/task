@@ -9,6 +9,7 @@ import { EventPanel } from './components/EventPanel'
 import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
 import { AgentView } from './components/TaskView'
+import { SignInRequired } from './components/SignInRequired'
 import { GoalView } from './components/GoalView'
 import AssetsView from './components/AssetsView'
 import { storage } from './lib/storage'
@@ -18,6 +19,12 @@ import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData,
 
 type Theme = 'light' | 'dark'
 type View = 'routine' | 'agent' | 'calendar' | 'mail' | 'news' | 'assets' | 'settings'
+
+// Views backed only by server data; hidden from guests
+const AUTH_ONLY_VIEWS: View[] = ['agent', 'mail', 'assets']
+const VIEW_LABELS: Record<View, string> = {
+  routine: 'Routine', agent: 'Agent', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', settings: 'Settings',
+}
 
 const SLOT_DAY_NAMES: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
@@ -477,6 +484,8 @@ export default function App() {
     setTemplates(storage.getTemplates())
     loadedDatesRef.current = new Set()
     setDailyData({})
+    if (AUTH_ONLY_VIEWS.includes(view)) setView('routine')
+    setRoutineTab('tasks')
   }
 
   // Settings handlers
@@ -995,7 +1004,7 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
           </svg>
         </button>
-        {settings.showAgent !== false && (
+        {isAuth && settings.showAgent !== false && (
           <button
             className={`rail-btn${view === 'agent' ? ' rail-btn-active' : ''}`}
             onClick={() => setView('agent')} title="Agent"
@@ -1013,17 +1022,19 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
           </svg>
         </button>
-        <button
-          className={`rail-btn${view === 'mail' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('mail')} title="Mail"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-          </svg>
-          {mailUnread > 0 && (
-            <span className="rail-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>
-          )}
-        </button>
+        {isAuth && (
+          <button
+            className={`rail-btn${view === 'mail' ? ' rail-btn-active' : ''}`}
+            onClick={() => setView('mail')} title="Mail"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+            </svg>
+            {mailUnread > 0 && (
+              <span className="rail-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>
+            )}
+          </button>
+        )}
         <button
           className={`rail-btn${view === 'news' ? ' rail-btn-active' : ''}`}
           onClick={() => setView('news')} title="News"
@@ -1032,14 +1043,16 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
         </button>
-        <button
-          className={`rail-btn${view === 'assets' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('assets')} title="Assets"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
-          </svg>
-        </button>
+        {isAuth && (
+          <button
+            className={`rail-btn${view === 'assets' ? ' rail-btn-active' : ''}`}
+            onClick={() => setView('assets')} title="Assets"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
+            </svg>
+          </button>
+        )}
         <button
           className={`rail-btn${view === 'settings' ? ' rail-btn-active' : ''}`}
           onClick={() => setView('settings')} title="Settings"
@@ -1076,7 +1089,7 @@ export default function App() {
                   <div className="board-progress-fill" style={{ width: `${boardDone / boardTotal * 100}%` }} />
                 </div>
               )}
-              <div className="routine-tab-toggle">
+              {isAuth && <div className="routine-tab-toggle">
                 <button
                   className={`routine-tab-btn${routineTab === 'tasks' ? ' routine-tab-active' : ''}`}
                   onClick={() => setRoutineTab('tasks')}
@@ -1085,7 +1098,7 @@ export default function App() {
                   className={`routine-tab-btn${routineTab === 'goals' ? ' routine-tab-active' : ''}`}
                   onClick={() => setRoutineTab('goals')}
                 >Goals</button>
-              </div>
+              </div>}
             </div>
 
             {routineTab === 'tasks' ? (
@@ -1143,6 +1156,7 @@ export default function App() {
                     onDeleteTodo={handleDeleteTodo}
                     onLinkTemplate={handleLinkTemplate}
                     onUnlinkTemplate={handleUnlinkTemplate}
+                    isAuth={isAuth}
                   />
                 </div>
                 <div className="board-footer">
@@ -1150,7 +1164,7 @@ export default function App() {
                 </div>
               </>
             ) : (
-              <GoalView isAuth={isAuth} />
+              isAuth ? <GoalView isAuth={isAuth} /> : <SignInRequired feature="Goals" onSignIn={() => setShowSignIn(true)} />
             )}
           </>
         ) : view === 'calendar' ? (
@@ -1174,10 +1188,12 @@ export default function App() {
             onDayClick={date => { setSelectedCalendarDate(prev => prev === date ? null : date); setEditingEventId(null) }}
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
+        ) : !isAuth && AUTH_ONLY_VIEWS.includes(view) ? (
+          <SignInRequired feature={VIEW_LABELS[view]} onSignIn={() => setShowSignIn(true)} />
         ) : view === 'mail' ? (
           <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} initialMailId={initialMailId} />
         ) : view === 'news' ? (
-          <NewsView />
+          <NewsView isAuth={isAuth} />
         ) : view === 'assets' ? (
           <AssetsView isAuth={isAuth} />
         ) : view === 'settings' ? (
@@ -1240,7 +1256,7 @@ export default function App() {
           </svg>
           <span>Routine</span>
         </button>
-        {settings.showAgent !== false && (
+        {isAuth && settings.showAgent !== false && (
           <button className={`bottom-nav-btn${view === 'agent' ? ' bottom-nav-active' : ''}`} onClick={() => setView('agent')}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v10.5a2.25 2.25 0 0 0 2.25 2.25Zm.75-12h9v9h-9v-9Z" />
@@ -1254,25 +1270,29 @@ export default function App() {
           </svg>
           <span>Calendar</span>
         </button>
-        <button className={`bottom-nav-btn${view === 'mail' ? ' bottom-nav-active' : ''}`} onClick={() => setView('mail')}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-          </svg>
-          {mailUnread > 0 && <span className="bottom-nav-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>}
-          <span>Mail</span>
-        </button>
+        {isAuth && (
+          <button className={`bottom-nav-btn${view === 'mail' ? ' bottom-nav-active' : ''}`} onClick={() => setView('mail')}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+            </svg>
+            {mailUnread > 0 && <span className="bottom-nav-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>}
+            <span>Mail</span>
+          </button>
+        )}
         <button className={`bottom-nav-btn${view === 'news' ? ' bottom-nav-active' : ''}`} onClick={() => setView('news')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
           <span>News</span>
         </button>
-        <button className={`bottom-nav-btn${view === 'assets' ? ' bottom-nav-active' : ''}`} onClick={() => setView('assets')}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
-          </svg>
-          <span>Assets</span>
-        </button>
+        {isAuth && (
+          <button className={`bottom-nav-btn${view === 'assets' ? ' bottom-nav-active' : ''}`} onClick={() => setView('assets')}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
+            </svg>
+            <span>Assets</span>
+          </button>
+        )}
         <button className={`bottom-nav-btn${view === 'settings' ? ' bottom-nav-active' : ''}`} onClick={() => setView('settings')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />

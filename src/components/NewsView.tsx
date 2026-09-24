@@ -48,7 +48,7 @@ async function handleFlagToggle(
   }
 }
 
-function NewsItemCard({ item, setItems }: { item: NewsItem; setItems: React.Dispatch<React.SetStateAction<NewsItem[]>> }) {
+function NewsItemCard({ item, setItems, canFlag }: { item: NewsItem; setItems: React.Dispatch<React.SetStateAction<NewsItem[]>>; canFlag: boolean }) {
   return (
     <div className="news-item">
       <div className="news-item-header">
@@ -58,11 +58,13 @@ function NewsItemCard({ item, setItems }: { item: NewsItem; setItems: React.Disp
           target="_blank"
           rel="noopener noreferrer"
         >{item.title}</a>
-        <button
-          className={`flag-btn${item.flagged ? ' flag-btn-active' : ''}`}
-          onClick={e => handleFlagToggle(item, setItems, e)}
-          aria-label={item.flagged ? 'Unflag' : 'Flag'}
-        >★</button>
+        {canFlag && (
+          <button
+            className={`flag-btn${item.flagged ? ' flag-btn-active' : ''}`}
+            onClick={e => handleFlagToggle(item, setItems, e)}
+            aria-label={item.flagged ? 'Unflag' : 'Flag'}
+          >★</button>
+        )}
       </div>
       {item.preview && <NewsPreview html={item.preview} />}
       <div className="news-item-meta">
@@ -73,7 +75,7 @@ function NewsItemCard({ item, setItems }: { item: NewsItem; setItems: React.Disp
   )
 }
 
-export function NewsView() {
+export function NewsView({ isAuth }: { isAuth: boolean }) {
   const [items, setItems] = useState<NewsItem[]>([])
   const [flaggedItems, setFlaggedItems] = useState<NewsItem[]>([])
   const [tab, setTab] = useState<'all' | 'flagged'>('all')
@@ -84,9 +86,10 @@ export function NewsView() {
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(null) }
     try {
+      // Flagged stories are per-account; guests only get the public feed
       const [feed, flagged] = await Promise.all([
         api.news.getItems(),
-        api.news.getFlagged(),
+        isAuth ? api.news.getFlagged() : Promise.resolve([]),
       ])
       if (silent) {
         setItems(prev => mergeNewsItems(prev, feed))
@@ -100,7 +103,7 @@ export function NewsView() {
     } finally {
       if (!silent) setLoading(false)
     }
-  }, [])
+  }, [isAuth])
 
   useEffect(() => { load() }, [load])
 
@@ -170,7 +173,7 @@ export function NewsView() {
               All
               {items.length > 0 && <span className="news-nav-count">{items.length}</span>}
             </button>
-            <button
+            {isAuth && <button
               className={`news-nav-item${tab === 'flagged' ? ' news-nav-active' : ''}`}
               onClick={() => setTab('flagged')}
             >
@@ -179,7 +182,7 @@ export function NewsView() {
               </svg>
               Flagged
               {flagCount > 0 && <span className="news-nav-count">{flagCount}</span>}
-            </button>
+            </button>}
           </div>
         </div>
       )}
@@ -214,6 +217,7 @@ export function NewsView() {
                 key={i}
                 item={item}
                 setItems={tab === 'all' ? setItemsWithSync : setFlaggedWithSync}
+                canFlag={isAuth}
               />
             ))}
           </div>
