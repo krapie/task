@@ -73,7 +73,7 @@ jobs:
           sed -i "s|krapi0314/task-api:.*|krapi0314/task-api:${IMAGE_TAG}|" \
             homeserver/k8s/task/deployment-api.yaml
           sed -i "s|krapi0314/task-web:.*|krapi0314/task-web:${IMAGE_TAG}|" \
-            homeserver/k8s/task/deployment-web.yaml
+            homeserver/k8s/web/deployment.yaml
 
       - name: Commit and push manifest updates
         env:
@@ -82,6 +82,6 @@ jobs:
           cd homeserver
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add k8s/task/deployment-api.yaml k8s/task/deployment-web.yaml
+          git add k8s/task/deployment-api.yaml k8s/web/deployment.yaml
           git commit -m "deploy: task ${{ env.IMAGE_TAG }}"
           git push
