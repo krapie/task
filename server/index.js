@@ -79,11 +79,10 @@ async function initDb() {
       slot_date TEXT NOT NULL,
       PRIMARY KEY (event_id, slot_date)
     );
-    CREATE TABLE IF NOT EXISTS refresh_tokens (
-      token_hash TEXT PRIMARY KEY,
-      username TEXT NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL
-    );
+    -- Sign-in moved to auth.kevinprk.com (2026-09-28): drop the old local
+    -- session and passkey tables.
+    DROP TABLE IF EXISTS refresh_tokens;
+    DROP TABLE IF EXISTS webauthn_credentials;
     CREATE TABLE IF NOT EXISTS audit_log (
       id SERIAL PRIMARY KEY,
       event TEXT NOT NULL,
@@ -149,19 +148,6 @@ async function initDb() {
       p256dh TEXT NOT NULL,
       auth TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    -- Passkeys for the asset-tab step-up (see assetAuth). public_key/id are
-    -- base64 text, not bytea — keeps the whole credential JSON-round-trippable
-    -- without a driver-level bytea decode step, and these are never queried
-    -- by content, only fetched by id.
-    CREATE TABLE IF NOT EXISTS webauthn_credentials (
-      id TEXT PRIMARY KEY,
-      public_key TEXT NOT NULL,
-      counter BIGINT NOT NULL DEFAULT 0,
-      device_name TEXT,
-      transports TEXT[],
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      last_used_at TIMESTAMPTZ
     );
   `)
   await pool.query(`

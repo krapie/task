@@ -161,13 +161,6 @@ export interface FinanceStatus {
   dateRange: [string | null, string | null]
 }
 
-export interface PasskeyCredential {
-  id: string
-  device_name: string | null
-  created_at: string
-  last_used_at: string | null
-}
-
 export interface FinanceNotifySettings {
   financeNotifyEnabled: string
   financeNotifyDay: string
