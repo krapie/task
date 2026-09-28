@@ -28,7 +28,6 @@ export interface Settings {
   rotateMinute: number
   keepBonus: boolean
   workWeek: WorkWeek
-  showAgent?: boolean
   taskNotifyEnabled?: boolean
   taskNotifyHour?: number
   taskNotifyMinute?: number
@@ -144,25 +143,6 @@ export interface GoalPeriod {
   year: number | null
   half: 1 | 2 | null
   categories: GoalCategory[]
-}
-
-export type AgentTaskStatus = 'queued' | 'running' | 'waiting_quota' | 'gating' | 'done' | 'failed' | 'canceled'
-
-export interface AgentTask {
-  id: number
-  title: string
-  prompt: string | null
-  repo: string
-  session: string | null
-  status: AgentTaskStatus
-  branch: string | null
-  error: string | null
-  summary: string | null
-  pr_number: number | null
-  pr_url: string | null
-  created_at: string
-  started_at: string | null
-  finished_at: string | null
 }
 
 export interface AssetSummary {

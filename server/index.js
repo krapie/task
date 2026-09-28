@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser'
 import pg from 'pg'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-import { randomUUID, createHash, createHmac } from 'crypto'
+import { randomUUID, createHash } from 'crypto'
 import fetch from 'node-fetch'
 import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
@@ -30,8 +30,6 @@ const RP_NAME = 'Task — Assets'
 // Stable, non-secret WebAuthn "user handle": derived from TASK_USERNAME so
 // it survives restarts without a users table (this app is single-user).
 const WEBAUTHN_USER_ID = createHash('sha256').update(TASK_USERNAME).digest()
-const AGENTQ_URL = process.env.AGENTQ_URL || 'http://192.168.0.17:8888'
-const AGENTQ_JWT_SECRET = process.env.AGENTQ_JWT_SECRET || ''
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@localhost'
@@ -45,16 +43,6 @@ const MAX_HTML_TRANSLATE_CHARS = 12000
 
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
-}
-
-function b64url(buf) {
-  return Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-function signAgentqJwt(sub) {
-  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const body = b64url(JSON.stringify({ sub: sub || 'task', aud: 'agentq', iss: 'task', exp: Math.floor(Date.now() / 1000) + 60 }))
-  const sig = b64url(createHmac('sha256', AGENTQ_JWT_SECRET).update(`${header}.${body}`).digest())
-  return `${header}.${body}.${sig}`
 }
 
 const pool = new pg.Pool({ connectionString: process.env.POSTGRES_URL })
@@ -1446,56 +1434,6 @@ app.patch('/api/todos/:id', auth, async (req, res) => {
 app.delete('/api/todos/:id', auth, async (req, res) => {
   await pool.query('DELETE FROM todos WHERE id = $1', [req.params.id])
   res.json({})
-})
-
-// agentq proxy — signs JWT server-side, forwards to agentq host process
-function agentqFetch(url, options = {}) {
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 10000)
-  return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer))
-}
-
-app.post('/api/agentq/tasks', auth, async (req, res) => {
-  if (!AGENTQ_JWT_SECRET) return res.status(503).json({ error: 'agentq not configured' })
-  const { title, prompt, session } = req.body
-  if (!title || !prompt) return res.status(400).json({ error: 'title and prompt required' })
-  try {
-    const token = signAgentqJwt(req.user?.username)
-    const r = await agentqFetch(`${AGENTQ_URL}/v1/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title, prompt, repo: '/home/kevinprk/homeserver/apps/task', ...(session ? { session } : {}) }),
-    })
-    const data = await r.json()
-    res.status(r.status).json(data)
-  } catch {
-    res.status(502).json({ error: 'agentq unreachable' })
-  }
-})
-
-app.get('/api/agentq/tasks', auth, async (req, res) => {
-  if (!AGENTQ_JWT_SECRET) return res.status(503).json({ error: 'agentq not configured' })
-  try {
-    const token = signAgentqJwt(req.user?.username)
-    const qs = req.query.status ? `?status=${req.query.status}` : ''
-    const r = await agentqFetch(`${AGENTQ_URL}/v1/tasks${qs}`, { headers: { Authorization: `Bearer ${token}` } })
-    const data = await r.json()
-    res.status(r.status).json(data)
-  } catch {
-    res.status(502).json({ error: 'agentq unreachable' })
-  }
-})
-
-app.get('/api/agentq/tasks/:id', auth, async (req, res) => {
-  if (!AGENTQ_JWT_SECRET) return res.status(503).json({ error: 'agentq not configured' })
-  try {
-    const token = signAgentqJwt(req.user?.username)
-    const r = await agentqFetch(`${AGENTQ_URL}/v1/tasks/${req.params.id}`, { headers: { Authorization: `Bearer ${token}` } })
-    const data = await r.json()
-    res.status(r.status).json(data)
-  } catch {
-    res.status(502).json({ error: 'agentq unreachable' })
-  }
 })
 
 // ── Goals ─────────────────────────────────────────────────────────────

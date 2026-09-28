@@ -1,6 +1,6 @@
 # Task
 
-Personal daily task board that combines recurring routines, one-off tasks, calendar events, agent coding tasks, email, and news into a single interface. Works offline in guest mode (localStorage) and syncs across devices when signed in. **Live:** [task.kevinprk.com](https://task.kevinprk.com)
+Personal daily task board that combines recurring routines, one-off tasks, calendar events, email, and news into a single interface. Works offline in guest mode (localStorage) and syncs across devices when signed in. **Live:** [task.kevinprk.com](https://task.kevinprk.com)
 
 ## Getting Started
 
@@ -21,10 +21,9 @@ node server/index.js
 - **Multi-day add** — add a daily task to multiple day slots at once from the quick-add input
 - **Calendar** — monthly view with event management; supports weekly, monthly, and yearly recurring events
 - **Goals** — three side-by-side columns of categorized goal lists: General (bucket list), Year, and Half (H1/H2 of the selected year), driven by a shared year selector with an add-year control. The Year column consolidates the selected year's half-year goals into its annual list by category name (shown read-only with an H1/H2 badge). Items support completion, strikethrough, and inline comments. Narrow screens collapse the columns into a General/Year/Half tab switcher
-- **Agent** — queue coding tasks for a local [agentq](https://github.com/krapie/agentq) daemon and track run status, session, and PR link in real time
 - **Mail** — IMAP inbox: add multiple accounts, read HTML email in a sandboxed iframe with dark mode, mark read/unread, mark all read. Syncs `INBOX` plus a `청구·결제` (bills/payments) folder where present, since some providers (Naver) auto-file statements there instead of INBOX
 - **News** — GeekNews feed reader with article preview expansion and a flag/save-for-later list
-- **Guest mode** — routine board (daily + bonus tasks) and calendar work with no account, stored in localStorage; News shows the public feed without flagging. Account-only features (Agent, Mail, Assets, Goals, Tasks) are hidden from the nav, and a deep link to one shows a sign-in prompt
+- **Guest mode** — routine board (daily + bonus tasks) and calendar work with no account, stored in localStorage; News shows the public feed without flagging. Account-only features (Mail, Assets, Goals, Tasks) are hidden from the nav, and a deep link to one shows a sign-in prompt
 - **Sync** — sign in to persist data server-side and sync across devices
 - **Import / Export** — JSON export of all templates and board settings
 - **Dark mode** — manual toggle; PWA install supported with status bar following theme

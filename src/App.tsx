@@ -8,22 +8,21 @@ import { CalendarView } from './components/CalendarView'
 import { EventPanel } from './components/EventPanel'
 import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
-import { AgentView } from './components/TaskView'
 import { SignInRequired } from './components/SignInRequired'
 import { GoalView } from './components/GoalView'
 import AssetsView from './components/AssetsView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
-import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem, AgentTask } from './types'
+import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'routine' | 'agent' | 'calendar' | 'mail' | 'news' | 'assets' | 'settings'
+type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'settings'
 
 // Views backed only by server data; hidden from guests
-const AUTH_ONLY_VIEWS: View[] = ['agent', 'mail', 'assets']
+const AUTH_ONLY_VIEWS: View[] = ['mail', 'assets']
 const VIEW_LABELS: Record<View, string> = {
-  routine: 'Routine', agent: 'Agent', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', settings: 'Settings',
+  routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', settings: 'Settings',
 }
 
 const SLOT_DAY_NAMES: Record<string, string> = {
@@ -178,7 +177,7 @@ export default function App() {
   const [view, setView] = useState<View>(() => {
     const p = new URLSearchParams(window.location.search)
     const t = p.get('tab')
-    const valid: View[] = ['routine', 'agent', 'calendar', 'mail', 'news', 'assets', 'settings']
+    const valid: View[] = ['routine', 'calendar', 'mail', 'news', 'assets', 'settings']
     return valid.includes(t as View) ? (t as View) : 'routine'
   })
   // Deep-link: ?mail=<id> opens a specific email (set by push notification URL)
@@ -193,7 +192,6 @@ export default function App() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [calendarAdditions, setCalendarAdditions] = useState<Addition[]>([])
   const [todos, setTodos] = useState<TodoItem[]>([])
-  const [agentTasks, setAgentTasks] = useState<AgentTask[]>([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
 
@@ -266,10 +264,8 @@ export default function App() {
   const loadSettings = useCallback(async () => {
     if (isAuth) {
       const s = await api.settings.get().catch(() => storage.getSettings())
-      const local = storage.getSettings()
-      const merged = { ...s, ...(local.showAgent !== undefined ? { showAgent: local.showAgent } : {}) }
-      setSettings(merged)
-      return merged
+      setSettings(s)
+      return s
     } else {
       const s = storage.getSettings()
       setSettings(s)
@@ -324,12 +320,6 @@ export default function App() {
     }
   }, [isAuth])
 
-  const loadAgentTasks = useCallback(async () => {
-    if (!isAuth) return
-    const result = await api.agentq.list().catch(() => null)
-    if (result) setAgentTasks(result.tasks)
-  }, [isAuth])
-
   const loadDaily = useCallback(async (slotDate: string) => {
     if (!slotDate || loadedDatesRef.current.has(slotDate)) return
     loadedDatesRef.current.add(slotDate)
@@ -377,7 +367,6 @@ export default function App() {
       loadDaily(slotDate)
       loadAllEvents()
       loadTodos()
-      loadAgentTasks()
     })
   }, [isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -395,14 +384,6 @@ export default function App() {
       loadCalendarAdditions(calendarMonth.year, calendarMonth.month)
     }
   }, [view, calendarMonth]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Load agent tasks when switching to agent view; poll every 3s while visible
-  useEffect(() => {
-    if (view !== 'agent' || !isAuth) return
-    loadAgentTasks()
-    const id = setInterval(loadAgentTasks, 3000)
-    return () => clearInterval(id)
-  }, [view, isAuth, loadAgentTasks])
 
   // Sync all board data: templates + daily + events
   const [boardSyncing, setBoardSyncing] = useState(false)
@@ -506,9 +487,6 @@ export default function App() {
       loadedDatesRef.current = new Set()
       setDailyData({})
     }
-    if (partial.showAgent === false && view === 'agent') {
-      setView('routine')
-    }
   }
 
   // Todo handlers
@@ -532,12 +510,6 @@ export default function App() {
   async function handleDeleteTodo(id: string) {
     await api.todos.remove(id).catch(console.error)
     setTodos(prev => prev.filter(t => t.id !== id))
-  }
-
-  async function handleSubmitAgentTask(title: string, prompt: string, session?: string): Promise<void> {
-    const result = await api.agentq.submit(title, prompt, session)
-    await loadAgentTasks()
-    return void result
   }
 
   // Template handlers
@@ -1004,16 +976,6 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
           </svg>
         </button>
-        {isAuth && settings.showAgent !== false && (
-          <button
-            className={`rail-btn${view === 'agent' ? ' rail-btn-active' : ''}`}
-            onClick={() => setView('agent')} title="Agent"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v10.5a2.25 2.25 0 0 0 2.25 2.25Zm.75-12h9v9h-9v-9Z" />
-            </svg>
-          </button>
-        )}
         <button
           className={`rail-btn${view === 'calendar' ? ' rail-btn-active' : ''}`}
           onClick={() => setView('calendar')} title="Calendar"
@@ -1196,7 +1158,7 @@ export default function App() {
           <NewsView isAuth={isAuth} />
         ) : view === 'assets' ? (
           <AssetsView isAuth={isAuth} />
-        ) : view === 'settings' ? (
+        ) : (
           <SettingsPanel
             settings={settings}
             username={username}
@@ -1207,11 +1169,6 @@ export default function App() {
             onSignOut={handleSignOut}
             onExport={handleExport}
             onImport={() => setShowImport(true)}
-          />
-        ) : (
-          <AgentView
-            agentTasks={agentTasks}
-            onSubmitAgentTask={handleSubmitAgentTask}
           />
         )}
       </main>
@@ -1256,14 +1213,6 @@ export default function App() {
           </svg>
           <span>Routine</span>
         </button>
-        {isAuth && settings.showAgent !== false && (
-          <button className={`bottom-nav-btn${view === 'agent' ? ' bottom-nav-active' : ''}`} onClick={() => setView('agent')}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v10.5a2.25 2.25 0 0 0 2.25 2.25Zm.75-12h9v9h-9v-9Z" />
-            </svg>
-            <span>Agent</span>
-          </button>
-        )}
         <button className={`bottom-nav-btn${view === 'calendar' ? ' bottom-nav-active' : ''}`} onClick={() => setView('calendar')}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />

@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, AgentTask, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, PasskeyCredential, FinanceNotifySettings } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, PasskeyCredential, FinanceNotifySettings } from '../types'
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
 
 function getToken(): string | null {
@@ -229,11 +229,6 @@ export const api = {
     getVapidKey: () => req<{ key: string }>('GET', '/push/vapid-key'),
     subscribe: (sub: PushSubscriptionJSON) => req<{ ok: boolean }>('POST', '/push/subscribe', sub),
     unsubscribe: (endpoint: string) => req<{ ok: boolean }>('DELETE', '/push/unsubscribe', { endpoint }),
-  },
-  agentq: {
-    submit: (title: string, prompt: string, session?: string) => req<{ id: number }>('POST', '/agentq/tasks', { title, prompt, ...(session ? { session } : {}) }),
-    list: () => req<{ tasks: AgentTask[] }>('GET', '/agentq/tasks'),
-    get: (id: number) => req<AgentTask>('GET', `/agentq/tasks/${id}`),
   },
   passkey: {
     listCredentials: () => req<PasskeyCredential[]>('GET', '/auth/passkey/credentials'),

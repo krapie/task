@@ -269,26 +269,8 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
           </div>
         </div>
 
-        {/* Right column: Agent + Mail + Data */}
+        {/* Right column: Mail + Data */}
         <div className="sp-col">
-
-          {/* Agent — settings for the Agent tab */}
-          <div className="sp-section">
-            <div className="section-label">Agent</div>
-            <div className="sp-rows">
-              <div className="sp-row">
-                <span className="sp-row-label">Show Agent tab</span>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={settings.showAgent !== false}
-                    onChange={e => onSave({ showAgent: e.target.checked })}
-                  />
-                  <span className="toggle-track" />
-                </label>
-              </div>
-            </div>
-          </div>
 
           {/* Mail — settings for the Mail tab */}
           <NotificationsSection isAuth={!!username} />
