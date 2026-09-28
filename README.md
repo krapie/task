@@ -25,5 +25,7 @@ node server/index.js
 - **News** — GeekNews feed reader with article preview expansion and a flag/save-for-later list
 - **Guest mode** — routine board (daily + bonus tasks) and calendar work with no account, stored in localStorage; News shows the public feed without flagging. Account-only features (Mail, Assets, Goals, Tasks) are hidden from the nav, and a deep link to one shows a sign-in prompt
 - **Sync** — sign in to persist data server-side and sync across devices
+- **Sign-in** — central SSO at [auth.kevinprk.com](https://auth.kevinprk.com) (client `task`, `admins` group only). The web app exchanges the auth session for a 15-minute access token kept in memory (`GET /api/token?aud=task`); the API verifies it against the auth JWKS (`AUTH_ISSUER`)
+- **Asset step-up** — `/api/assets/*` needs a `step_up` token (`aud=task&step_up=1`), which auth issues only after a passkey check in the last 5 minutes and which expires 5 minutes after it. Passkeys are managed on the auth account page
 - **Import / Export** — JSON export of all templates and board settings
 - **Dark mode** — manual toggle; PWA install supported with status bar following theme

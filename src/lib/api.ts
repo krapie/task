@@ -1,40 +1,56 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, PasskeyCredential, FinanceNotifySettings } from '../types'
-import { startRegistration, startAuthentication } from '@simplewebauthn/browser'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings } from '../types'
 
-function getToken(): string | null {
-  return localStorage.getItem('task_token')
+// Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
+// same-site with task) is exchanged for a 15-minute access token that lives
+// only in memory. Task also works signed out, so a missing session is not an
+// error here: callers just stay in local mode.
+const AUTH_URL = 'https://auth.kevinprk.com'
+
+type TokenResponse = {
+  access_token: string
+  expires_in: number
+  user: { username: string }
+  error?: string
+  login_url?: string
 }
 
-function setToken(token: string) {
-  localStorage.setItem('task_token', token)
+let _token: string | null = null
+let _tokenExpiresAt = 0
+let _username: string | null = null
+let _tokenPromise: Promise<string | null> | null = null
+
+function tokenURL(stepUp: boolean, returnTo: string): string {
+  return `${AUTH_URL}/api/token?aud=task${stepUp ? '&step_up=1' : ''}&return=${encodeURIComponent(returnTo)}`
 }
 
-function clearToken() {
-  localStorage.removeItem('task_token')
-}
-
-let _refreshPromise: Promise<string | null> | null = null
-
-async function refreshAccessToken(): Promise<string | null> {
-  if (_refreshPromise) return _refreshPromise
-  _refreshPromise = (async () => {
+// Returns a valid access token, refreshing it near expiry. null = signed out.
+async function ensureToken(force = false): Promise<string | null> {
+  if (!force && _token && _tokenExpiresAt - 60_000 > Date.now()) return _token
+  if (_tokenPromise) return _tokenPromise
+  _tokenPromise = (async () => {
     try {
-      const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
-      if (!res.ok) return null
-      const { token } = await res.json()
-      setToken(token)
-      return token
+      const res = await fetch(tokenURL(false, location.href), { credentials: 'include' })
+      if (!res.ok) {
+        _token = null
+        _username = null
+        return null
+      }
+      const data = (await res.json()) as TokenResponse
+      _token = data.access_token
+      _tokenExpiresAt = Date.now() + data.expires_in * 1000
+      _username = data.user.username
+      return _token
     } catch {
       return null
     } finally {
-      _refreshPromise = null
+      _tokenPromise = null
     }
   })()
-  return _refreshPromise
+  return _tokenPromise
 }
 
 function headers(token?: string | null): Record<string, string> {
-  const t = token ?? getToken()
+  const t = token ?? _token
   return {
     'Content-Type': 'application/json',
     ...(t ? { Authorization: `Bearer ${t}` } : {}),
@@ -42,6 +58,7 @@ function headers(token?: string | null): Record<string, string> {
 }
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (_token) await ensureToken()
   const res = await fetch(`/api${path}`, {
     method,
     headers: headers(),
@@ -49,10 +66,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
 
-  if (res.status === 401 && path !== '/auth/login' && path !== '/auth/refresh') {
-    const newToken = await refreshAccessToken()
+  if (res.status === 401 && _token) {
+    const newToken = await ensureToken(true)
     if (!newToken) {
-      clearToken()
       window.location.reload()
       throw new Error('Session expired')
     }
@@ -79,9 +95,10 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 // The asset-scope token is deliberately memory-only, never localStorage —
 // unlike the regular session token, a leaked copy of this one grants
 // financial data directly with no further check. A page reload forces a
-// fresh passkey prompt, which is the intended tradeoff for a 10-minute,
+// fresh passkey check, which is the intended tradeoff for a 5-minute,
 // high-sensitivity scope. AssetsView also clears this proactively on
 // backgrounding (visibilitychange) and after 5 minutes idle.
+const ASSET_UNLOCK_PENDING = 'task-asset-unlock'
 let _assetToken: string | null = null
 let _assetTokenExpiresAt = 0
 
@@ -123,17 +140,20 @@ async function assetReq<T>(method: string, path: string, body?: unknown): Promis
 
 export const api = {
   auth: {
-    login: async (username: string, password: string) => {
-      const data = await req<{ token: string }>('POST', '/auth/login', { username, password })
-      setToken(data.token)
-      return data
+    // Resolves the current SSO session without redirecting (null = signed out).
+    session: async (): Promise<{ username: string } | null> => {
+      const t = await ensureToken(true)
+      return t && _username ? { username: _username } : null
     },
     me: () => req<{ username: string }>('GET', '/auth/me'),
-    logout: async () => {
-      await req<void>('POST', '/auth/logout')
-      clearToken()
+    signIn: () => {
+      location.assign(`${AUTH_URL}/login?redirect=${encodeURIComponent(location.href)}`)
     },
-    refresh: () => refreshAccessToken(),
+    // Ends the central session (every kevinprk.com app), then returns here.
+    signOut: () => {
+      _token = null
+      location.assign(`${AUTH_URL}/logout?redirect=${encodeURIComponent(location.origin + '/')}`)
+    },
   },
   templates: {
     getAll: () => req<Record<Slot, Template[]>>('GET', '/templates'),
@@ -231,31 +251,32 @@ export const api = {
     unsubscribe: (endpoint: string) => req<{ ok: boolean }>('DELETE', '/push/unsubscribe', { endpoint }),
   },
   passkey: {
-    listCredentials: () => req<PasskeyCredential[]>('GET', '/auth/passkey/credentials'),
-    removeCredential: (id: string) => req<void>('DELETE', `/auth/passkey/credentials/${id}`),
-    // Registers a new passkey for THIS browser/device. Requires a normal
-    // session only — this is how the asset scope is bootstrapped in the
-    // first place, so it can't itself require an asset token.
-    register: async (deviceName?: string) => {
-      const optionsJSON = await req<Parameters<typeof startRegistration>[0]['optionsJSON']>(
-        'POST', '/auth/passkey/register/options'
-      )
-      const response = await startRegistration({ optionsJSON })
-      await req<{ ok: boolean }>('POST', '/auth/passkey/register/verify', { ...response, deviceName })
-    },
-    // Runs the passkey ceremony (Face ID / fingerprint / security key) and,
-    // on success, stores the resulting 10-minute asset-scope token in
-    // memory. Throws if the user cancels or verification fails.
+    // Step-up for the asset tab: auth issues a step_up token only if a
+    // passkey was used in the last 5 minutes (it expires 5 minutes after that
+    // check). Otherwise the browser goes to auth for a passkey prompt and
+    // comes back to ?tab=assets, where AssetsView retries automatically.
     authenticate: async () => {
-      const optionsJSON = await req<Parameters<typeof startAuthentication>[0]['optionsJSON']>(
-        'POST', '/auth/passkey/authenticate/options'
-      )
-      const response = await startAuthentication({ optionsJSON })
-      const { assetToken, expiresIn } = await req<{ assetToken: string; expiresIn: number }>(
-        'POST', '/auth/passkey/authenticate/verify', response
-      )
-      setAssetToken(assetToken, expiresIn)
+      const returnTo = `${location.origin}/?tab=assets`
+      const res = await fetch(tokenURL(true, returnTo), { credentials: 'include' })
+      const data = (await res.json().catch(() => ({}))) as Partial<TokenResponse>
+      if (res.ok && data.access_token && data.expires_in) {
+        setAssetToken(data.access_token, data.expires_in)
+        return
+      }
+      if (data.login_url) {
+        sessionStorage.setItem(ASSET_UNLOCK_PENDING, '1')
+        location.assign(data.login_url)
+        throw new Error('REDIRECTING')
+      }
+      throw new Error(data.error === 'access_denied' ? 'This account has no access to Task.' : 'Passkey unlock failed')
     },
+    // Set before leaving for the auth passkey prompt; consumed on return.
+    takeUnlockPending: (): boolean => {
+      const pending = sessionStorage.getItem(ASSET_UNLOCK_PENDING) === '1'
+      sessionStorage.removeItem(ASSET_UNLOCK_PENDING)
+      return pending
+    },
+    manageURL: `${AUTH_URL}/account`,
   },
   assets: {
     hasToken: hasAssetToken,

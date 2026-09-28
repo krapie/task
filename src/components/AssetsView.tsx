@@ -1,23 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
-import type { AssetSummary, FinanceStatus, PasskeyCredential, FinanceNotifySettings } from '../types'
+import type { AssetSummary, FinanceStatus, FinanceNotifySettings } from '../types'
 
 const IDLE_LOCK_MS = 5 * 60_000
 
 function formatKRW(n: number): string {
   return `₩${n.toLocaleString('ko-KR')}`
-}
-
-// Rough device label from the UA string, used instead of prompting for a
-// name — see the focus-loss note in handleRegister.
-function guessDeviceName(): string {
-  const ua = navigator.userAgent
-  if (/iPhone/.test(ua)) return 'iPhone'
-  if (/iPad/.test(ua)) return 'iPad'
-  if (/Macintosh/.test(ua)) return 'Mac'
-  if (/Android/.test(ua)) return 'Android'
-  if (/Windows/.test(ua)) return 'Windows'
-  return '기기'
 }
 
 function LockIcon() {
@@ -49,7 +37,6 @@ interface AssetsViewProps {
 
 export default function AssetsView({ isAuth }: AssetsViewProps) {
   const [locked, setLocked] = useState(!api.assets.hasToken())
-  const [credentials, setCredentials] = useState<PasskeyCredential[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -72,12 +59,15 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
     setStatus(null)
   }, [])
 
-  // Always know whether any passkey exists, even while locked, so the
-  // locked screen can offer "register" vs "unlock" — this list itself
-  // carries no amounts, just device metadata, safe under the general session.
+  // Coming back from the auth passkey prompt (see api.passkey.authenticate):
+  // finish the unlock without another click.
+  useEffect(() => {
+    if (isAuth && locked && api.passkey.takeUnlockPending()) void handleUnlock()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuth])
+
   useEffect(() => {
     if (!isAuth) return
-    api.passkey.listCredentials().then(setCredentials).catch(() => {})
   }, [locked, isAuth])
 
   const loadAll = useCallback(async () => {
@@ -146,23 +136,6 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
     return () => clearInterval(id)
   }, [locked, lockNow])
 
-  async function handleRegister() {
-    setBusy(true)
-    setError(null)
-    try {
-      // No window.prompt() (or any blocking dialog) before this call —
-      // WebAuthn's navigator.credentials.create() throws "document is not
-      // focused" if the document lost focus just before it runs, which a
-      // native prompt() reliably does. Device name is auto-detected instead.
-      await api.passkey.register(guessDeviceName())
-      setCredentials(await api.passkey.listCredentials())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Passkey registration failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function handleUnlock() {
     setBusy(true)
     setError(null)
@@ -170,6 +143,7 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       await api.passkey.authenticate()
       setLocked(false)
     } catch (err) {
+      if (err instanceof Error && err.message === 'REDIRECTING') return
       setError(err instanceof Error ? err.message : 'Passkey unlock failed')
     } finally {
       setBusy(false)
@@ -208,12 +182,6 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
     }
   }
 
-  async function handleRemoveCredential(id: string) {
-    if (!window.confirm('이 패스키를 삭제할까요?')) return
-    await api.passkey.removeCredential(id)
-    setCredentials(await api.passkey.listCredentials())
-  }
-
   async function updateNotify(patch: Partial<FinanceNotifySettings>) {
     const next = { ...notify, ...patch } as FinanceNotifySettings
     setNotify(next)
@@ -224,16 +192,11 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
     return (
       <div className="assets-locked">
         <LockIcon />
-        <p className="assets-locked-title">
-          {credentials.length === 0 ? '자산 탭을 보려면 패스키를 등록하세요' : '자산 탭이 잠겨 있습니다'}
-        </p>
+        <p className="assets-locked-title">자산 탭이 잠겨 있습니다</p>
         <p className="assets-locked-sub">순자산, 지출 내역 등 금융 데이터는 별도 인증이 필요합니다</p>
         {error && <p className="assets-error">{error}</p>}
-        {credentials.length === 0 ? (
-          <button className="btn-primary" onClick={handleRegister} disabled={busy}>패스키 등록</button>
-        ) : (
-          <button className="btn-primary" onClick={handleUnlock} disabled={busy}>패스키로 잠금 해제</button>
-        )}
+        <button className="btn-primary" onClick={handleUnlock} disabled={busy}>패스키로 잠금 해제</button>
+        <a className="btn-ghost btn-sm" href={api.passkey.manageURL} target="_blank" rel="noreferrer">패스키 관리</a>
       </div>
     )
   }
@@ -354,15 +317,8 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
 
       <div className="assets-section">
         <h3 className="assets-section-title">패스키</h3>
-        <ul className="assets-credential-list">
-          {credentials.map(c => (
-            <li key={c.id}>
-              <span>{c.device_name || '이름 없는 기기'}</span>
-              <button className="btn-ghost btn-sm" onClick={() => handleRemoveCredential(c.id)}>삭제</button>
-            </li>
-          ))}
-        </ul>
-        <button className="btn-ghost btn-sm" onClick={handleRegister} disabled={busy}>새 패스키 추가</button>
+        <p className="assets-locked-sub">패스키는 kevinprk 계정에서 관리합니다 (모든 앱 공용).</p>
+        <a className="btn-ghost btn-sm" href={api.passkey.manageURL} target="_blank" rel="noreferrer">계정에서 패스키 관리</a>
       </div>
 
       <a className="assets-grafana-link" href="https://dashboard.kevinprk.com/d/finance-assets" target="_blank" rel="noreferrer">

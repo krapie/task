@@ -1,35 +1,21 @@
 import express from 'express'
-import cookieParser from 'cookie-parser'
 import pg from 'pg'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-import { randomUUID, createHash } from 'crypto'
+import { randomUUID } from 'crypto'
 import fetch from 'node-fetch'
 import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
-import {
-  generateRegistrationOptions, verifyRegistrationResponse,
-  generateAuthenticationOptions, verifyAuthenticationResponse,
-} from '@simplewebauthn/server'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 
 const PORT = process.env.PORT || 3000
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me'
-const JWT_ASSET_SECRET = process.env.JWT_ASSET_SECRET || 'dev-asset-secret-change-me'
-const TASK_USERNAME = process.env.TASK_USERNAME || 'admin'
-const TASK_PASSWORD = process.env.TASK_PASSWORD || ''
+// Sign-in is on auth.kevinprk.com. The web app sends access tokens from
+// GET /api/token?aud=task (client "task": admins only); they are verified
+// here against the auth JWKS.
+const AUTH_ISSUER = (process.env.AUTH_ISSUER || 'https://auth.kevinprk.com').replace(/\/$/, '')
+const AUTH_AUDIENCE = process.env.AUTH_AUDIENCE || 'task'
+const JWKS = createRemoteJWKSet(new URL(`${AUTH_ISSUER}/keys`), { cacheMaxAge: 60 * 60_000 })
 const MAIL_BRIDGE_URL = process.env.MAIL_BRIDGE_URL || 'http://localhost:3001'
 const FINANCE_URL = process.env.FINANCE_URL || 'http://finance-svc:3002'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
-// WebAuthn relying party — rpID must be the bare hostname the browser is on
-// (no scheme/port), and expectedOrigin must be the exact scheme+host the
-// credential ceremony ran on, or every verify call fails closed.
-const RP_ID = process.env.RP_ID || 'task.kevinprk.com'
-const RP_ORIGIN = process.env.RP_ORIGIN || `https://${RP_ID}`
-const RP_NAME = 'Task — Assets'
-// Stable, non-secret WebAuthn "user handle": derived from TASK_USERNAME so
-// it survives restarts without a users table (this app is single-user).
-const WEBAUTHN_USER_ID = createHash('sha256').update(TASK_USERNAME).digest()
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@localhost'
@@ -197,28 +183,6 @@ async function initDb() {
 
 const app = express()
 app.use(express.json())
-app.use(cookieParser())
-
-// Rate limiting (simple in-memory, sufficient for single-user personal server)
-const loginAttempts = new Map()
-function rateLimit(req, res, next) {
-  const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown'
-  const now = Date.now()
-  const window = 60_000
-  const max = 10
-  const attempts = (loginAttempts.get(ip) || []).filter(t => now - t < window)
-  if (attempts.length >= max) return res.status(429).json({ error: 'Too many attempts' })
-  loginAttempts.set(ip, [...attempts, now])
-  next()
-}
-setInterval(() => {
-  const now = Date.now()
-  for (const [ip, times] of loginAttempts) {
-    const fresh = times.filter(t => now - t < 60_000)
-    if (fresh.length === 0) loginAttempts.delete(ip)
-    else loginAttempts.set(ip, fresh)
-  }
-}, 60_000)
 
 async function audit(event, req) {
   const ip = req.ip || req.headers['x-forwarded-for'] || null
@@ -226,165 +190,43 @@ async function audit(event, req) {
   await pool.query('INSERT INTO audit_log (event, ip, user_agent) VALUES ($1, $2, $3)', [event, ip, ua]).catch(() => {})
 }
 
-function auth(req, res, next) {
+async function verifyToken(req) {
   const header = req.headers.authorization
-  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
+  if (!header?.startsWith('Bearer ')) return null
   try {
-    req.user = jwt.verify(header.slice(7), JWT_SECRET)
-    next()
+    const { payload } = await jwtVerify(header.slice(7), JWKS, {
+      issuer: AUTH_ISSUER,
+      audience: AUTH_AUDIENCE,
+      algorithms: ['RS256'],
+      clockTolerance: 30,
+    })
+    return payload
   } catch {
-    res.status(401).json({ error: 'Invalid token' })
+    return null
   }
+}
+
+async function auth(req, res, next) {
+  const payload = await verifyToken(req)
+  if (!payload) return res.status(401).json({ error: 'Unauthorized' })
+  req.user = { username: payload.preferred_username, sub: payload.sub }
+  next()
 }
 
 // ── Asset auth (passkey step-up) ───────────────────────────────────────
-// Two-tier trust boundary: a normal `auth` session (username/password,
-// above) never reaches /api/assets/*. Only a passkey ceremony completed
-// *within* that session issues a short-lived, separately-signed token that
-// does. A stolen refresh cookie alone can't touch financial data.
-const pendingChallenges = new Map() // purpose -> { challenge, expires }
-const CHALLENGE_TTL_MS = 5 * 60_000
-
-function putChallenge(purpose, challenge) {
-  pendingChallenges.set(purpose, { challenge, expires: Date.now() + CHALLENGE_TTL_MS })
+// Two-tier trust boundary: a normal session token never reaches
+// /api/assets/*. Only a step-up token does: auth issues it for
+// GET /api/token?aud=task&step_up=1 when a passkey was verified in the last
+// 5 minutes, and it expires 5 minutes after that passkey check.
+async function assetAuth(req, res, next) {
+  const payload = await verifyToken(req)
+  if (!payload || payload.step_up !== true || !payload.amr?.includes('hwk')) {
+    return res.status(401).json({ error: 'Asset session expired or invalid' })
+  }
+  req.user = { username: payload.preferred_username, sub: payload.sub }
+  req.assetUser = req.user
+  next()
 }
-function takeChallenge(purpose) {
-  const entry = pendingChallenges.get(purpose)
-  pendingChallenges.delete(purpose)
-  if (!entry || entry.expires < Date.now()) return null
-  return entry.challenge
-}
-
-function assetAuth(req, res, next) {
-  const header = req.headers.authorization
-  if (!header?.startsWith('Bearer ')) return res.status(401).json({ error: 'Asset session required' })
-  try {
-    const payload = jwt.verify(header.slice(7), JWT_ASSET_SECRET)
-    if (payload.scope !== 'asset') throw new Error('wrong scope')
-    req.assetUser = payload
-    next()
-  } catch {
-    res.status(401).json({ error: 'Asset session expired or invalid' })
-  }
-}
-
-// Passkey ceremony endpoints sit under regular `auth` only — completing one
-// is how an asset-scoped token is obtained in the first place, so they
-// can't themselves require assetAuth.
-app.post('/api/auth/passkey/register/options', auth, async (req, res) => {
-  const { rows } = await pool.query('SELECT id, transports FROM webauthn_credentials')
-  const options = await generateRegistrationOptions({
-    rpName: RP_NAME,
-    rpID: RP_ID,
-    userID: WEBAUTHN_USER_ID,
-    userName: req.user.username,
-    attestationType: 'none',
-    excludeCredentials: rows.map(r => ({ id: r.id, transports: r.transports ?? undefined })),
-    authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
-  })
-  putChallenge('register', options.challenge)
-  res.json(options)
-})
-
-app.post('/api/auth/passkey/register/verify', auth, async (req, res) => {
-  const expectedChallenge = takeChallenge('register')
-  if (!expectedChallenge) return res.status(400).json({ error: 'Registration ceremony expired — try again' })
-  try {
-    const verification = await verifyRegistrationResponse({
-      response: req.body,
-      expectedChallenge,
-      expectedOrigin: RP_ORIGIN,
-      expectedRPID: RP_ID,
-    })
-    if (!verification.verified || !verification.registrationInfo) {
-      return res.status(400).json({ error: 'Passkey verification failed' })
-    }
-    const { credential } = verification.registrationInfo
-    await pool.query(
-      `INSERT INTO webauthn_credentials (id, public_key, counter, device_name, transports)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        credential.id,
-        Buffer.from(credential.publicKey).toString('base64'),
-        credential.counter,
-        req.body.deviceName || null,
-        credential.transports ?? null,
-      ]
-    )
-    await audit('passkey_register', req)
-    res.json({ ok: true })
-  } catch (err) {
-    console.error('passkey register verify error:', err.message)
-    res.status(400).json({ error: 'Passkey verification failed' })
-  }
-})
-
-app.get('/api/auth/passkey/credentials', auth, async (_req, res) => {
-  const { rows } = await pool.query(
-    'SELECT id, device_name, created_at, last_used_at FROM webauthn_credentials ORDER BY created_at'
-  )
-  res.json(rows)
-})
-
-app.delete('/api/auth/passkey/credentials/:id', auth, async (req, res) => {
-  await pool.query('DELETE FROM webauthn_credentials WHERE id = $1', [req.params.id])
-  res.json({ ok: true })
-})
-
-app.post('/api/auth/passkey/authenticate/options', auth, rateLimit, async (_req, res) => {
-  const { rows } = await pool.query('SELECT id, transports FROM webauthn_credentials')
-  if (!rows.length) return res.status(400).json({ error: 'No passkey registered yet' })
-  const options = await generateAuthenticationOptions({
-    rpID: RP_ID,
-    userVerification: 'preferred',
-    allowCredentials: rows.map(r => ({ id: r.id, transports: r.transports ?? undefined })),
-  })
-  putChallenge('authenticate', options.challenge)
-  res.json(options)
-})
-
-app.post('/api/auth/passkey/authenticate/verify', auth, rateLimit, async (req, res) => {
-  const expectedChallenge = takeChallenge('authenticate')
-  if (!expectedChallenge) {
-    await audit('asset_step_up_fail', req)
-    return res.status(400).json({ error: 'Authentication ceremony expired — try again' })
-  }
-  const { rows } = await pool.query('SELECT * FROM webauthn_credentials WHERE id = $1', [req.body.id])
-  if (!rows.length) {
-    await audit('asset_step_up_fail', req)
-    return res.status(400).json({ error: 'Unknown passkey' })
-  }
-  const stored = rows[0]
-  try {
-    const verification = await verifyAuthenticationResponse({
-      response: req.body,
-      expectedChallenge,
-      expectedOrigin: RP_ORIGIN,
-      expectedRPID: RP_ID,
-      credential: {
-        id: stored.id,
-        publicKey: new Uint8Array(Buffer.from(stored.public_key, 'base64')),
-        counter: Number(stored.counter),
-        transports: stored.transports ?? undefined,
-      },
-    })
-    if (!verification.verified) {
-      await audit('asset_step_up_fail', req)
-      return res.status(400).json({ error: 'Passkey verification failed' })
-    }
-    await pool.query(
-      'UPDATE webauthn_credentials SET counter = $1, last_used_at = NOW() WHERE id = $2',
-      [verification.authenticationInfo.newCounter, stored.id]
-    )
-    const assetToken = jwt.sign({ username: req.user.username, scope: 'asset' }, JWT_ASSET_SECRET, { expiresIn: '10m' })
-    await audit('asset_step_up_success', req)
-    res.json({ assetToken, expiresIn: 600 })
-  } catch (err) {
-    console.error('passkey auth verify error:', err.message)
-    await audit('asset_step_up_fail', req)
-    res.status(400).json({ error: 'Passkey verification failed' })
-  }
-})
 
 // ── Assets (finance) proxy ──────────────────────────────────────────────
 // Everything below requires BOTH a normal session (auth) and a live
@@ -440,65 +282,6 @@ app.post('/api/assets/notify-settings', assetAuth, async (req, res) => {
 app.get('/api/health', (_req, res) => res.json({ ok: true }))
 
 // ── Auth ────────────────────────────────────────────────────────────
-app.post('/api/auth/login', rateLimit, async (req, res) => {
-  const { username, password } = req.body ?? {}
-  if (!username || !password) return res.status(400).json({ error: 'Missing credentials' })
-  if (username !== TASK_USERNAME) {
-    await audit('login_fail', req)
-    return res.status(401).json({ error: 'Invalid credentials' })
-  }
-  if (!TASK_PASSWORD) return res.status(503).json({ error: 'TASK_PASSWORD not set' })
-  const valid = TASK_PASSWORD.startsWith('$2')
-    ? await bcrypt.compare(password, TASK_PASSWORD)
-    : password === TASK_PASSWORD
-  if (!valid) {
-    await audit('login_fail', req)
-    return res.status(401).json({ error: 'Invalid credentials' })
-  }
-  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '4h' })
-  // 7d, not 30 — this session now reaches financial data (the asset tab, via
-  // a separate passkey-gated scope on top of this session), so a stolen
-  // refresh cookie has a much shorter window than it used to.
-  const refreshToken = jwt.sign({ username }, JWT_REFRESH_SECRET, { expiresIn: '7d' })
-  const hash = createHash('sha256').update(refreshToken).digest('hex')
-  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-  await pool.query(
-    'INSERT INTO refresh_tokens (token_hash, username, expires_at) VALUES ($1, $2, $3) ON CONFLICT (token_hash) DO NOTHING',
-    [hash, username, expires]
-  )
-  await audit('login_success', req)
-  res.cookie('refresh_token', refreshToken, { httpOnly: true, secure: true, sameSite: 'strict', expires })
-  res.json({ token })
-})
-
-app.post('/api/auth/refresh', async (req, res) => {
-  const refreshToken = req.cookies?.refresh_token
-  if (!refreshToken) return res.status(401).json({ error: 'No refresh token' })
-  try {
-    const payload = jwt.verify(refreshToken, JWT_REFRESH_SECRET)
-    const hash = createHash('sha256').update(refreshToken).digest('hex')
-    const { rows } = await pool.query(
-      'SELECT * FROM refresh_tokens WHERE token_hash = $1 AND expires_at > NOW()',
-      [hash]
-    )
-    if (!rows.length) return res.status(401).json({ error: 'Invalid refresh token' })
-    const token = jwt.sign({ username: payload.username }, JWT_SECRET, { expiresIn: '4h' })
-    res.json({ token })
-  } catch {
-    res.status(401).json({ error: 'Invalid refresh token' })
-  }
-})
-
-app.post('/api/auth/logout', async (req, res) => {
-  const refreshToken = req.cookies?.refresh_token
-  if (refreshToken) {
-    const hash = createHash('sha256').update(refreshToken).digest('hex')
-    await pool.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [hash])
-  }
-  res.clearCookie('refresh_token')
-  res.json({ ok: true })
-})
-
 app.get('/api/auth/me', auth, (req, res) => {
   res.json({ username: req.user.username })
 })

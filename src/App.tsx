@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { DayTabs } from './components/DayTabs'
 import { RoutineBoard } from './components/RoutineBoard'
 import { SettingsPanel, downloadExport } from './components/SettingsPanel'
-import { SignInModal } from './components/SignInModal'
 import { ImportModal } from './components/ImportModal'
 import { CalendarView } from './components/CalendarView'
 import { EventPanel } from './components/EventPanel'
@@ -151,7 +150,8 @@ export default function App() {
     document.title = mailUnread > 0 ? `(${mailUnread}) Task` : 'Task'
   }, [mailUnread])
 
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('task_token'))
+  // Set once the auth.kevinprk.com session resolves (see api.auth.session).
+  const [token, setToken] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
   const isAuth = token !== null
 
@@ -168,7 +168,6 @@ export default function App() {
   const loadedDatesRef = useRef<Set<string>>(new Set())
 
   const [selectedSlot, setSelectedSlot] = useState<Slot>('mon')
-  const [showSignIn, setShowSignIn] = useState(false)
   const [showImport, setShowImport] = useState(false)
 
   const [routineTab, setRoutineTab] = useState<'tasks' | 'goals'>('tasks')
@@ -252,14 +251,14 @@ export default function App() {
       )
   }, [calendarEvents, selectedCalendarDate])
 
-  // Verify token on mount
+  // Resolve the central SSO session on mount; without one Task stays in local mode.
   useEffect(() => {
-    if (!token) return
-    api.auth.me().then(u => setUsername(u.username)).catch(() => {
-      localStorage.removeItem('task_token')
-      setToken(null)
+    api.auth.session().then(s => {
+      if (!s) return
+      setToken(s.username)
+      setUsername(s.username)
     })
-  }, [token])
+  }, [])
 
   const loadSettings = useCallback(async () => {
     if (isAuth) {
@@ -445,15 +444,8 @@ export default function App() {
   }, [settings, activeSlotDate])
 
   // Auth handlers
-  function handleSignIn(newToken: string, user: string) {
-    localStorage.setItem('task_token', newToken)
-    setToken(newToken)
-    setUsername(user)
-    setShowSignIn(false)
-  }
-
   function handleSignOut() {
-    localStorage.removeItem('task_token')
+    api.auth.signOut()
     setToken(null)
     setUsername(null)
     const s = storage.getSettings()
@@ -1126,7 +1118,7 @@ export default function App() {
                 </div>
               </>
             ) : (
-              isAuth ? <GoalView isAuth={isAuth} /> : <SignInRequired feature="Goals" onSignIn={() => setShowSignIn(true)} />
+              isAuth ? <GoalView isAuth={isAuth} /> : <SignInRequired feature="Goals" onSignIn={() => api.auth.signIn()} />
             )}
           </>
         ) : view === 'calendar' ? (
@@ -1151,7 +1143,7 @@ export default function App() {
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
         ) : !isAuth && AUTH_ONLY_VIEWS.includes(view) ? (
-          <SignInRequired feature={VIEW_LABELS[view]} onSignIn={() => setShowSignIn(true)} />
+          <SignInRequired feature={VIEW_LABELS[view]} onSignIn={() => api.auth.signIn()} />
         ) : view === 'mail' ? (
           <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} initialMailId={initialMailId} />
         ) : view === 'news' ? (
@@ -1165,7 +1157,7 @@ export default function App() {
             theme={theme}
             onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
             onSave={handleSaveSettings}
-            onSignIn={() => setShowSignIn(true)}
+            onSignIn={() => api.auth.signIn()}
             onSignOut={handleSignOut}
             onExport={handleExport}
             onImport={() => setShowImport(true)}
@@ -1191,12 +1183,6 @@ export default function App() {
         />
       )}
 
-      {showSignIn && (
-        <SignInModal
-          onClose={() => setShowSignIn(false)}
-          onSuccess={handleSignIn}
-        />
-      )}
 
       {showImport && (
         <ImportModal
