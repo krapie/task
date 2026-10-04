@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import type { Settings, ExportData } from '../types'
+import { useState, useEffect, useCallback } from 'react'
+import type { Settings, ExportData, PushDevice } from '../types'
 import { api } from '../lib/api'
 
 interface SettingsPanelProps {
@@ -14,6 +14,14 @@ interface SettingsPanelProps {
   onImport: () => void
 }
 
+function XMarkIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+    </svg>
+  )
+}
+
 function ChevronRightIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -22,13 +30,35 @@ function ChevronRightIcon() {
   )
 }
 
+// "Chrome on macOS", "Safari on iPhone", … from a user agent. Rows saved
+// before user agents were recorded fall back to the push service's host.
+function deviceLabel(d: PushDevice): string {
+  const ua = d.user_agent
+  if (!ua) {
+    if (d.endpoint.includes('push.apple.com')) return 'Apple device'
+    if (d.endpoint.includes('fcm.googleapis.com')) return 'Chrome device'
+    if (d.endpoint.includes('mozilla.com')) return 'Firefox device'
+    return 'Unknown device'
+  }
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : 'device'
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser'
+  return `${browser} on ${os}`
+}
+
 function NotificationsSection({ isAuth }: { isAuth: boolean }) {
   const [supported, setSupported] = useState(false)
   const [permission, setPermission] = useState<NotificationPermission>('default')
   const [subscribed, setSubscribed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
-  const [swVersion, setSwVersion] = useState<string | null>(null)
+  const [endpoint, setEndpoint] = useState<string | null>(null)
+  const [devices, setDevices] = useState<PushDevice[] | null>(null)
+
+  const loadDevices = useCallback(() => {
+    if (!isAuth) { setDevices(null); return }
+    api.push.list().then(setDevices, () => setDevices(null))
+  }, [isAuth])
+  useEffect(loadDevices, [loadDevices])
 
   useEffect(() => {
     setSupported('serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window)
@@ -39,9 +69,7 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
         const reg = await navigator.serviceWorker.ready
         const sub = await reg.pushManager.getSubscription()
         setSubscribed(!!sub)
-        // Show which SW script is active so we can confirm updates
-        const url = reg.active?.scriptURL ?? reg.installing?.scriptURL ?? ''
-        setSwVersion(url.split('/').pop() ?? null)
+        setEndpoint(sub?.endpoint ?? null)
       } catch {}
     }
     if ('serviceWorker' in navigator) checkSubscription()
@@ -59,6 +87,7 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
         await api.push.unsubscribe(existing.endpoint)
         await existing.unsubscribe()
         setSubscribed(false)
+        setEndpoint(null)
         setHint('Notifications disabled')
       } else {
         const { key } = await api.push.getVapidKey()
@@ -71,12 +100,34 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
         })
         await api.push.subscribe(sub.toJSON() as PushSubscriptionJSON)
         setSubscribed(true)
+        setEndpoint(sub.endpoint)
         setHint('Notifications enabled')
       }
     } catch (e) {
       setHint(`Error: ${(e as Error).message}`)
     } finally {
       setLoading(false)
+      loadDevices()
+    }
+  }
+
+  async function removeDevice(d: PushDevice) {
+    if (!confirm(`Stop email notifications to ${deviceLabel(d)}?`)) return
+    try {
+      if (d.endpoint === endpoint) {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        await api.push.unsubscribe(d.endpoint)
+        await sub?.unsubscribe()
+        setSubscribed(false)
+        setEndpoint(null)
+      } else {
+        await api.push.unsubscribe(d.endpoint)
+      }
+    } catch (e) {
+      setHint(`Error: ${(e as Error).message}`)
+    } finally {
+      loadDevices()
     }
   }
 
@@ -106,9 +157,19 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
             <span className="toggle-track" />
           </label>
         </div>
-        {swVersion && (
-          <div className="sp-row sp-row-info">
-            <span className="sp-row-hint">SW: {swVersion}</span>
+        {devices && devices.length > 0 && (
+          <div className="sp-devices">
+            {devices.map(d => (
+              <div key={d.endpoint} className="sp-device" title={`Since ${new Date(d.created_at).toLocaleDateString()}`}>
+                <span className="sp-device-label">
+                  {deviceLabel(d)}
+                  {d.endpoint === endpoint && <span className="sp-row-hint"> (this one)</span>}
+                </span>
+                <button className="sp-device-x" onClick={() => removeDevice(d)} aria-label={`Remove ${deviceLabel(d)}`} title="Remove">
+                  <XMarkIcon />
+                </button>
+              </div>
+            ))}
           </div>
         )}
         {subscribed && (

@@ -149,6 +149,8 @@ async function initDb() {
       auth TEXT NOT NULL,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
+    ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS username TEXT;
+    ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_agent TEXT;
   `)
   await pool.query(`
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
@@ -624,12 +626,20 @@ app.post('/api/push/subscribe', auth, async (req, res) => {
   const { endpoint, keys } = req.body ?? {}
   if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ error: 'Invalid subscription' })
   const id = randomUUID()
+  const ua = (req.headers['user-agent'] || '').slice(0, 300) || null
   await pool.query(
-    `INSERT INTO push_subscriptions (id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4)
-     ON CONFLICT (endpoint) DO UPDATE SET p256dh=$3, auth=$4`,
-    [id, endpoint, keys.p256dh, keys.auth]
+    `INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, username, user_agent) VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (endpoint) DO UPDATE SET p256dh=$3, auth=$4, username=$5, user_agent=$6`,
+    [id, endpoint, keys.p256dh, keys.auth, req.user.username, ua]
   )
   res.json({ ok: true })
+})
+
+app.get('/api/push/subscriptions', auth, async (_req, res) => {
+  const { rows } = await pool.query(
+    'SELECT endpoint, username, user_agent, created_at FROM push_subscriptions ORDER BY created_at'
+  )
+  res.json({ subscriptions: rows })
 })
 
 app.delete('/api/push/unsubscribe', auth, async (req, res) => {

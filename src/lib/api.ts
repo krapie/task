@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -249,6 +249,7 @@ export const api = {
     getVapidKey: () => req<{ key: string }>('GET', '/push/vapid-key'),
     subscribe: (sub: PushSubscriptionJSON) => req<{ ok: boolean }>('POST', '/push/subscribe', sub),
     unsubscribe: (endpoint: string) => req<{ ok: boolean }>('DELETE', '/push/unsubscribe', { endpoint }),
+    list: () => req<{ subscriptions: PushDevice[] }>('GET', '/push/subscriptions').then(r => r.subscriptions),
   },
   passkey: {
     // Step-up for the asset tab: auth issues a step_up token only if a

@@ -167,3 +167,11 @@ export interface FinanceNotifySettings {
   financeNotifyHour: string
   financeNotifyMinute: string
 }
+
+// A browser subscribed to Web Push (one row per device).
+export interface PushDevice {
+  endpoint: string
+  username: string | null
+  user_agent: string | null
+  created_at: string
+}
