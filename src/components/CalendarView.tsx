@@ -148,8 +148,10 @@ function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate
             style={{ gridRow: 1, gridColumn: col }}
             onClick={() => onDayClick(date)}
           >
-            <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
-            {holiday && <span className="calendar-holiday-name">{holiday}</span>}
+            <div className="calendar-day-head">
+              <span className="calendar-day-num">{parseInt(date.split('-')[2])}</span>
+              {holiday && <span className="calendar-holiday-name">{holiday}</span>}
+            </div>
           </div>
         )
       })}

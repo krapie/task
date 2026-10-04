@@ -2004,11 +2004,21 @@ a { color: var(--kp-fg); text-decoration: none; }
 [data-theme="dark"] .calendar-day-cell.is-holiday .calendar-day-num { color: hsl(0, 62%, 65%); }
 .calendar-day-cell.today.is-holiday .calendar-day-num { color: var(--kp-bg); }
 
+/* Holiday name sits beside the day number so the head stays under DAY_NUM_H
+ * (stacked below it on narrow screens, see the mobile block). */
+.calendar-day-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .calendar-holiday-name {
-  font-size: 9px;
-  line-height: 1;
+  font-size: 11px;
+  line-height: 1.2;
   color: hsl(0, 55%, 50%);
-  margin-top: 2px;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2338,7 +2348,8 @@ a { color: var(--kp-fg); text-decoration: none; }
   .calendar-week {
     grid-template-rows: 122px;
   }
-  .calendar-holiday-name { font-size: 8px; }
+  .calendar-day-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+  .calendar-holiday-name { font-size: 8px; line-height: 1; }
   .calendar-day-cell { padding: 3px 4px; }
   .calendar-day-num { width: 20px; height: 20px; font-size: 12px; }
   .event-bar { height: 16px; font-size: 11px; padding: 0 3px; }
