@@ -249,6 +249,7 @@ export const api = {
     getVapidKey: () => req<{ key: string }>('GET', '/push/vapid-key'),
     subscribe: (sub: PushSubscriptionJSON) => req<{ ok: boolean }>('POST', '/push/subscribe', sub),
     unsubscribe: (endpoint: string) => req<{ ok: boolean }>('DELETE', '/push/unsubscribe', { endpoint }),
+    test: () => req<{ sent: number }>('POST', '/push/test'),
     list: () => req<{ subscriptions: PushDevice[] }>('GET', '/push/subscriptions').then(r => r.subscriptions),
   },
   passkey: {

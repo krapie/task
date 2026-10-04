@@ -111,6 +111,18 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
     }
   }
 
+  async function sendTest() {
+    setHint(null)
+    try {
+      const { sent } = await api.push.test()
+      setHint(`Test sent to ${sent} device${sent === 1 ? '' : 's'}`)
+    } catch (e) {
+      setHint(`Error: ${(e as Error).message}`)
+    } finally {
+      loadDevices()
+    }
+  }
+
   async function removeDevice(d: PushDevice) {
     if (!confirm(`Stop email notifications to ${deviceLabel(d)}?`)) return
     try {
@@ -157,6 +169,15 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
             <span className="toggle-track" />
           </label>
         </div>
+        {devices && devices.length > 0 && (
+          <div className="sp-row">
+            <div className="sp-row-left">
+              <span className="sp-row-label">Test notification</span>
+              <span className="sp-row-hint">Sends to every device below</span>
+            </div>
+            <button className="sp-inline-btn" onClick={sendTest}>Send test</button>
+          </div>
+        )}
         {devices && devices.length > 0 && (
           <div className="sp-devices">
             {devices.map(d => (

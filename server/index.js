@@ -649,15 +649,18 @@ app.delete('/api/push/unsubscribe', auth, async (req, res) => {
   res.json({ ok: true })
 })
 
+// Returns how many devices accepted the push.
 async function sendPushToAll(payload) {
-  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return 0
   const { rows } = await pool.query('SELECT * FROM push_subscriptions')
+  let sent = 0
   await Promise.all(rows.map(async row => {
     try {
       await webpush.sendNotification(
         { endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } },
         JSON.stringify(payload)
       )
+      sent++
     } catch (err) {
       if (err.statusCode === 410 || err.statusCode === 404) {
         await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [row.endpoint])
@@ -666,7 +669,14 @@ async function sendPushToAll(payload) {
       }
     }
   }))
+  return sent
 }
+
+app.post('/api/push/test', auth, async (req, res) => {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return res.status(503).json({ error: 'Push not configured' })
+  const sent = await sendPushToAll({ title: 'Test notification', body: `Sent from Task by ${req.user.username}`, tag: 'test', url: '/?tab=settings' })
+  res.json({ sent })
+})
 
 async function checkAndPushNewMail() {
   try {
