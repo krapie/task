@@ -369,12 +369,15 @@ export default function App() {
     })
   }, [isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load daily data whenever selected slot changes
+  // Load daily data whenever the selected slot changes or the Tasks board is
+  // opened. The cache entry is dropped first so a day chip always shows
+  // completions made on another device (e.g. the iPhone app).
   useEffect(() => {
-    if (!activeSlotDate) return
+    if (!activeSlotDate || view !== 'routine' || routineTab !== 'tasks') return
     const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
+    loadedDatesRef.current.delete(slotDate)
     loadDaily(slotDate)
-  }, [selectedSlot, activeSlot, activeSlotDate, loadDaily])
+  }, [selectedSlot, activeSlot, activeSlotDate, view, routineTab, loadDaily]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reload events and additions when switching to or navigating within calendar view
   useEffect(() => {
@@ -395,10 +398,17 @@ export default function App() {
     setBoardSyncing(false)
   }, [activeSlotDate, selectedSlot, activeSlot, loadTemplates, loadAllEvents, loadDaily])
 
-  // Refresh all data when the browser tab/window becomes visible again
+  // Refresh all data when the browser tab/window becomes visible again or
+  // regains focus. On desktop, switching apps leaves the window visible, so
+  // visibilitychange alone misses it; focus covers that case. Both can fire
+  // together, so refreshes within 2s of each other are collapsed.
+  const lastFocusRefreshRef = useRef(0)
   useEffect(() => {
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible' || !activeSlotDate) return
+      const now = Date.now()
+      if (now - lastFocusRefreshRef.current < 2000) return
+      lastFocusRefreshRef.current = now
       const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
       loadedDatesRef.current.delete(slotDate)
       loadTemplates()
@@ -410,7 +420,11 @@ export default function App() {
       }
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', onVisibilityChange)
+    }
   }, [selectedSlot, activeSlot, activeSlotDate, view, calendarMonth, loadTemplates, loadAllEvents, loadDaily, loadTodos, loadCalendarAdditions])
 
   // Periodic auto-refresh every 5 minutes (when authenticated)
