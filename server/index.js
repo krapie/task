@@ -952,11 +952,10 @@ app.get('/api/mail/items', auth, mailProxy)
 app.get('/api/mail/items/:id', auth, mailProxy)
 app.post('/api/mail/items/:id/read', auth, mailProxy)
 app.post('/api/mail/items/:id/flag', auth, mailProxy)
-app.post('/api/mail/sync', auth, async (req, res) => {
-  await mailProxy(req, res)
-  // After sync, check for new mail to push (non-blocking)
-  checkAndPushNewMail().catch(() => {})
-})
+// Sync runs in the background in mail-bridge: POST starts it (202), GET
+// reports progress. New mail is pushed by the 5-minute push poller.
+app.post('/api/mail/sync', auth, mailProxy)
+app.get('/api/mail/sync', auth, mailProxy)
 
 // ── Translation helpers ─────────────────────────────────────────────
 const TRANSLATE_TARGET_NAME = { ko: 'Korean', en: 'English' }

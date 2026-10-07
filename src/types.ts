@@ -81,6 +81,15 @@ export interface MailAccount {
   last_synced: string | null
 }
 
+// State of the mail-bridge background sync (one runs at a time).
+export interface MailSyncStatus {
+  running: boolean
+  started?: boolean
+  finished_at: string | null
+  synced: number | null
+  error: string | null
+}
+
 export interface MailItem {
   id: string
   account_id: string

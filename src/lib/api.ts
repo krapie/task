@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, PushDevice } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -214,7 +214,9 @@ export const api = {
     getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
     toggleFlag: (id: string) => req<{ flagged: boolean }>('POST', `/mail/items/${id}/flag`),
-    sync: (account_id?: string) => req<{ synced: number }>('POST', '/mail/sync', account_id ? { account_id } : {}),
+    // Starts a background sync (or joins the running one); poll syncStatus until running is false.
+    sync: (opts?: { account_id?: string; force?: boolean }) => req<MailSyncStatus>('POST', '/mail/sync', opts ?? {}),
+    syncStatus: () => req<MailSyncStatus>('GET', '/mail/sync'),
     translate: (id: string, target: 'ko' | 'en') =>
       req<{ translated: string; html: string | null; lang: string; cached: boolean }>('POST', `/mail/items/${id}/translate`, { target }),
   },

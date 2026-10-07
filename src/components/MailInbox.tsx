@@ -307,14 +307,28 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     loadItems()
   }, [loadAccounts, loadItems])
 
+  // Starts a background sync and waits for it (polling every 2s, at most
+  // 2 min), then reloads. A sync already running is joined; without force,
+  // mail-bridge skips it if the last one finished under a minute ago.
+  const syncAndReload = useCallback(async (opts?: { account_id?: string; force?: boolean }) => {
+    setSyncing(true)
+    try {
+      let status = await api.mail.sync(opts)
+      for (const deadline = Date.now() + 120_000; status.running && Date.now() < deadline;) {
+        await new Promise(r => setTimeout(r, 2000))
+        status = await api.mail.syncStatus()
+      }
+    } catch (err) {
+      console.error(err)
+    }
+    await loadItems(true)
+    await loadAccounts()
+    setSyncing(false)
+  }, [loadItems, loadAccounts])
+
   // Auto-sync on tab open (MailInbox mounts each time mail tab is selected)
   useEffect(() => {
-    setSyncing(true)
-    api.mail.sync().catch(console.error).finally(async () => {
-      await loadItems(true)
-      await loadAccounts()
-      setSyncing(false)
-    })
+    syncAndReload()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Periodic refresh from DB every 3 minutes (picks up background poller results)
@@ -349,11 +363,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
   }, [initialMailId, isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSync() {
-    setSyncing(true)
-    await api.mail.sync(activeAccount ?? undefined).catch(console.error)
-    await loadItems(true)
-    await loadAccounts()
-    setSyncing(false)
+    await syncAndReload({ account_id: activeAccount ?? undefined, force: true })
   }
 
   async function handleMarkRead(item: MailItem) {
