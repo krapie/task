@@ -991,8 +991,8 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 /* Routine list column */
 .routine-col {
-  flex: 1 1 760px;
-  max-width: 760px;
+  flex: 1 1 600px;
+  max-width: 600px;
   min-width: 0;
   max-height: 100%;
   min-height: 0;
@@ -3548,55 +3548,12 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .task-item { padding: 9px 0; }
 }
 
-/* Goals panel beside the routine list (wide windows, signed in) */
-.goals-panel { display: none; }
-.split-handle { display: none; }
-@media (min-width: 1100px) {
-  .goals-panel {
-    display: block;
-    flex: 1 1 0;
-    min-width: 280px;
-    max-height: 100%;
-    overflow-y: auto;
-    padding-left: var(--kp-space-4);
-  }
-  /* Signed in: the list width comes from the drag handle; the Goals panel takes the rest. */
-  .board-content.has-split .routine-col { flex: 0 1 var(--list-w, 640px); max-width: none; min-width: 360px; }
-  .split-handle {
-    display: block;
-    flex: 0 0 17px;
-    align-self: stretch;
-    position: relative;
-    cursor: col-resize;
-    touch-action: none;
-  }
-  .split-handle::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 8px;
-    width: 1px;
-    background: var(--kp-border);
-    transition: background var(--kp-dur-fast) var(--kp-ease), left var(--kp-dur-fast) var(--kp-ease), width var(--kp-dur-fast) var(--kp-ease);
-  }
-  .split-handle:hover::before, .split-handle.dragging::before, .split-handle:focus-visible::before {
-    left: 7px;
-    width: 3px;
-    border-radius: 2px;
-    background: var(--kp-border-strong);
-  }
-  .split-handle:focus-visible { outline: none; }
-}
-.goals-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--kp-space-3); margin-bottom: var(--kp-space-3); }
-.goals-panel-head .section-label { margin-bottom: 0; }
 
 /* Phones: the day tabs already say which day it is; keep the hero on one line next to Tasks | Goals */
 @media (max-width: 600px) {
   .board-date-mono { display: none; }
 }
 
-body.is-resizing { cursor: col-resize; user-select: none; }
 
 /* ── Retro tab ─────────────────────────────────────────────────── */
 .retro-bar { justify-content: space-between; }

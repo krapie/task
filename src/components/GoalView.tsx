@@ -4,7 +4,7 @@ import type { GoalPeriod, GoalCategory, GoalItem } from '../types'
 import { notifyError } from '../lib/notify'
 import { Empty, Loading } from './Ui'
 
-export function currentHalf(): { year: number; half: 1 | 2 } {
+function currentHalf(): { year: number; half: 1 | 2 } {
   const now = new Date()
   return { year: now.getFullYear(), half: now.getMonth() < 6 ? 1 : 2 }
 }
@@ -263,7 +263,7 @@ interface PeriodContentProps {
   readOnlyExtras?: { name: string; items: RollupItem[] }[]
 }
 
-export function PeriodContent({ period, onUpdate, rollupByName, readOnlyExtras }: PeriodContentProps) {
+function PeriodContent({ period, onUpdate, rollupByName, readOnlyExtras }: PeriodContentProps) {
   const [addingCategory, setAddingCategory] = useState(false)
   const [newCatName, setNewCatName] = useState('')
   const catInputRef = useRef<HTMLInputElement>(null)
