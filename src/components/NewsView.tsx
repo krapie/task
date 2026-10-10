@@ -4,6 +4,7 @@ import type { NewsItem } from '../types'
 import { notifyError } from '../lib/notify'
 import { Empty, Loading } from './Ui'
 import { Icon } from './Icons'
+import { useSidebarOpen } from '../lib/useSidebarOpen'
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -84,7 +85,7 @@ export function NewsView({ isAuth }: { isAuth: boolean }) {
   const [tab, setTab] = useState<'all' | 'flagged'>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpen('task_news_sidebar')
 
   const load = useCallback(async (silent = false) => {
     if (!silent) { setLoading(true); setError(null) }

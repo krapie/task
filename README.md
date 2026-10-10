@@ -63,3 +63,4 @@ Keyboard (desktop, not while typing): `g` then `t` / `c` / `i` / `l` / `s` jumps
 - Phones get a slim top bar (π, current section, theme toggle). Row actions (edit, hide, delete, reorder) show on hover, on keyboard focus, and always on touch devices wider than 600px; on phones they appear after tapping the task text.
 - Text is never below 12px (`--kp-text-2xs`); body-level gray text uses `--kp-fg-3`, `--kp-fg-4` is for placeholders, disabled and icon-only controls.
 - Calendar week rows share the window height; the number of event lanes per day follows the row height (`maxLanes` in `CalendarView.tsx`), so 5- and 6-week months both fit without scrolling. Assets and Health use two columns from 900px.
+- The Mail and News sidebars remember whether you collapsed them (per view, in this browser; phones always start with the overlay closed).

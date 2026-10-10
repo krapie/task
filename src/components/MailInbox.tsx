@@ -4,6 +4,7 @@ import type { MailAccount, MailItem } from '../types'
 import { notifyError } from '../lib/notify'
 import { Empty, Loading } from './Ui'
 import { Icon } from './Icons'
+import { useSidebarOpen } from '../lib/useSidebarOpen'
 
 type Panel = 'inbox' | 'accounts'
 
@@ -247,7 +248,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
   const [showTranslated, setShowTranslated] = useState(false)
   const [translateTarget, setTranslateTarget] = useState<'ko' | 'en'>('ko')
   const [translateError, setTranslateError] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 600)
+  const [sidebarOpen, setSidebarOpen] = useSidebarOpen('task_mail_sidebar')
   const [searchQuery, setSearchQuery] = useState('')
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
