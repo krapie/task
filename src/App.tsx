@@ -11,124 +11,25 @@ import { SignInRequired } from './components/SignInRequired'
 import { GoalView } from './components/GoalView'
 import AssetsView from './components/AssetsView'
 import HealthView from './components/HealthView'
+import { Icon } from './components/Icons'
+import { ResetCountdown } from './components/ResetCountdown'
+import { DialogHost, LoadingBar, ToastHost } from './components/Ui'
+import { AUTH_ONLY_VIEWS, GROUPS, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
+import { expandForView, expandForDate, calendarViewRange } from './lib/recurrence'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem } from './types'
+import { notify, notifyError } from './lib/notify'
 
 type Theme = 'light' | 'dark'
-type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'settings'
-
-// Views backed only by server data; hidden from guests
-const AUTH_ONLY_VIEWS: View[] = ['mail', 'assets', 'health']
-// Personal-data views: only shown to this account. Hiding the tab is
-// cosmetic; the server enforces it (STEP_UP_USERS + passkey step-up).
 const OWNER_USERNAME = 'kevinprk'
-const OWNER_ONLY_VIEWS: View[] = ['assets', 'health']
-const VIEW_LABELS: Record<View, string> = {
-  routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', settings: 'Settings',
-}
 
 const SLOT_DAY_NAMES: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
   thu: 'Thursday', fri: 'Friday', weekend: 'Weekend',
 }
 
-function pad(n: number) { return String(n).padStart(2, '0') }
-
-function addDays(dateStr: string, days: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  const dt = new Date(y, m - 1, d + days)
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
-}
-
-function diffDays(a: string, b: string): number {
-  const [ay, am, ad] = a.split('-').map(Number)
-  const [by, bm, bd] = b.split('-').map(Number)
-  return Math.round((new Date(by, bm - 1, bd).getTime() - new Date(ay, am - 1, ad).getTime()) / 86400000)
-}
-
-// Expand recurring events to their visible occurrences within [viewStart, viewEnd].
-// Non-recurring events are passed through if they overlap the range.
-// The original `id` is always preserved so API edit/delete still works.
-function expandForView(events: CalendarEvent[], viewStart: string, viewEnd: string): CalendarEvent[] {
-  const result: CalendarEvent[] = []
-  for (const e of events) {
-    if (!e.recurrence) {
-      if (e.start_date <= viewEnd && e.end_date >= viewStart) result.push(e)
-      continue
-    }
-    const [origY, origM, origD] = e.start_date.split('-').map(Number)
-    const dur = diffDays(e.start_date, e.end_date)
-    if (e.recurrence === 'yearly') {
-      const [vy] = viewStart.split('-').map(Number)
-      for (let y = vy - 1; y <= vy + 1; y++) {
-        const ns = `${y}-${pad(origM)}-${pad(origD)}`
-        const ne = dur > 0 ? addDays(ns, dur) : ns
-        if (ns <= viewEnd && ne >= viewStart) result.push({ ...e, start_date: ns, end_date: ne })
-      }
-    } else if (e.recurrence === 'monthly') {
-      const [vy, vm] = viewStart.split('-').map(Number)
-      for (let offset = -1; offset <= 3; offset++) {
-        const dt = new Date(vy, vm - 1 + offset, origD)
-        if (dt.getDate() !== origD) continue
-        const ns = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(origD)}`
-        const ne = dur > 0 ? addDays(ns, dur) : ns
-        if (ns <= viewEnd && ne >= viewStart) result.push({ ...e, start_date: ns, end_date: ne })
-      }
-    } else if (e.recurrence === 'weekly') {
-      const origDow = new Date(origY, origM - 1, origD).getDay()
-      const [vy, vm, vd] = viewStart.split('-').map(Number)
-      const vsDate = new Date(vy, vm - 1, vd)
-      const daysDiff = (origDow - vsDate.getDay() + 7) % 7
-      const first = new Date(vsDate)
-      first.setDate(vsDate.getDate() + daysDiff)
-      const origDate = new Date(origY, origM - 1, origD)
-      for (let cur = new Date(first); ; cur.setDate(cur.getDate() + 7)) {
-        if (cur < origDate) continue
-        const ns = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`
-        if (ns > viewEnd) break
-        result.push({ ...e, start_date: ns, end_date: ns })
-      }
-    }
-  }
-  return result
-}
-
-// Expand recurring events for a single date (for board view bonus tasks).
-function expandForDate(events: CalendarEvent[], date: string): CalendarEvent[] {
-  const [, currM, currD] = date.split('-').map(Number)
-  const currDow = new Date(date).getDay()
-  const result: CalendarEvent[] = []
-  for (const e of events) {
-    if (!e.recurrence) {
-      if (e.start_date === date && e.end_date === date) result.push(e)
-      continue
-    }
-    const [, origM, origD] = e.start_date.split('-').map(Number)
-    if (e.recurrence === 'yearly' && origM === currM && origD === currD) {
-      result.push({ ...e, start_date: date, end_date: date })
-    } else if (e.recurrence === 'monthly' && origD === currD) {
-      result.push({ ...e, start_date: date, end_date: date })
-    } else if (e.recurrence === 'weekly' && new Date(e.start_date).getDay() === currDow) {
-      result.push({ ...e, start_date: date, end_date: date })
-    }
-  }
-  return result
-}
-
-// Compute the [viewStart, viewEnd] range for the 6-week calendar view
-function calendarViewRange(year: number, month: number): { start: string; end: string } {
-  const first = new Date(year, month - 1, 1)
-  const start = new Date(first)
-  start.setDate(1 - first.getDay())
-  const end = new Date(start)
-  end.setDate(start.getDate() + 41)
-  return {
-    start: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`,
-    end: `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`,
-  }
-}
 
 function getInitialTheme(): Theme {
   const stored = localStorage.getItem('task_theme') as Theme | null
@@ -176,24 +77,45 @@ export default function App() {
   const [selectedSlot, setSelectedSlot] = useState<Slot>('mon')
   const [showImport, setShowImport] = useState(false)
 
-  const [routineTab, setRoutineTab] = useState<'tasks' | 'goals'>('tasks')
-
-  // Calendar state
-  const [view, setView] = useState<View>(() => {
-    const p = new URLSearchParams(window.location.search)
-    const t = p.get('tab')
-    const valid: View[] = ['routine', 'calendar', 'mail', 'news', 'assets', 'health', 'settings']
-    return valid.includes(t as View) ? (t as View) : 'routine'
-  })
+  // Initial position comes from the hash, or the legacy ?tab=&mail= links in push notifications.
+  const initialRoute = useRef(parseLocation()).current
+  const [routineTab, setRoutineTab] = useState<RoutineTab>(initialRoute.tab)
+  const [view, setView] = useState<View>(initialRoute.view)
   // Deep-link: ?mail=<id> opens a specific email (set by push notification URL)
-  const [initialMailId] = useState<string | null>(() => {
-    const p = new URLSearchParams(window.location.search)
-    return p.get('mail')
-  })
-  const [calendarMonth, setCalendarMonth] = useState(() => {
+  const [initialMailId] = useState<string | null>(initialRoute.mailId)
+  const [calendarMonth, setCalendarMonth] = useState<YearMonth>(() => {
+    if (initialRoute.month) return initialRoute.month
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() + 1 }
   })
+
+  // State -> URL: every navigation is a history entry (the first one replaces, so Back leaves the app).
+  const hashSynced = useRef(false)
+  useEffect(() => {
+    const h = hashOf(view, routineTab, calendarMonth)
+    if (location.hash === h && !location.search) { hashSynced.current = true; return }
+    const url = location.pathname + h
+    if (hashSynced.current) history.pushState(null, '', url)
+    else history.replaceState(null, '', url)
+    hashSynced.current = true
+  }, [view, routineTab, calendarMonth])
+
+  // URL -> state: Back/Forward and hand-edited hashes.
+  useEffect(() => {
+    const onNav = () => {
+      const r = parseLocation()
+      setView(r.view)
+      setRoutineTab(r.tab)
+      const m = r.month
+      if (m) setCalendarMonth(prev => (prev.year === m.year && prev.month === m.month ? prev : m))
+    }
+    window.addEventListener('popstate', onNav)
+    window.addEventListener('hashchange', onNav)
+    return () => {
+      window.removeEventListener('popstate', onNav)
+      window.removeEventListener('hashchange', onNav)
+    }
+  }, [])
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [calendarAdditions, setCalendarAdditions] = useState<Addition[]>([])
   const [todos, setTodos] = useState<TodoItem[]>([])
@@ -489,7 +411,7 @@ export default function App() {
     if (isAuth) {
       // Always send the browser timezone so the server can fire notifications at the right local time
       const payload = { ...partial, taskNotifyTz: Intl.DateTimeFormat().resolvedOptions().timeZone }
-      await api.settings.update(payload).catch(console.error)
+      await api.settings.update(payload).catch(notifyError)
     }
     const { slot, slotDate } = getActiveSlotDate(next.rotateHour, next.rotateMinute, next.workWeek)
     if (slotDate !== activeSlotDate) {
@@ -520,8 +442,10 @@ export default function App() {
   }
 
   async function handleDeleteTodo(id: string) {
-    await api.todos.remove(id).catch(console.error)
+    const gone = todos.find(t => t.id === id)
+    await api.todos.remove(id).catch(notifyError)
     setTodos(prev => prev.filter(t => t.id !== id))
+    if (gone) notify(`Deleted "${gone.text}"`, 'info', 6000, { label: 'Undo', run: () => { void latest.current.addTodo(gone.text, gone.due_date ?? undefined) } })
   }
 
   // Template handlers
@@ -553,6 +477,7 @@ export default function App() {
 
   async function handleDeleteTemplate(id: string) {
     const slot = selectedSlot
+    const gone = templates[slot]?.find(t => t.id === id)
     if (isAuth) {
       await api.templates.remove(id)
     }
@@ -571,6 +496,7 @@ export default function App() {
         }
       })
     }
+    if (gone) notify(`Deleted "${gone.text}"`, 'info', 6000, { label: 'Undo', run: () => { void latest.current.addTemplate(gone.text, [slot]) } })
   }
 
   async function handleEditTemplate(id: string, text: string) {
@@ -617,7 +543,7 @@ export default function App() {
       return next
     })
     if (isAuth) {
-      await api.templates.reorder(slot, reordered.map(t => t.id)).catch(console.error)
+      await api.templates.reorder(slot, reordered.map(t => t.id)).catch(notifyError)
     }
   }
 
@@ -639,7 +565,7 @@ export default function App() {
       [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), completions: next },
     }))
     if (isAuth) {
-      await api.daily.toggleTemplate(id, slotDate, !done).catch(console.error)
+      await api.daily.toggleTemplate(id, slotDate, !done).catch(notifyError)
     } else {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, { ...d, completions: next })
@@ -651,17 +577,19 @@ export default function App() {
     const slotDate = activeSlotDate
     const current = dailyData[slotDate]?.skips ?? []
     const skipped = current.includes(id)
+    const text = templates[selectedSlot]?.find(t => t.id === id)?.text
     const next = skipped ? current.filter(s => s !== id) : [...current, id]
     setDailyData(prev => ({
       ...prev,
       [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), skips: next },
     }))
     if (isAuth) {
-      await api.daily.skipTemplate(id, slotDate, !skipped).catch(console.error)
+      await api.daily.skipTemplate(id, slotDate, !skipped).catch(notifyError)
     } else {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, { ...d, skips: next })
     }
+    if (!skipped && text) notify(`Hidden for today: "${text}"`, 'info', 6000, { label: 'Undo', run: () => { void latest.current.skipTemplate(id) } })
   }
 
   async function handleLinkTemplate(id: string, targetId: string) {
@@ -680,7 +608,7 @@ export default function App() {
   }
 
   async function handleUnlinkTemplate(id: string) {
-    await api.templates.unlink(id).catch(console.error)
+    await api.templates.unlink(id).catch(notifyError)
     setTemplates(prev => {
       const result = { ...prev } as Record<Slot, Template[]>
       for (const slot of Object.keys(result) as Slot[]) {
@@ -780,7 +708,7 @@ export default function App() {
     setCalendarAdditions(prev => prev.map(a => a.id === id ? { ...a, completed: !a.completed } : a))
     if (isAuth) {
       if (!id.startsWith('temp-')) {
-        await api.daily.toggleAddition(id, !target.completed).catch(console.error)
+        await api.daily.toggleAddition(id, !target.completed).catch(notifyError)
       }
     } else {
       const d = storage.getDaily(target.slot_date)
@@ -793,6 +721,7 @@ export default function App() {
 
   async function handleDeleteAddition(id: string) {
     const slotDate = selectedSlotDate
+    const gone = dailyData[slotDate]?.additions.find(a => a.id === id)
     if (isAuth) {
       await api.daily.removeAddition(id)
     }
@@ -807,6 +736,7 @@ export default function App() {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, { ...d, additions: d.additions.filter(a => a.id !== id) })
     }
+    if (gone) notify(`Deleted "${gone.text}"`, 'info', 6000, { label: 'Undo', run: () => { void latest.current.addAddition(gone.text) } })
   }
 
   async function handleEditAddition(id: string, text: string) {
@@ -866,7 +796,7 @@ export default function App() {
       },
     }))
     if (isAuth) {
-      await api.daily.toggleAddition(id, !a.completed).catch(console.error)
+      await api.daily.toggleAddition(id, !a.completed).catch(notifyError)
     } else {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, {
@@ -932,7 +862,7 @@ export default function App() {
       [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), eventCompletions: next },
     }))
     if (isAuth) {
-      await api.events.toggle(eventId, slotDate, !done).catch(console.error)
+      await api.events.toggle(eventId, slotDate, !done).catch(notifyError)
     } else {
       storage.toggleEventCompletion(eventId, slotDate, !done)
     }
@@ -974,82 +904,109 @@ export default function App() {
     + selectedDailyData.additions.length
     + selectedEvents.length
 
+  const visibleGroups = GROUPS
+    .map(g => {
+      const visible = g.views.filter(v => isViewVisible(v, isAuth, isOwner))
+      // A group with a single reachable view (e.g. News for guests) is named after it.
+      const solo = visible.length === 1 && g.views.length > 1 ? visible[0] : null
+      return { ...g, visible, label: solo ? VIEW_LABELS[solo] : g.label, icon: solo ? VIEW_ICONS[solo] : g.icon }
+    })
+    .filter(g => g.visible.length > 0)
+  const currentGroup = visibleGroups.find(g => g.id === groupOf(view).id)
+  const subViews = currentGroup && currentGroup.id !== 'today' ? currentGroup.visible : []
+  const goGroup = (g: (typeof visibleGroups)[number]) => { if (groupOf(view).id !== g.id) setView(g.visible[0]) }
+  const groupBadge = (id: string) => (id === 'inbox' ? mailUnread : 0)
+
+  // Undo toasts outlive the render that created them; they call the newest handlers through this ref.
+  const latest = useRef({ addTodo: handleAddTodo, addTemplate: handleAddTemplate, addAddition: handleAddAddition, skipTemplate: handleSkipTemplate })
+  latest.current = { addTodo: handleAddTodo, addTemplate: handleAddTemplate, addAddition: handleAddAddition, skipTemplate: handleSkipTemplate }
+
+  const shiftMonth = (delta: number) => setCalendarMonth(prev => {
+    const d = new Date(prev.year, prev.month - 1 + delta, 1)
+    return { year: d.getFullYear(), month: d.getMonth() + 1 }
+  })
+
+  // Keyboard shortcuts (desktop): g t/c/i/l/s go to a section, n new task, / search mail, [ ] month, ? help.
+  const keys = useRef({ view, goGroup: (_id: string) => {}, shiftMonth })
+  keys.current = { view, shiftMonth, goGroup: id => { const g = visibleGroups.find(x => x.id === id); if (g) goGroup(g) } }
+  useEffect(() => {
+    let gAt = 0
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return
+      if (document.querySelector('.modal-overlay')) return
+      const k = e.key
+      if (gAt && Date.now() - gAt < 1000) {
+        gAt = 0
+        const target = ({ t: 'today', c: 'calendar', i: 'inbox', l: 'life', s: 'settings' } as Record<string, string>)[k]
+        if (target) { e.preventDefault(); keys.current.goGroup(target) }
+        return
+      }
+      if (k === 'g') { gAt = Date.now(); return }
+      if (k === 'n' && keys.current.view === 'routine') {
+        const el = document.querySelector<HTMLInputElement>('.add-task-input')
+        if (el) { e.preventDefault(); el.focus() }
+      } else if (k === '/' && keys.current.view === 'mail') {
+        const el = document.querySelector<HTMLInputElement>('.mail-search-input')
+        if (el) { e.preventDefault(); el.focus() }
+      } else if ((k === '[' || k === ']') && keys.current.view === 'calendar') {
+        keys.current.shiftMonth(k === '[' ? -1 : 1)
+      } else if (k === '?') {
+        notify('g then t/c/i/l/s: go to Today/Calendar/Inbox/Life/Settings · n: new task · /: search mail · j/k/Enter/e/s: move, open, read, star in the inbox · [ ]: previous/next month', 'info', 10000)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <div className="app">
+      <LoadingBar />
       {/* Left rail navigation */}
-      <nav className="app-rail">
+      <nav className="app-rail" aria-label="Views">
         <a href="https://kevinprk.com" className="rail-pi-mark" title="kevinprk.com">π</a>
-
-        <button
-          className={`rail-btn${view === 'routine' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('routine')} title="Routine"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-          </svg>
-        </button>
-        <button
-          className={`rail-btn${view === 'calendar' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('calendar')} title="Calendar"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-          </svg>
-        </button>
-        {isAuth && (
+        {visibleGroups.map(g => (
           <button
-            className={`rail-btn${view === 'mail' ? ' rail-btn-active' : ''}`}
-            onClick={() => setView('mail')} title="Mail"
+            key={g.id}
+            className={`rail-btn${currentGroup?.id === g.id ? ' rail-btn-active' : ''}`}
+            onClick={() => goGroup(g)}
+            title={g.label}
+            aria-label={g.label}
+            aria-current={currentGroup?.id === g.id ? 'page' : undefined}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-            </svg>
-            {mailUnread > 0 && (
-              <span className="rail-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>
+            <Icon name={g.icon} />
+            {groupBadge(g.id) > 0 && (
+              <span className="rail-badge">{groupBadge(g.id) > 99 ? '99+' : groupBadge(g.id)}</span>
             )}
           </button>
-        )}
-        <button
-          className={`rail-btn${view === 'news' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('news')} title="News"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
-          </svg>
+        ))}
+        <div className="rail-spacer" />
+        <button className="rail-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} title="Toggle theme" aria-label="Toggle theme">
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
         </button>
-        {isOwner && (
-          <button
-            className={`rail-btn${view === 'assets' ? ' rail-btn-active' : ''}`}
-            onClick={() => setView('assets')} title="Assets"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
-            </svg>
-          </button>
-        )}
-        {isOwner && (
-          <button
-            className={`rail-btn${view === 'health' ? ' rail-btn-active' : ''}`}
-            onClick={() => setView('health')} title="Health"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
-            </svg>
-          </button>
-        )}
-        <button
-          className={`rail-btn${view === 'settings' ? ' rail-btn-active' : ''}`}
-          onClick={() => setView('settings')} title="Settings"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-          </svg>
-        </button>
-
       </nav>
 
+      {/* Phones: slim top bar with the π mark, current section and the theme toggle (desktop has the rail) */}
+      <header className="app-topbar">
+        <a href="https://kevinprk.com" className="rail-pi-mark" title="kevinprk.com" aria-label="kevinprk.com">π</a>
+        <span className="app-topbar-title">{VIEW_LABELS[view]}</span>
+        <button className="icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
+          <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
+        </button>
+      </header>
+
       <main className="app-main">
+        {subViews.length > 1 && (
+          <nav className="view-tabs" aria-label={`${currentGroup?.label} pages`}>
+            {subViews.map(v => (
+              <button key={v} className={`view-tab${view === v ? ' active' : ''}`} onClick={() => setView(v)} aria-current={view === v ? 'page' : undefined}>
+                {VIEW_LABELS[v]}
+                {v === 'mail' && mailUnread > 0 && <span className="view-tab-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>}
+              </button>
+            ))}
+          </nav>
+        )}
         {view === 'routine' ? (
           <>
             {/* Date hero / Goals header */}
@@ -1057,7 +1014,11 @@ export default function App() {
               {routineTab === 'tasks' ? (
                 <>
                   <span className="board-day-name">{SLOT_DAY_NAMES[selectedSlot] ?? selectedSlot}</span>
+                  <span className={`board-day-tag${selectedSlot === activeSlot ? ' board-day-tag-today' : ''}`}>
+                    {selectedSlot === activeSlot ? 'Today' : 'Upcoming'}
+                  </span>
                   <span className="board-date-mono">{selectedSlotDate}</span>
+                  {selectedSlot === activeSlot && <ResetCountdown rotateHour={settings.rotateHour} rotateMinute={settings.rotateMinute} />}
                 </>
               ) : (
                 <span className="board-day-name">Goals</span>
@@ -1065,7 +1026,11 @@ export default function App() {
               <div className="rail-spacer" />
               {routineTab === 'tasks' && boardTotal > 0 && (
                 <span className="board-progress-count">
-                  <span className="board-progress-done">{boardDone}</span>/{boardTotal}
+                  {boardDone === boardTotal ? (
+                    <span className="board-progress-done board-all-done"><Icon name="check" size={14} /> All done</span>
+                  ) : (
+                    <><span className="board-progress-done">{boardDone}</span>/{boardTotal}</>
+                  )}
                 </span>
               )}
               {routineTab === 'tasks' && boardTotal > 0 && (
@@ -1073,13 +1038,13 @@ export default function App() {
                   <div className="board-progress-fill" style={{ width: `${boardDone / boardTotal * 100}%` }} />
                 </div>
               )}
-              {isAuth && <div className="routine-tab-toggle">
+              {isAuth && <div className="view-tabs view-tabs-inline">
                 <button
-                  className={`routine-tab-btn${routineTab === 'tasks' ? ' routine-tab-active' : ''}`}
+                  className={`view-tab${routineTab === 'tasks' ? ' active' : ''}`}
                   onClick={() => setRoutineTab('tasks')}
                 >Tasks</button>
                 <button
-                  className={`routine-tab-btn${routineTab === 'goals' ? ' routine-tab-active' : ''}`}
+                  className={`view-tab${routineTab === 'goals' ? ' active' : ''}`}
                   onClick={() => setRoutineTab('goals')}
                 >Goals</button>
               </div>}
@@ -1103,10 +1068,7 @@ export default function App() {
                     aria-label="Sync"
                     title="Sync"
                   >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                      style={{ animation: boardSyncing ? 'mail-spin 1s linear infinite' : undefined }}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                    </svg>
+                    <Icon name="refresh" size={16} style={{ animation: boardSyncing ? 'mail-spin 1s linear infinite' : undefined }} />
                   </button>
                 </div>
 
@@ -1119,8 +1081,6 @@ export default function App() {
                     templates={selectedTemplates}
                     additions={selectedDailyData.additions}
                     calendarEvents={selectedEvents}
-                    rotateHour={settings.rotateHour}
-                    rotateMinute={settings.rotateMinute}
                     slotLabels={getSlotLabels(settings.workWeek)}
                     onToggleTemplate={handleToggleTemplate}
                     onSkipTemplate={handleSkipTemplate}
@@ -1158,16 +1118,8 @@ export default function App() {
             events={monthEvents}
             additions={monthAdditions}
             selectedDate={selectedCalendarDate}
-            onPrevMonth={() => setCalendarMonth(prev => {
-              const m = prev.month === 1 ? 12 : prev.month - 1
-              const y = prev.month === 1 ? prev.year - 1 : prev.year
-              return { year: y, month: m }
-            })}
-            onNextMonth={() => setCalendarMonth(prev => {
-              const m = prev.month === 12 ? 1 : prev.month + 1
-              const y = prev.month === 12 ? prev.year + 1 : prev.year
-              return { year: y, month: m }
-            })}
+            onPrevMonth={() => shiftMonth(-1)}
+            onNextMonth={() => shiftMonth(1)}
             todos={todos}
             onDayClick={date => { setSelectedCalendarDate(prev => prev === date ? null : date); setEditingEventId(null) }}
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
@@ -1227,58 +1179,18 @@ export default function App() {
         />
       )}
 
+      <ToastHost />
+      <DialogHost />
+
       {/* Bottom tab bar — mobile only */}
-      <nav className="app-bottom-nav">
-        <button className={`bottom-nav-btn${view === 'routine' ? ' bottom-nav-active' : ''}`} onClick={() => setView('routine')}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-          </svg>
-          <span>Routine</span>
-        </button>
-        <button className={`bottom-nav-btn${view === 'calendar' ? ' bottom-nav-active' : ''}`} onClick={() => setView('calendar')}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
-          </svg>
-          <span>Calendar</span>
-        </button>
-        {isAuth && (
-          <button className={`bottom-nav-btn${view === 'mail' ? ' bottom-nav-active' : ''}`} onClick={() => setView('mail')}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-            </svg>
-            {mailUnread > 0 && <span className="bottom-nav-badge">{mailUnread > 99 ? '99+' : mailUnread}</span>}
-            <span>Mail</span>
+      <nav className="app-bottom-nav" aria-label="Views">
+        {visibleGroups.map(g => (
+          <button key={g.id} className={`bottom-nav-btn${currentGroup?.id === g.id ? ' bottom-nav-active' : ''}`} onClick={() => goGroup(g)} aria-current={currentGroup?.id === g.id ? 'page' : undefined}>
+            <Icon name={g.icon} />
+            {groupBadge(g.id) > 0 && <span className="bottom-nav-badge">{groupBadge(g.id) > 99 ? '99+' : groupBadge(g.id)}</span>}
+            <span>{g.label}</span>
           </button>
-        )}
-        <button className={`bottom-nav-btn${view === 'news' ? ' bottom-nav-active' : ''}`} onClick={() => setView('news')}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
-          </svg>
-          <span>News</span>
-        </button>
-        {isOwner && (
-          <button className={`bottom-nav-btn${view === 'assets' ? ' bottom-nav-active' : ''}`} onClick={() => setView('assets')}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
-            </svg>
-            <span>Assets</span>
-          </button>
-        )}
-        {isOwner && (
-          <button className={`bottom-nav-btn${view === 'health' ? ' bottom-nav-active' : ''}`} onClick={() => setView('health')}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
-            </svg>
-            <span>Health</span>
-          </button>
-        )}
-        <button className={`bottom-nav-btn${view === 'settings' ? ' bottom-nav-active' : ''}`} onClick={() => setView('settings')}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-          </svg>
-          <span>Settings</span>
-        </button>
+        ))}
       </nav>
     </div>
   )

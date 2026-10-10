@@ -39,21 +39,21 @@ export default function StepUpBar({ unlocked, busy, remaining, masked, onToggleM
   if (!unlocked) {
     return (
       <div className="assets-topbar">
-        <span className="assets-status-chip"><LockIcon /> 데이터가 가려져 있습니다</span>
+        <span className="assets-status-chip"><LockIcon /> Data is hidden</span>
         <div className="assets-topbar-actions">
-          <button className="btn-primary btn-sm" onClick={onUnlock} disabled={busy}>패스키로 표시</button>
+          <button className="btn-primary btn-sm" onClick={onUnlock} disabled={busy}>Show with passkey</button>
         </div>
       </div>
     )
   }
   return (
     <div className="assets-topbar">
-      <span className="assets-status-chip">인증됨 · {formatRemaining(remaining)} 남음</span>
+      <span className="assets-status-chip">Verified · {formatRemaining(remaining)} left</span>
       <div className="assets-topbar-actions">
         <button className="btn-ghost btn-sm" onClick={onToggleMask}>
-          {masked ? <EyeIcon /> : <EyeSlashIcon />} {masked ? '표시' : '숨기기'}
+          {masked ? <EyeIcon /> : <EyeSlashIcon />} {masked ? 'Show' : 'Hide'}
         </button>
-        <button className="btn-ghost btn-sm" onClick={onLock}>잠금</button>
+        <button className="btn-ghost btn-sm" onClick={onLock}>Lock</button>
       </div>
     </div>
   )

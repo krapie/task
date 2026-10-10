@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Settings, ExportData, PushDevice } from '../types'
 import { api } from '../lib/api'
+import { confirmDialog } from '../lib/notify'
 
 interface SettingsPanelProps {
   settings: Settings
@@ -124,7 +125,7 @@ function NotificationsSection({ isAuth }: { isAuth: boolean }) {
   }
 
   async function removeDevice(d: PushDevice) {
-    if (!confirm(`Stop email notifications to ${deviceLabel(d)}?`)) return
+    if (!(await confirmDialog({ title: 'Remove device', body: `Stop email notifications to ${deviceLabel(d)}?`, confirmLabel: 'Remove', danger: true }))) return
     try {
       if (d.endpoint === endpoint) {
         const reg = await navigator.serviceWorker.ready

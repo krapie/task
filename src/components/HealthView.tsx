@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import StepUpBar from './StepUpBar'
+import { Empty, Meter } from './Ui'
 import type { HealthSummary } from '../types'
 
 const MASK = '••••'
@@ -9,7 +10,7 @@ const MASK = '••••'
 function hoursText(h: number | null | undefined): string {
   if (h == null) return '—'
   const total = Math.round(h * 60)
-  return `${Math.floor(total / 60)}시간 ${total % 60}분`
+  return `${Math.floor(total / 60)}h ${total % 60}m`
 }
 
 // 5.94 min/km -> 5'56"
@@ -21,16 +22,40 @@ function paceText(p: number | null): string {
 
 function kst(iso: string | null | undefined, opts: Intl.DateTimeFormatOptions): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', ...opts })
+  return new Date(iso).toLocaleString('en-US', { timeZone: 'Asia/Seoul', ...opts })
 }
 
 function num(n: number | null | undefined, suffix = ''): string {
-  return n == null ? '—' : `${n.toLocaleString('ko-KR')}${suffix}`
+  return n == null ? '—' : `${n.toLocaleString('en-US')}${suffix}`
 }
 
 function ofGoal(value: number | null | undefined, goal: number | null | undefined, unit: string): string {
   if (value == null) return '—'
-  return goal ? `${value.toLocaleString('ko-KR')} / ${goal.toLocaleString('ko-KR')}${unit}` : `${value.toLocaleString('ko-KR')}${unit}`
+  return goal ? `${value.toLocaleString('en-US')} / ${goal.toLocaleString('en-US')}${unit}` : `${value.toLocaleString('en-US')}${unit}`
+}
+
+const STAGES = [
+  { key: 'deepH', label: 'Deep', shade: 'var(--kp-fg)' },
+  { key: 'coreH', label: 'Core', shade: 'var(--kp-fg-3)' },
+  { key: 'remH', label: 'REM', shade: 'var(--kp-fg-4)' },
+  { key: 'awakeH', label: 'Awake', shade: 'var(--kp-border-strong)' },
+] as const
+
+function SleepStages({ night }: { night: NonNullable<HealthSummary['lastNight']> }) {
+  const total = STAGES.reduce((sum, st) => sum + (night[st.key] ?? 0), 0)
+  if (!total) return null
+  return (
+    <>
+      <div className="sleep-bar" aria-hidden="true">
+        {STAGES.map(st => (night[st.key] ? <span key={st.key} style={{ flex: night[st.key]!, background: st.shade }} /> : null))}
+      </div>
+      <ul className="sleep-legend">
+        {STAGES.map(st => (
+          <li key={st.key}><i style={{ background: st.shade }} />{st.label} {hoursText(night[st.key])}</li>
+        ))}
+      </ul>
+    </>
+  )
 }
 
 interface HealthViewProps {
@@ -57,7 +82,7 @@ export default function HealthView({ isAuth }: HealthViewProps) {
     setError(null)
     try {
       const s = await api.health.getSummary()
-      if (!s) setError('아직 가져온 건강 데이터가 없습니다')
+      if (!s) setError('No health data imported yet')
       setSummary(s)
     } catch (err) {
       handleError(err)
@@ -75,6 +100,15 @@ export default function HealthView({ isAuth }: HealthViewProps) {
   const day = summary?.day
   const week = summary?.week
 
+  if (!unlocked) {
+    return (
+      <div className="assets-view">
+        {error && <p className="assets-error">{error}</p>}
+        <Empty icon="lock" title="Health is locked" hint="Verify with your passkey to see your data. Everything stays hidden until then." action={{ label: 'Show with passkey', onClick: unlock, disabled: busy }} />
+      </div>
+    )
+  }
+
   return (
     <div className="assets-view">
       <StepUpBar
@@ -90,22 +124,22 @@ export default function HealthView({ isAuth }: HealthViewProps) {
       {error && <p className="assets-error">{error}</p>}
 
       <div className="assets-section">
-        <h3 className="assets-section-title">최근 7일 평균</h3>
+        <div className="section-label">7-day average</div>
         <div className="assets-stat-grid">
           <div className="assets-stat assets-stat-primary">
-            <span className="assets-stat-label">수면</span>
+            <span className="assets-stat-label">Sleep</span>
             <span className="assets-stat-value">{show(hoursText(week?.sleepAvgH))}</span>
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">걸음</span>
+            <span className="assets-stat-label">Steps</span>
             <span className="assets-stat-value">{show(num(week?.stepsAvg))}</span>
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">안정 시 심박수</span>
+            <span className="assets-stat-label">Resting HR</span>
             <span className="assets-stat-value">{show(num(week?.restingHr, ' bpm'))}</span>
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">심박 변이 (HRV)</span>
+            <span className="assets-stat-label">HRV</span>
             <span className="assets-stat-value">{show(num(week?.hrvMs, ' ms'))}</span>
           </div>
           <div className="assets-stat">
@@ -115,32 +149,42 @@ export default function HealthView({ isAuth }: HealthViewProps) {
         </div>
       </div>
 
+      {!hide && summary?.lastNight && (
+        <div className="assets-section">
+          <div className="section-label">Last night · {hoursText(summary.lastNight.asleepH)}</div>
+          <SleepStages night={summary.lastNight} />
+        </div>
+      )}
+
       <div className="assets-section">
-        <h3 className="assets-section-title">
-          활동 · {show(kst(summary?.asOf, { month: 'long', day: 'numeric', weekday: 'short' }))}
-        </h3>
+        <div className="section-label">
+          Activity · {show(kst(summary?.asOf, { month: 'long', day: 'numeric', weekday: 'short' }))}
+        </div>
         <div className="assets-stat-grid">
           <div className="assets-stat">
-            <span className="assets-stat-label">걸음</span>
+            <span className="assets-stat-label">Steps</span>
             <span className="assets-stat-value">{show(num(day?.steps))}</span>
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">활동 에너지</span>
+            <span className="assets-stat-label">Active energy</span>
             <span className="assets-stat-value">{show(ofGoal(day?.activeKcal, day?.activeGoal, ' kcal'))}</span>
+            {!hide && <Meter value={day?.activeKcal} max={day?.activeGoal} label="Active energy" />}
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">운동</span>
-            <span className="assets-stat-value">{show(ofGoal(day?.exerciseMin, day?.exerciseGoal, '분'))}</span>
+            <span className="assets-stat-label">Exercise</span>
+            <span className="assets-stat-value">{show(ofGoal(day?.exerciseMin, day?.exerciseGoal, ' min'))}</span>
+            {!hide && <Meter value={day?.exerciseMin} max={day?.exerciseGoal} label="Exercise" />}
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">서 있기</span>
-            <span className="assets-stat-value">{show(ofGoal(day?.standHours, day?.standGoal, '시간'))}</span>
+            <span className="assets-stat-label">Stand</span>
+            <span className="assets-stat-value">{show(ofGoal(day?.standHours, day?.standGoal, ' h'))}</span>
+            {!hide && <Meter value={day?.standHours} max={day?.standGoal} label="Stand" />}
           </div>
         </div>
       </div>
 
       <div className="assets-section">
-        <h3 className="assets-section-title">최근 러닝</h3>
+        <div className="section-label">Recent runs</div>
         <ul className="assets-category-list">
           {summary && !masked
             ? summary.runs.map(r => (
@@ -152,25 +196,25 @@ export default function HealthView({ isAuth }: HealthViewProps) {
             : [0, 1, 2].map(i => (
                 <li key={i}><span>{MASK}</span><span>{MASK}</span></li>
               ))}
-          {summary && !masked && summary.runs.length === 0 && <li><span>기록 없음</span><span /></li>}
+          {summary && !masked && summary.runs.length === 0 && <li><span>No runs recorded</span><span /></li>}
         </ul>
       </div>
 
       {unlocked && summary && (
         <div className="assets-section">
-          <h3 className="assets-section-title">데이터</h3>
+          <div className="section-label">Data</div>
           <p className="assets-sync-info">
-            내보낸 시각 {kst(summary.exportedAt, { dateStyle: 'medium', timeStyle: 'short' })}
-            {' · '}가져온 시각 {kst(summary.importedAt, { dateStyle: 'medium', timeStyle: 'short' })}
+            Exported {kst(summary.exportedAt, { dateStyle: 'medium', timeStyle: 'short' })}
+            {' · '}Imported {kst(summary.importedAt, { dateStyle: 'medium', timeStyle: 'short' })}
           </p>
           <p className="assets-locked-sub">
-            iPhone 건강 앱에서 내보낸 export.zip을 Drive의 health 폴더에 올리면 매시 15분에 반영됩니다.
+            Upload export.zip from the iPhone Health app to the health folder in Drive; it is picked up at 15 past each hour.
           </p>
         </div>
       )}
 
       <a className="assets-grafana-link" href="https://dashboard.kevinprk.com/d/health" target="_blank" rel="noreferrer">
-        Grafana에서 상세 보기 →
+        View details in Grafana →
       </a>
     </div>
   )

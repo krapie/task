@@ -1,0 +1,326 @@
+/* ==========================================================================
+   kevinprk — Colors & Type
+   Pure neutral palette. Sans body + mono accents. Light default, dark opt-in.
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* ----- Base neutral scale (true grays) ----- */
+  --kp-white:  #ffffff;
+  --kp-gray-50:  #fafafa;
+  --kp-gray-100: #f4f4f4;
+  --kp-gray-200: #e8e8e8;
+  --kp-gray-300: #d4d4d4;
+  --kp-gray-400: #a3a3a3;
+  --kp-gray-500: #737373;
+  --kp-gray-600: #525252;
+  --kp-gray-700: #404040;
+  --kp-gray-800: #262626;
+  --kp-gray-900: #171717;
+  --kp-black:    #0a0a0a;
+
+  /* ----- Semantic surfaces ----- */
+  --kp-bg:        var(--kp-white);
+  --kp-bg-subtle: var(--kp-gray-50);
+  --kp-bg-muted:  var(--kp-gray-100);
+  --kp-surface:   var(--kp-white);
+  --kp-overlay:   rgba(10, 10, 10, 0.04);
+
+  /* ----- Semantic foreground ----- */
+  --kp-fg:        var(--kp-black);     /* primary ink */
+  --kp-fg-1:      var(--kp-gray-900);  /* near-ink */
+  --kp-fg-2:      var(--kp-gray-600);  /* secondary */
+  --kp-fg-3:      var(--kp-gray-500);  /* tertiary / hint */
+  --kp-fg-4:      var(--kp-gray-400);  /* disabled / placeholder */
+  --kp-fg-on-dark: var(--kp-gray-50);
+
+  /* ----- Borders / dividers ----- */
+  --kp-border:        var(--kp-gray-200);
+  --kp-border-strong: var(--kp-gray-300);
+  --kp-border-faint:  var(--kp-gray-100);
+
+  /* ----- Interaction ----- */
+  --kp-accent:   var(--kp-black); /* the brand IS the ink */
+  --kp-link:     var(--kp-black);
+  --kp-focus-ring: rgba(10, 10, 10, 0.35);
+  --kp-hover-bg: rgba(10, 10, 10, 0.04);
+  --kp-press-bg: rgba(10, 10, 10, 0.08);
+
+  /* ----- Status (used sparingly, kept neutral-leaning) ----- */
+  --kp-success: #1f7a3a;
+  --kp-warning: #8a6300;
+  --kp-danger:  #a01b1b;
+  --kp-info:    #1f4f7a;
+
+  /* ----- Type families ----- */
+  --kp-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --kp-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --kp-font-serif: ui-serif, Georgia, "Times New Roman", serif;
+
+  /* ----- Type scale (modular, 1.2 minor third) ----- */
+  --kp-text-2xs:  12px;  /* readability floor: labels, badges, table headers, secondary diagram text */
+  --kp-text-ui:   14px;  /* dense UI: diagram node labels, code, terminal output, commands */
+  --kp-text-xs:   13px;
+  --kp-text-sm:   15px;
+  --kp-text-base: 17px;
+  --kp-text-md:   19px;
+  --kp-text-lg:   23px;
+  --kp-text-xl:   28px;
+  --kp-text-2xl:  36px;
+  --kp-text-3xl:  46px;
+  --kp-text-4xl:  58px;
+  --kp-text-5xl:  76px;
+
+  /* ----- Line heights ----- */
+  --kp-leading-tight:  1.15;
+  --kp-leading-snug:   1.3;
+  --kp-leading-normal: 1.5;
+  --kp-leading-relaxed: 1.65;
+
+  /* ----- Letter spacing ----- */
+  --kp-tracking-tight:  -0.02em;
+  --kp-tracking-snug:   -0.01em;
+  --kp-tracking-normal: 0;
+  --kp-tracking-wide:   0.04em;
+  --kp-tracking-mono:   -0.005em;
+
+  /* ----- Weights ----- */
+  /* Body defaults to Medium (500) — "Inter Medium" is the resting weight of the brand. */
+  --kp-weight-regular: 500;
+  --kp-weight-medium:  500;
+  --kp-weight-semi:    600;
+  --kp-weight-bold:    700;
+
+  /* ----- Spacing (4px base) ----- */
+  --kp-space-1:  4px;
+  --kp-space-2:  8px;
+  --kp-space-3:  12px;
+  --kp-space-4:  16px;
+  --kp-space-5:  24px;
+  --kp-space-6:  32px;
+  --kp-space-7:  48px;
+  --kp-space-8:  64px;
+  --kp-space-9:  96px;
+  --kp-space-10: 128px;
+
+  /* ----- Radii (kept tight; nothing fully pill except inputs of choice) ----- */
+  --kp-radius-none: 0;
+  --kp-radius-xs:   2px;
+  --kp-radius-sm:   4px;
+  --kp-radius-md:   6px;
+  --kp-radius-lg:   10px;
+  --kp-radius-full: 9999px;
+
+  /* ----- Shadows (subtle; ink-based, not blue) ----- */
+  --kp-shadow-xs: 0 1px 0 rgba(10, 10, 10, 0.04);
+  --kp-shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.06), 0 1px 1px rgba(10, 10, 10, 0.04);
+  --kp-shadow-md: 0 2px 6px rgba(10, 10, 10, 0.06), 0 1px 2px rgba(10, 10, 10, 0.04);
+  --kp-shadow-lg: 0 8px 24px rgba(10, 10, 10, 0.08), 0 2px 6px rgba(10, 10, 10, 0.04);
+
+  /* ----- Motion ----- */
+  --kp-ease: cubic-bezier(0.2, 0, 0, 1); /* @kind other */
+  --kp-ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* @kind other */
+  --kp-dur-fast:   120ms; /* @kind other */
+  --kp-dur-base:   180ms; /* @kind other */
+  --kp-dur-slow:   280ms; /* @kind other */
+
+  /* ----- Layout ----- */
+  --kp-content-width: 1280px;  /* page frame: header, main, footer */
+  --kp-wide-width:    1440px;  /* full-bleed tool layouts */
+  --kp-prose-width:   680px;   /* reading measure for long-form text */
+  --kp-page-pad:      clamp(16px, 2.5vw, 32px);
+  --kp-page-pad-mobile: 16px;
+}
+
+/* ===== Dark mode (opt-in via [data-theme="dark"] OR system preference) ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --kp-bg:        var(--kp-black);
+    --kp-bg-subtle: var(--kp-gray-900);
+    --kp-bg-muted:  var(--kp-gray-800);
+    --kp-surface:   #111111;
+    --kp-overlay:   rgba(255, 255, 255, 0.04);
+
+    --kp-fg:        var(--kp-gray-50);
+    --kp-fg-1:      var(--kp-gray-100);
+    --kp-fg-2:      var(--kp-gray-400);
+    --kp-fg-3:      var(--kp-gray-500);
+    --kp-fg-4:      var(--kp-gray-600);
+
+    --kp-border:        #2a2a2a;
+    --kp-border-strong: #3a3a3a;
+    --kp-border-faint:  #1f1f1f;
+
+    --kp-accent:    var(--kp-gray-50);
+    --kp-link:      var(--kp-gray-50);
+    --kp-focus-ring: rgba(245, 245, 245, 0.45);
+    --kp-hover-bg:  rgba(255, 255, 255, 0.05);
+    --kp-press-bg:  rgba(255, 255, 255, 0.09);
+
+    --kp-shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.4);
+    --kp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --kp-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.55);
+    --kp-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Explicit light override — wins over system-preference dark above. */
+[data-theme="light"] {
+  --kp-bg:        var(--kp-white);
+  --kp-bg-subtle: var(--kp-gray-50);
+  --kp-bg-muted:  var(--kp-gray-100);
+  --kp-surface:   var(--kp-white);
+  --kp-overlay:   rgba(10, 10, 10, 0.04);
+
+  --kp-fg:        var(--kp-black);
+  --kp-fg-1:      var(--kp-gray-900);
+  --kp-fg-2:      var(--kp-gray-600);
+  --kp-fg-3:      var(--kp-gray-500);
+  --kp-fg-4:      var(--kp-gray-400);
+
+  --kp-border:        var(--kp-gray-200);
+  --kp-border-strong: var(--kp-gray-300);
+  --kp-border-faint:  var(--kp-gray-100);
+
+  --kp-accent:    var(--kp-black);
+  --kp-link:      var(--kp-black);
+  --kp-focus-ring: rgba(10, 10, 10, 0.35);
+  --kp-hover-bg:  rgba(10, 10, 10, 0.04);
+  --kp-press-bg:  rgba(10, 10, 10, 0.08);
+
+  --kp-shadow-xs: 0 1px 0 rgba(10, 10, 10, 0.04);
+  --kp-shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.06), 0 1px 1px rgba(10, 10, 10, 0.04);
+  --kp-shadow-md: 0 2px 6px rgba(10, 10, 10, 0.06), 0 1px 2px rgba(10, 10, 10, 0.04);
+  --kp-shadow-lg: 0 8px 24px rgba(10, 10, 10, 0.08), 0 2px 6px rgba(10, 10, 10, 0.04);
+}
+
+[data-theme="dark"] {
+  --kp-bg:        var(--kp-black);
+  --kp-bg-subtle: var(--kp-gray-900);
+  --kp-bg-muted:  var(--kp-gray-800);
+  --kp-surface:   #111111;
+  --kp-overlay:   rgba(255, 255, 255, 0.04);
+
+  --kp-fg:        var(--kp-gray-50);
+  --kp-fg-1:      var(--kp-gray-100);
+  --kp-fg-2:      var(--kp-gray-400);
+  --kp-fg-3:      var(--kp-gray-500);
+  --kp-fg-4:      var(--kp-gray-600);
+
+  --kp-border:        #2a2a2a;
+  --kp-border-strong: #3a3a3a;
+  --kp-border-faint:  #1f1f1f;
+
+  --kp-accent:    var(--kp-gray-50);
+  --kp-link:      var(--kp-gray-50);
+  --kp-focus-ring: rgba(245, 245, 245, 0.45);
+  --kp-hover-bg:  rgba(255, 255, 255, 0.05);
+  --kp-press-bg:  rgba(255, 255, 255, 0.09);
+
+  --kp-shadow-xs: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --kp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --kp-shadow-md: 0 2px 8px rgba(0, 0, 0, 0.55);
+  --kp-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================================
+   Semantic typographic styles — apply or @extend these.
+   ============================================================ */
+
+.kp-display {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-5xl);
+  font-weight: var(--kp-weight-semi);
+  line-height: var(--kp-leading-tight);
+  letter-spacing: var(--kp-tracking-tight);
+  color: var(--kp-fg);
+}
+
+.kp-h1 {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-3xl);
+  font-weight: var(--kp-weight-semi);
+  line-height: var(--kp-leading-tight);
+  letter-spacing: var(--kp-tracking-tight);
+  color: var(--kp-fg);
+}
+
+.kp-h2 {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-2xl);
+  font-weight: var(--kp-weight-semi);
+  line-height: var(--kp-leading-snug);
+  letter-spacing: var(--kp-tracking-snug);
+  color: var(--kp-fg);
+}
+
+.kp-h3 {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-xl);
+  font-weight: var(--kp-weight-semi);
+  line-height: var(--kp-leading-snug);
+  color: var(--kp-fg);
+}
+
+.kp-h4 {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-lg);
+  font-weight: var(--kp-weight-medium);
+  line-height: var(--kp-leading-snug);
+  color: var(--kp-fg);
+}
+
+.kp-body {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-base);
+  font-weight: var(--kp-weight-regular);
+  line-height: var(--kp-leading-relaxed);
+  color: var(--kp-fg-1);
+}
+
+.kp-body-sm {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-sm);
+  line-height: var(--kp-leading-normal);
+  color: var(--kp-fg-2);
+}
+
+.kp-caption {
+  font-family: var(--kp-font-sans);
+  font-size: var(--kp-text-xs);
+  letter-spacing: var(--kp-tracking-wide);
+  text-transform: uppercase;
+  color: var(--kp-fg-3);
+}
+
+.kp-meta {
+  font-family: var(--kp-font-mono);
+  font-size: var(--kp-text-xs);
+  letter-spacing: var(--kp-tracking-mono);
+  color: var(--kp-fg-3);
+  font-feature-settings: "tnum";
+}
+
+.kp-code {
+  font-family: var(--kp-font-mono);
+  font-size: 0.92em;
+  letter-spacing: var(--kp-tracking-mono);
+  color: var(--kp-fg-1);
+  background: var(--kp-bg-muted);
+  padding: 0.12em 0.38em;
+  border-radius: var(--kp-radius-xs);
+}
+
+.kp-link {
+  color: var(--kp-link);
+  text-decoration: underline;
+  text-decoration-color: var(--kp-border-strong);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color var(--kp-dur-fast) var(--kp-ease);
+}
+.kp-link:hover {
+  text-decoration-color: currentColor;
+}

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
 import type { MailAccount, MailItem } from '../types'
+import { notifyError } from '../lib/notify'
+import { Empty, Loading } from './Ui'
+import { Icon } from './Icons'
 
 type Panel = 'inbox' | 'accounts'
 
@@ -368,26 +371,27 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
 
   async function handleMarkRead(item: MailItem) {
     if (item.read) return
-    await api.mail.markRead(item.id).catch(console.error)
+    const ok = await api.mail.markRead(item.id).then(() => true, e => { notifyError(e); return false })
+    if (!ok) return
     setItems(prev => prev.map(m => m.id === item.id ? { ...m, read: true } : m))
     if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, read: true } : prev)
   }
 
   async function handleMarkAllRead() {
     const unread = items.filter(m => !m.read)
-    await Promise.all(unread.map(m => api.mail.markRead(m.id).catch(console.error)))
+    await Promise.all(unread.map(m => api.mail.markRead(m.id).catch(notifyError)))
     setItems(prev => prev.map(m => ({ ...m, read: true })))
   }
 
-  async function handleToggleFlag(item: MailItem, e: React.MouseEvent) {
-    e.stopPropagation()
-    const { flagged } = await api.mail.toggleFlag(item.id).catch(() => ({ flagged: item.flagged }))
+  async function handleToggleFlag(item: MailItem, e?: React.MouseEvent) {
+    e?.stopPropagation()
+    const { flagged } = await api.mail.toggleFlag(item.id).catch(err => { notifyError(err); return { flagged: item.flagged } })
     setItems(prev => prev.map(m => m.id === item.id ? { ...m, flagged } : m))
     if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, flagged } : prev)
   }
 
   async function handleDeleteAccount(id: string) {
-    await api.mail.removeAccount(id).catch(console.error)
+    await api.mail.removeAccount(id).catch(notifyError)
     setAccounts(prev => prev.filter(a => a.id !== id))
     if (activeAccount === id) setActiveAccount(null)
   }
@@ -458,18 +462,45 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
 
   const showDetail = selectedItem !== null && panel === 'inbox'
 
+  // Keyboard: j/k move the cursor, Enter opens, e marks read, s flags (list view only, not while typing).
+  const [cursorId, setCursorId] = useState<string | null>(null)
+  const keyCtx = useRef({ active: false, list: displayedItems, cursor: cursorId, open: handleItemClick, read: handleMarkRead, flag: handleToggleFlag })
+  keyCtx.current = { active: isAuth && panel === 'inbox' && !showDetail, list: displayedItems, cursor: cursorId, open: handleItemClick, read: handleMarkRead, flag: handleToggleFlag }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const c = keyCtx.current
+      if (!c.active || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName) || t.isContentEditable)) return
+      if (document.querySelector('.modal-overlay')) return
+      const i = c.list.findIndex(m => m.id === c.cursor)
+      const cur = i >= 0 ? c.list[i] : null
+      if (e.key === 'j' || e.key === 'k') {
+        e.preventDefault()
+        const next = c.list[Math.max(0, Math.min(c.list.length - 1, i < 0 ? 0 : i + (e.key === 'j' ? 1 : -1)))]
+        if (!next) return
+        setCursorId(next.id)
+        document.querySelector(`[data-mail-id="${CSS.escape(next.id)}"]`)?.scrollIntoView({ block: 'nearest' })
+      } else if (cur && e.key === 'Enter') { e.preventDefault(); c.open(cur) }
+      else if (cur && e.key === 'e') { void c.read(cur) }
+      else if (cur && e.key === 's') { void c.flag(cur) }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
-    <div className="mail-inbox">
+    <div className="split-view">
       {/* Backdrop for mobile sidebar overlay */}
       {sidebarOpen && <div className="sidebar-mobile-backdrop" onClick={() => setSidebarOpen(false)} />}
 
       {/* Sidebar — in-flow on desktop, overlay on mobile */}
       {sidebarOpen && (
-        <div className="mail-sidebar">
-          <div className="mail-sidebar-header">Mail</div>
-          <div className="mail-nav">
+        <div className="split-sidebar">
+          <div className="split-sidebar-header">Mail</div>
+          <div className="split-nav">
             <button
-              className={`mail-nav-item${panel === 'inbox' && !showFlagged ? ' mail-nav-active' : ''}`}
+              className={`split-nav-item${panel === 'inbox' && !showFlagged ? ' split-nav-active' : ''}`}
               onClick={() => { setPanel('inbox'); setShowFlagged(false); setSelectedItem(null) }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -479,16 +510,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
               {unreadCount > 0 && <span className="mail-badge">{unreadCount}</span>}
             </button>
             <button
-              className={`mail-nav-item${showFlagged ? ' mail-nav-active' : ''}`}
+              className={`split-nav-item${showFlagged ? ' split-nav-active' : ''}`}
               onClick={() => { setShowFlagged(true); setPanel('inbox'); setSelectedItem(null) }}
             >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
-              </svg>
+              <Icon name="flag" size={16} />
               Flagged
             </button>
             <button
-              className={`mail-nav-item${panel === 'accounts' ? ' mail-nav-active' : ''}`}
+              className={`split-nav-item${panel === 'accounts' ? ' split-nav-active' : ''}`}
               onClick={() => { setPanel('accounts'); setShowFlagged(false); setSelectedItem(null) }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -518,16 +547,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
       )}
 
       {/* List pane — hidden when detail is open */}
-      <div className={`mail-main${showDetail ? ' mail-main-hidden' : ''}`}>
+      <div className={`split-main${showDetail ? ' mail-main-hidden' : ''}`}>
         {panel === 'inbox' ? (
           <>
-            <div className="mail-toolbar">
+            <div className="split-toolbar">
               <button className="icon-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
-                </svg>
+                <Icon name="sidebar" size={16} />
               </button>
-              <span className="mail-toolbar-title">
+              <span className="split-toolbar-title">
                 {showFlagged ? 'Flagged' : activeAccount ? accounts.find(a => a.id === activeAccount)?.label : 'Inbox'}
               </span>
               {!showFlagged && unreadCount > 0 && (
@@ -540,10 +567,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                 </button>
               )}
               <button className="icon-btn" onClick={handleSync} disabled={syncing} aria-label="Sync">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                  style={{ animation: syncing ? 'mail-spin 1s linear infinite' : undefined }}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
+                <Icon name="refresh" size={16} style={{ animation: syncing ? 'mail-spin 1s linear infinite' : undefined }} />
               </button>
             </div>
 
@@ -568,15 +592,27 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
             </div>
 
             {loading ? (
-              <div className="mail-empty">Loading…</div>
+              <div className="mail-empty"><Loading /></div>
             ) : items.length === 0 ? (
               <div className="mail-empty">
-                {accounts.length === 0
-                  ? 'Add an account to get started'
-                  : 'No messages. Sync to fetch new mail.'}
+                {accounts.length === 0 ? (
+                  <Empty
+                    icon="mail"
+                    title="No mail accounts yet"
+                    hint="Connect an IMAP account to read your mail here."
+                    action={{ label: 'Add account', onClick: () => { setPanel('accounts'); setShowFlagged(false); setSelectedItem(null) } }}
+                  />
+                ) : (
+                  <Empty
+                    icon="mail"
+                    title="Nothing here yet"
+                    hint="New mail shows up after a sync."
+                    action={{ label: syncing ? 'Syncing…' : 'Sync now', onClick: handleSync, disabled: syncing }}
+                  />
+                )}
               </div>
             ) : displayedItems.length === 0 ? (
-              <div className="mail-empty">No results for "{searchQuery}"</div>
+              <div className="mail-empty"><Empty compact icon="search" title={`No results for "${searchQuery}"`} /></div>
             ) : (
               <div className="mail-list">
                 {displayedItems.map(item => (
@@ -584,7 +620,8 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                     key={item.id}
                     role="button"
                     tabIndex={0}
-                    className={`mail-item${!item.read ? ' mail-item-unread' : ''}${selectedItem?.id === item.id ? ' mail-item-selected' : ''}`}
+                    className={`mail-item${!item.read ? ' mail-item-unread' : ''}${selectedItem?.id === item.id ? ' mail-item-selected' : ''}${cursorId === item.id ? ' mail-item-cursor' : ''}`}
+                    data-mail-id={item.id}
                     onClick={() => handleItemClick(item)}
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleItemClick(item) }}
                   >
@@ -598,16 +635,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                           aria-label="Mark as read"
                           title="Mark as read"
                         >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                          </svg>
+                          <Icon name="check" size={14} />
                         </button>
                       )}
                       <button
                         className={`flag-btn${item.flagged ? ' flag-btn-active' : ''}`}
                         onClick={e => handleToggleFlag(item, e)}
                         aria-label={item.flagged ? 'Unflag' : 'Flag'}
-                      >★</button>
+                      ><Icon name="star" size={16} /></button>
                     </div>
                     <div className="mail-item-subject">{item.subject}</div>
                     {item.snippet && <div className="mail-item-snippet">{item.snippet}</div>}
@@ -620,13 +655,11 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
           </>
         ) : (
           <div className="mail-accounts-panel">
-            <div className="mail-toolbar">
+            <div className="split-toolbar">
               <button className="icon-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Toggle sidebar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125C3.504 4.5 3 5.004 3 5.625v12.75c0 .621.504 1.125 1.125 1.125Z" />
-                </svg>
+                <Icon name="sidebar" size={16} />
               </button>
-              <span className="mail-toolbar-title">Mail accounts</span>
+              <span className="split-toolbar-title">Mail accounts</span>
               <div style={{ flex: 1 }} />
               {!showAddForm && (
                 <button className="btn-ghost btn-sm" onClick={() => setShowAddForm(true)}>
@@ -722,7 +755,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
           {translateError && <div className="mail-translate-error">{translateError}</div>}
           <div className="mail-detail-body">
             {bodyLoading ? (
-              <div className="mail-empty">Loading…</div>
+              <div className="mail-empty"><Loading /></div>
             ) : showTranslated && selectedItem.translated_html ? (
               <AutoIframe key={`${selectedItem.id}-translated`} srcdoc={buildSrcdoc(selectedItem.translated_html, isDark)} />
             ) : showTranslated && selectedItem.translated_body ? (

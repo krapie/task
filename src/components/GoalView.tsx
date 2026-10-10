@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import type { GoalPeriod, GoalCategory, GoalItem } from '../types'
+import { notifyError } from '../lib/notify'
+import { Empty, Loading } from './Ui'
 
 function currentHalf(): { year: number; half: 1 | 2 } {
   const now = new Date()
@@ -75,7 +77,7 @@ export function GoalView({ isAuth }: GoalViewProps) {
           setPeriods(prev => [...prev, general])
         }
       })
-      .catch(console.error)
+      .catch(notifyError)
       .finally(() => setLoading(false))
   }, [isAuth])
 
@@ -97,13 +99,13 @@ export function GoalView({ isAuth }: GoalViewProps) {
   async function handleCreateHalf() {
     try {
       insertPeriod(await api.goals.createPeriod(selectedYear, selectedHalf))
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   async function handleCreateYear() {
     try {
       insertPeriod(await api.goals.createPeriod(selectedYear))
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   async function handleAddYear(e: React.FormEvent) {
@@ -117,7 +119,7 @@ export function GoalView({ isAuth }: GoalViewProps) {
       setSelectedYear(year)
       setNewYearVal('')
       setAddingYear(false)
-    } catch (err) { console.error(err) }
+    } catch (err) { notifyError(err) }
   }
 
   function updatePeriod(updated: GoalPeriod) {
@@ -125,12 +127,11 @@ export function GoalView({ isAuth }: GoalViewProps) {
   }
 
   function renderScopedBody(period: GoalPeriod | null, label: string, onInit: () => void) {
-    if (loading) return <div className="goal-empty">Loading…</div>
+    if (loading) return <div className="goal-empty"><Loading /></div>
     if (!period) {
       return (
         <div className="goal-empty-state">
-          <p className="goal-empty-label">No goals for {label}</p>
-          <button className="goal-init-btn" onClick={onInit}>Initialize {label}</button>
+          <Empty icon="flag" title={`No goals for ${label}`} hint="Start a list to track what you want to get done." action={{ label: `Initialize ${label}`, onClick: onInit }} />
         </div>
       )
     }
@@ -138,12 +139,11 @@ export function GoalView({ isAuth }: GoalViewProps) {
   }
 
   function renderYearBody() {
-    if (loading) return <div className="goal-empty">Loading…</div>
+    if (loading) return <div className="goal-empty"><Loading /></div>
     if (!yearPeriod) {
       return (
         <div className="goal-empty-state">
-          <p className="goal-empty-label">No goals for {selectedYear}</p>
-          <button className="goal-init-btn" onClick={handleCreateYear}>Initialize {selectedYear}</button>
+          <Empty icon="flag" title={`No goals for ${selectedYear}`} hint="Start a list to track what you want to get done this year." action={{ label: `Initialize ${selectedYear}`, onClick: handleCreateYear }} />
         </div>
       )
     }
@@ -215,7 +215,7 @@ export function GoalView({ isAuth }: GoalViewProps) {
           </div>
           <div className="goal-body">
             {loading || !generalPeriod ? (
-              <div className="goal-empty">Loading…</div>
+              <div className="goal-empty"><Loading /></div>
             ) : (
               <PeriodContent period={generalPeriod} onUpdate={updatePeriod} />
             )}
@@ -280,7 +280,7 @@ function PeriodContent({ period, onUpdate, rollupByName, readOnlyExtras }: Perio
       onUpdate({ ...period, categories: [...period.categories, cat] })
       setNewCatName('')
       setAddingCategory(false)
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   function updateCategory(updated: GoalCategory) {
@@ -291,7 +291,7 @@ function PeriodContent({ period, onUpdate, rollupByName, readOnlyExtras }: Perio
     try {
       await api.goals.deleteCategory(catId)
       onUpdate({ ...period, categories: period.categories.filter(c => c.id !== catId) })
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   return (
@@ -366,7 +366,7 @@ function CategoryBlock({ category, onUpdate, onDelete, rollupItems, readOnly }: 
       const updated = await api.goals.updateCategory(category.id, nameVal.trim())
       onUpdate({ ...category, name: updated.name })
       setEditingName(false)
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   async function handleAddItem(e: React.FormEvent) {
@@ -376,7 +376,7 @@ function CategoryBlock({ category, onUpdate, onDelete, rollupItems, readOnly }: 
       const item = await api.goals.createItem(category.id, newItemText.trim())
       onUpdate({ ...category, items: [...category.items, item] })
       setNewItemText('')
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   function updateItem(updated: GoalItem) {
@@ -387,7 +387,7 @@ function CategoryBlock({ category, onUpdate, onDelete, rollupItems, readOnly }: 
     try {
       await api.goals.deleteItem(itemId)
       onUpdate({ ...category, items: category.items.filter(i => i.id !== itemId) })
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   return (
@@ -488,14 +488,14 @@ function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
     try {
       const updated = await api.goals.updateItem(item.id, { completed: !item.completed })
       onUpdate(updated)
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   async function toggleCrossedOut() {
     try {
       const updated = await api.goals.updateItem(item.id, { crossed_out: !item.crossed_out })
       onUpdate(updated)
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   async function saveNote() {
@@ -504,7 +504,7 @@ function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
     try {
       const updated = await api.goals.updateItem(item.id, { note })
       onUpdate(updated)
-    } catch (e) { console.error(e) }
+    } catch (e) { notifyError(e) }
   }
 
   return (

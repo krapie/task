@@ -31,3 +31,33 @@ node server/index.js
 - **Health** — Apple Health summary (activity rings, 7-day averages, last night's sleep, recent runs) from the `health` DB on store-postgres, read as role `health_task`, which can only `SELECT` the one view `hk_task_summary` (no raw samples, no GPS routes). See `~/homeserver/docs/health-dashboard.md`
 - **Import / Export** — JSON export of all templates and board settings
 - **Dark mode** — manual toggle; PWA install supported with status bar following theme
+
+## Navigation
+
+Seven views fold into five nav groups (left rail on desktop, bottom bar on phones); groups with several views show underline sub-tabs. The theme toggle sits at the bottom of the rail (on phones it is in Settings).
+
+| Group | Views | Route |
+|-------|-------|-------|
+| Today | Routine (Tasks / Goals) | `#/today`, `#/today/goals` |
+| Calendar | Calendar | `#/calendar`, `#/calendar/2026-10` |
+| Inbox | Mail, News | `#/inbox/mail`, `#/inbox/news` |
+| Life | Assets, Health (owner only, passkey step-up) | `#/life/assets`, `#/life/health` |
+| Settings | Settings | `#/settings` |
+
+Every navigation is a history entry, so Back/Forward and reload keep your place. A group with one reachable view (News for guests) is named after it. The selected day tab is not in the URL: it follows the active slot. Legacy links with `?tab=<view>&mail=<id>` (push notifications) still work and are rewritten to the hash form (`src/lib/nav.ts`).
+
+Keyboard (desktop, not while typing): `g` then `t` / `c` / `i` / `l` / `s` jumps to Today / Calendar / Inbox / Life / Settings, `n` focuses the new-task input, `/` focuses mail search, `[` `]` change month in Calendar, `?` lists them. In the mail list `j` / `k` move the cursor, `Enter` opens, `e` marks read, `s` stars.
+
+## UI building blocks
+
+- `src/colors_and_type.css` is a copy of `~/homeserver/design/colors_and_type.css`; `index.css` only adds a dark lift for `--kp-danger` / `--kp-warning`. No hard-coded colors.
+- `components/Icons.tsx` holds every Heroicon (one place, 18px default). `components/Ui.tsx` has `Dialog`, `Meter`, `Loading` (skeleton), `Empty` and the hosts mounted once in `App` (`ToastHost`, `DialogHost`, `LoadingBar`).
+- `lib/notify.ts` is callable from anywhere without hooks: `notifyError` (use as `.catch(notifyError)`; logs and shows a toast), `notify`, `confirmDialog`, `promptDialog`. No native `confirm()` / `prompt()`.
+- `lib/inflight.ts` counts in-flight API requests for the thin top progress bar.
+- Mail and News share one split layout (`split-view`, `split-sidebar`, `split-nav`, `split-toolbar` in `index.css`).
+- `lib/recurrence.ts` expands recurring calendar events.
+- UI text is English throughout (including Assets and Health); holiday names on the calendar stay Korean.
+- Empty states use `Empty` (icon, title, hint, optional action) instead of a bare sentence; Assets and Health show one lock card with the passkey button until unlocked.
+- Deleting a task, bonus task or todo, or hiding a routine for today, shows an Undo toast (`notify(..., { label: 'Undo', run })`). Undo of a delete re-creates the item, so group links and past completions are not restored.
+- Phones get a slim top bar (π, current section, theme toggle). Row actions (edit, hide, delete, reorder) show on hover, on keyboard focus, and always on touch devices wider than 600px; on phones they appear after tapping the task text.
+- Text is never below 12px (`--kp-text-2xs`); body-level gray text uses `--kp-fg-3`, `--kp-fg-4` is for placeholders, disabled and icon-only controls.

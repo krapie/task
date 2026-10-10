@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { TemplateWithState, Addition, Slot, DailyEvent, TodoItem } from '../types'
-import { formatDayLabel, getNextReset, SLOTS } from '../lib/slots'
+import { SLOTS } from '../lib/slots'
+import { Empty } from './Ui'
 
 interface RoutineBoardProps {
   slot: Slot
@@ -9,8 +10,6 @@ interface RoutineBoardProps {
   isActive: boolean
   templates: TemplateWithState[]
   additions: Addition[]
-  rotateHour: number
-  rotateMinute: number
   slotLabels: Record<Slot, string>
   onToggleTemplate: (id: string) => void
   onSkipTemplate: (id: string) => void
@@ -287,25 +286,10 @@ function TodoItemRow({
 }
 
 // --- Shared icon components ---
-function useCountdown(rotateHour: number, rotateMinute: number) {
-  const [label, setLabel] = useState('')
-
-  useEffect(() => {
-    function tick() {
-      const next = getNextReset(rotateHour, rotateMinute)
-      const diff = next.getTime() - Date.now()
-      if (diff <= 0) { setLabel('resetting…'); return }
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      setLabel(`${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')} to reset`)
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [rotateHour, rotateMinute])
-
-  return label
+// Empty-state buttons: jump to the add input of the same section.
+function focusAdd(e: React.MouseEvent<HTMLButtonElement>) {
+  const input = e.currentTarget.closest('.task-section')?.querySelector<HTMLInputElement>('input') ?? document.querySelector<HTMLInputElement>('.add-task-input')
+  input?.focus()
 }
 
 function CheckIcon() {
@@ -624,8 +608,6 @@ export function RoutineBoard({
   isActive,
   templates,
   additions,
-  rotateHour,
-  rotateMinute,
   slotLabels,
   onToggleTemplate,
   onSkipTemplate,
@@ -648,7 +630,6 @@ export function RoutineBoard({
   onUnlinkTemplate,
   isAuth,
 }: RoutineBoardProps) {
-  const countdown = useCountdown(rotateHour, rotateMinute)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [revealedId, setRevealedId] = useState<string | null>(null)
   const [linkingId, setLinkingId] = useState<string | null>(null)
@@ -667,8 +648,6 @@ export function RoutineBoard({
   // Hiding only applies to the active day; upcoming slots always show every routine
   const hiddenTemplates = isActive ? templates.filter(t => t.skipped) : []
   const visibleCount = templates.length - hiddenTemplates.length
-  const completedCount = templates.filter(t => t.completed && !hiddenTemplates.includes(t)).length + additions.filter(a => a.completed).length + calendarEvents.filter(e => e.completed).length
-  const totalCount = visibleCount + additions.length + calendarEvents.length
 
   function startEdit(id: string) { setEditingId(id); setRevealedId(null) }
   function cancelEdit() { setEditingId(null) }
@@ -676,25 +655,6 @@ export function RoutineBoard({
 
   return (
     <div>
-      <div className="slot-header">
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 'var(--kp-text-base)', color: 'var(--kp-fg)' }}>
-            {slotDate ? formatDayLabel(slotDate) : slotLabels[slot]}
-          </div>
-          {slotDate && (
-            <div className="slot-date">
-              {slotDate}{!isActive && ' · upcoming'}
-            </div>
-          )}
-        </div>
-        <div className="slot-meta">
-          {isActive && totalCount > 0 && (
-            <span className="progress-label">{completedCount} / {totalCount}</span>
-          )}
-          {isActive && <span className="reset-countdown">{countdown}</span>}
-        </div>
-      </div>
-
       <div className="task-board">
         {/* Daily Tasks */}
         <div className="task-section">
@@ -812,9 +772,16 @@ export function RoutineBoard({
               })}
             </div>
           ) : (
-            <div className="empty-state">
-              {templates.length > 0 ? 'All daily tasks hidden today.' : 'No daily tasks yet. Add one below.'}
-            </div>
+            templates.length > 0 ? (
+              <Empty compact icon="eyeOff" title="All daily tasks are hidden today" hint="Restore them from the Hidden today list below." />
+            ) : (
+              <Empty
+                icon="routine"
+                title="No daily tasks yet"
+                hint="Daily tasks repeat on the days you pick and reset every morning."
+                action={{ label: 'Add a daily task', onClick: focusAdd }}
+              />
+            )
           )}
           {hiddenTemplates.length > 0 && (
             <div className="task-hidden">
@@ -885,9 +852,12 @@ export function RoutineBoard({
             </div>
           ) : (
             calendarEvents.length === 0 && (
-              <div className="empty-state">
-                {isActive ? 'No bonus tasks for today.' : `No bonus tasks for ${slotLabels[slot]}.`}
-              </div>
+              <Empty
+                icon="plus"
+                title={isActive ? 'No bonus tasks today' : `No bonus tasks for ${slotLabels[slot]}`}
+                hint="One-offs for just this day, like an errand or a call."
+                action={{ label: 'Add a bonus task', onClick: focusAdd }}
+              />
             )
           )}
           {calendarEvents.length > 0 && (
@@ -923,7 +893,12 @@ export function RoutineBoard({
             const today = todayDateStr()
             const visible = todos.filter(t => !(t.completed && t.due_date && t.due_date < today))
             return visible.length === 0 ? (
-              <div className="empty-state">No tasks yet.</div>
+              <Empty
+                icon="checkCircle"
+                title="Nothing to do"
+                hint="Tasks with a due date also show up on the calendar."
+                action={{ label: 'Add a task', onClick: focusAdd }}
+              />
             ) : (
               <div className="task-list">
                 {visible.map(t => (

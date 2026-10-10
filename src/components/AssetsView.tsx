@@ -3,9 +3,11 @@ import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import StepUpBar from './StepUpBar'
 import type { AssetSummary, FinanceStatus, FinanceNotifySettings } from '../types'
+import { promptDialog } from '../lib/notify'
+import { Empty, Meter } from './Ui'
 
 function formatKRW(n: number): string {
-  return `₩${n.toLocaleString('ko-KR')}`
+  return `₩${n.toLocaleString('en-US')}`
 }
 
 // Shown in every amount slot while locked or hidden.
@@ -64,7 +66,7 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
     setError(null)
     try {
       const result = await api.assets.sync()
-      setError(`동기화 완료: ${result.rowsTotal}건 (신규 ${result.rowsNew} / 갱신 ${result.rowsUpdated})`)
+      setError(`Synced ${result.rowsTotal} rows (${result.rowsNew} new, ${result.rowsUpdated} updated)`)
       const [s, st] = await Promise.all([api.assets.getSummary(), api.assets.getStatus()])
       setSummary(s)
       setStatus(st)
@@ -76,7 +78,7 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
   }
 
   async function handleSetPassword() {
-    const pw = window.prompt('뱅크샐러드 내보내기 비밀번호')
+    const pw = await promptDialog({ title: 'Export password', body: 'Password for the Banksalad export file.', password: true, confirmLabel: 'Save' })
     if (!pw) return
     setBusy(true)
     setError(null)
@@ -97,7 +99,17 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
   }
 
   const hide = masked || !summary
+  const allocTotal = summary ? summary.categoryBreakdown.reduce((t, c) => t + Math.abs(c.amount), 0) : 0
   const amount = (n: number | undefined) => (hide || n === undefined ? MASK : formatKRW(n))
+
+  if (!unlocked) {
+    return (
+      <div className="assets-view">
+        {error && <p className="assets-error">{error}</p>}
+        <Empty icon="lock" title="Assets are locked" hint="Verify with your passkey to see your numbers. Everything stays hidden until then." action={{ label: 'Show with passkey', onClick: unlock, disabled: busy }} />
+      </div>
+    )
+  }
 
   return (
     <div className="assets-view">
@@ -115,40 +127,40 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
 
       <div className="assets-stat-grid">
         <div className="assets-stat assets-stat-primary">
-          <span className="assets-stat-label">순자산</span>
+          <span className="assets-stat-label">Net worth</span>
           <span className="assets-stat-value">{amount(summary?.netWorth)}</span>
         </div>
         <div className="assets-stat">
-          <span className="assets-stat-label">총자산</span>
+          <span className="assets-stat-label">Total assets</span>
           <span className="assets-stat-value">{amount(summary?.totalAssets)}</span>
         </div>
         <div className="assets-stat">
-          <span className="assets-stat-label">총부채</span>
+          <span className="assets-stat-label">Total debt</span>
           <span className="assets-stat-value">{amount(summary?.totalDebt)}</span>
         </div>
         <div className="assets-stat">
-          <span className="assets-stat-label">신용점수</span>
+          <span className="assets-stat-label">Credit score</span>
           <span className="assets-stat-value">{hide ? '••••' : (summary?.creditScore ?? '—')}</span>
         </div>
       </div>
 
       <div className="assets-section">
-        <h3 className="assets-section-title">이번 달</h3>
+        <div className="section-label">This month</div>
         <div className="assets-stat-grid">
           <div className="assets-stat">
-            <span className="assets-stat-label">수입</span>
+            <span className="assets-stat-label">Income</span>
             <span className="assets-stat-value">{amount(summary?.thisMonth.income)}</span>
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">지출</span>
+            <span className="assets-stat-label">Spending</span>
             <span className={`assets-stat-value${hide ? '' : ' assets-negative'}`}>{amount(summary?.thisMonth.expense)}</span>
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">순저축</span>
+            <span className="assets-stat-label">Net savings</span>
             <span className="assets-stat-value">{amount(summary?.thisMonth.netSavings)}</span>
           </div>
           <div className="assets-stat">
-            <span className="assets-stat-label">투자 손익</span>
+            <span className="assets-stat-label">Investment P/L</span>
             <span className={`assets-stat-value${!hide && summary && summary.investment.pnl < 0 ? ' assets-negative' : ''}`}>
               {amount(summary?.investment.pnl)}
             </span>
@@ -157,13 +169,14 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       </div>
 
       <div className="assets-section">
-        <h3 className="assets-section-title">자산 구성</h3>
+        <div className="section-label">Allocation</div>
         <ul className="assets-category-list">
           {summary
             ? summary.categoryBreakdown.map(c => (
                 <li key={c.category}>
                   <span>{masked ? '••••' : c.category}</span>
                   <span>{amount(c.amount)}</span>
+                  {!hide && <Meter value={Math.abs(c.amount)} max={allocTotal} label={c.category} />}
                 </li>
               ))
             : [0, 1, 2].map(i => (
@@ -175,30 +188,30 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       {unlocked && (
         <>
           <div className="assets-section">
-            <h3 className="assets-section-title">동기화</h3>
+            <div className="section-label">Sync</div>
             {status && (
               <p className="assets-sync-info">
-                마지막 {status.lastIngest ? new Date(status.lastIngest.ingested_at).toLocaleString('ko-KR') : '없음'}
-                {' · '}{status.transactionCount.toLocaleString('ko-KR')}건
+                Last sync {status.lastIngest ? new Date(status.lastIngest.ingested_at).toLocaleString('en-US') : 'never'}
+                {' · '}{status.transactionCount.toLocaleString('en-US')} transactions
               </p>
             )}
-            <button className="btn-primary btn-sm" onClick={handleSync} disabled={busy}>지금 동기화</button>
+            <button className="btn-primary btn-sm" onClick={handleSync} disabled={busy}>Sync now</button>
           </div>
 
           <div className="assets-section">
-            <h3 className="assets-section-title">내보내기 비밀번호</h3>
-            <p className="assets-sync-info">{passwordSet ? '설정됨 ●●●●' : '설정되지 않음'}</p>
+            <div className="section-label">Export password</div>
+            <p className="assets-sync-info">{passwordSet ? 'Set ●●●●' : 'Not set'}</p>
             <button className="btn-ghost btn-sm" onClick={handleSetPassword} disabled={busy}>
-              {passwordSet ? '변경' : '설정'}
+              {passwordSet ? 'Change' : 'Set'}
             </button>
           </div>
 
           {notify && (
             <div className="assets-section">
-              <h3 className="assets-section-title">월간 알림</h3>
+              <div className="section-label">Monthly reminder</div>
               <div className="toggle-row">
                 <span className="toggle-label">
-                  매월 {notify.financeNotifyDay}일 {notify.financeNotifyHour.padStart(2, '0')}:{notify.financeNotifyMinute.padStart(2, '0')}
+                  Day {notify.financeNotifyDay} of each month, {notify.financeNotifyHour.padStart(2, '0')}:{notify.financeNotifyMinute.padStart(2, '0')}
                 </span>
                 <label className="toggle">
                   <input
@@ -215,13 +228,13 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       )}
 
       <div className="assets-section">
-        <h3 className="assets-section-title">패스키</h3>
-        <p className="assets-locked-sub">패스키는 kevinprk 계정에서 관리합니다 (모든 앱 공용).</p>
-        <a className="btn-ghost btn-sm" href={api.passkey.manageURL} target="_blank" rel="noreferrer">계정에서 패스키 관리</a>
+        <div className="section-label">Passkey</div>
+        <p className="assets-locked-sub">Passkeys are managed in your kevinprk account (shared by all apps).</p>
+        <a className="btn-ghost btn-sm" href={api.passkey.manageURL} target="_blank" rel="noreferrer">Manage passkeys</a>
       </div>
 
       <a className="assets-grafana-link" href="https://dashboard.kevinprk.com/d/finance-assets" target="_blank" rel="noreferrer">
-        Grafana에서 상세 보기 →
+        View details in Grafana →
       </a>
     </div>
   )

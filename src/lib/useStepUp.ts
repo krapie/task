@@ -45,7 +45,7 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void)
       lock()
     } else if (err instanceof Error && err.message === 'STEP_UP_FORBIDDEN') {
       lock()
-      setError('이 계정으로는 볼 수 없습니다')
+      setError('This account cannot view this data')
     } else {
       setError(err instanceof Error ? err.message : 'Failed to load')
     }

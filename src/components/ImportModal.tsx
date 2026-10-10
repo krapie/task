@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ExportData } from '../types'
+import { Dialog } from './Ui'
 
 interface ImportModalProps {
   onClose: () => void
@@ -48,12 +49,18 @@ export function ImportModal({ onClose, onImport }: ImportModalProps) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">Import tasks</span>
-        </div>
-        <div className="modal-body">
+    <Dialog
+      title="Import tasks"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn-primary" disabled={!data || loading} onClick={handleImport}>
+            {loading ? 'Importing…' : 'Import'}
+          </button>
+        </>
+      }
+    >
           <div className="field">
             <label className="field-label">File</label>
             <input
@@ -96,19 +103,6 @@ export function ImportModal({ onClose, onImport }: ImportModalProps) {
           )}
 
           {error && <div className="modal-error">{error}</div>}
-        </div>
-        <div className="modal-footer">
-          <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={!data || loading}
-            onClick={handleImport}
-          >
-            {loading ? 'Importing…' : 'Import'}
-          </button>
-        </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }

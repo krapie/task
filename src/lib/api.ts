@@ -1,3 +1,4 @@
+import { trackInflight } from './inflight'
 import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
@@ -57,7 +58,9 @@ function headers(token?: string | null): Record<string, string> {
   }
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+const req = <T,>(method: string, path: string, body?: unknown): Promise<T> => trackInflight(reqInner<T>(method, path, body))
+
+async function reqInner<T>(method: string, path: string, body?: unknown): Promise<T> {
   if (_token) await ensureToken()
   const res = await fetch(`/api${path}`, {
     method,

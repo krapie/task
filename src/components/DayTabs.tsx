@@ -19,7 +19,7 @@ export function DayTabs({ selected, active, onChange, slotLabels, slotOrder }: D
           aria-current={active === slot ? 'date' : undefined}
         >
           {slotLabels[slot]}
-          {active === slot && selected !== slot ? ' ·' : ''}
+          {active === slot && <span className="day-tab-dot" aria-hidden="true" />}
         </button>
       ))}
     </div>
