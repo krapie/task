@@ -74,7 +74,6 @@ export default function HealthView({ isAuth }: HealthViewProps) {
   const show = (text: string) => (hide ? MASK : text)
   const day = summary?.day
   const week = summary?.week
-  const night = summary?.lastNight
 
   return (
     <div className="assets-view">
@@ -91,30 +90,15 @@ export default function HealthView({ isAuth }: HealthViewProps) {
       {error && <p className="assets-error">{error}</p>}
 
       <div className="assets-section">
-        <h3 className="assets-section-title">지난밤 수면</h3>
-        <ul className="assets-category-list">
-          <li><span>수면 시간</span><span>{show(hoursText(night?.asleepH))}</span></li>
-          <li><span>깊은 수면</span><span>{show(hoursText(night?.deepH))}</span></li>
-          <li><span>코어 수면</span><span>{show(hoursText(night?.coreH))}</span></li>
-          <li><span>렘 수면</span><span>{show(hoursText(night?.remH))}</span></li>
-          <li><span>깨어 있음</span><span>{show(hoursText(night?.awakeH))}</span></li>
-          <li>
-            <span>취침 · 기상</span>
-            <span>{show(`${kst(night?.bedtime, { hour: '2-digit', minute: '2-digit' })} · ${kst(night?.wakeTime, { hour: '2-digit', minute: '2-digit' })}`)}</span>
-          </li>
-        </ul>
-      </div>
-
-      <div className="assets-section">
         <h3 className="assets-section-title">최근 7일 평균</h3>
         <div className="assets-stat-grid">
+          <div className="assets-stat assets-stat-primary">
+            <span className="assets-stat-label">수면</span>
+            <span className="assets-stat-value">{show(hoursText(week?.sleepAvgH))}</span>
+          </div>
           <div className="assets-stat">
             <span className="assets-stat-label">걸음</span>
             <span className="assets-stat-value">{show(num(week?.stepsAvg))}</span>
-          </div>
-          <div className="assets-stat">
-            <span className="assets-stat-label">수면</span>
-            <span className="assets-stat-value">{show(hoursText(week?.sleepAvgH))}</span>
           </div>
           <div className="assets-stat">
             <span className="assets-stat-label">안정 시 심박수</span>
@@ -136,7 +120,7 @@ export default function HealthView({ isAuth }: HealthViewProps) {
           활동 · {show(kst(summary?.asOf, { month: 'long', day: 'numeric', weekday: 'short' }))}
         </h3>
         <div className="assets-stat-grid">
-          <div className="assets-stat assets-stat-primary">
+          <div className="assets-stat">
             <span className="assets-stat-label">걸음</span>
             <span className="assets-stat-value">{show(num(day?.steps))}</span>
           </div>
