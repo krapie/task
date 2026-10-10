@@ -963,9 +963,15 @@ a { color: var(--kp-fg); text-decoration: none; }
   padding-top: var(--kp-space-3);
   border-top: 1px solid var(--kp-border);
 }
+/* Type switcher and its options (day chips / due date) share one row to keep the bar short. */
+.add-bar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--kp-space-2) var(--kp-space-3);
+}
 .add-bar-toggle {
   display: inline-flex;
-  align-self: flex-start;
   border: 1px solid var(--kp-border);
   border-radius: var(--kp-radius-sm);
   overflow: hidden;
@@ -982,12 +988,11 @@ a { color: var(--kp-fg); text-decoration: none; }
 .add-bar-type + .add-bar-type { border-left: 1px solid var(--kp-border); }
 .add-bar-type.selected { background: var(--kp-fg); color: var(--kp-bg); }
 .add-bar .add-task-input { flex: none; width: 100%; }
-.add-bar .date-picker { align-self: flex-start; }
 
 /* Routine list column */
 .routine-col {
-  flex: 1 1 640px;
-  max-width: 640px;
+  flex: 1 1 760px;
+  max-width: 760px;
   min-width: 0;
   max-height: 100%;
   min-height: 0;
@@ -1748,6 +1753,11 @@ a { color: var(--kp-fg); text-decoration: none; }
   /* Add bar: full-bleed type switcher on phones */
   .routine-col { max-width: none; flex-basis: auto; width: 100%; }
   .add-bar { border-top: none; padding-top: 0; margin-top: var(--kp-space-3); }
+  .add-bar-row { display: contents; }
+  .add-bar-toggle { order: 0; }
+  .add-bar .add-task-input { order: 1; }
+  .add-bar .day-toggle-row, .add-bar .date-picker { order: 2; }
+  .add-bar .add-task-btn-full { order: 3; }
   .add-bar-toggle {
     display: flex;
     align-self: stretch;
@@ -3518,7 +3528,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .settings-page-body { padding-inline: max(22px, calc((100% - 1100px) / 2)); align-content: start; }
 
 /* Assets / Health: two columns on wide windows so each fits one screen */
-@media (min-width: 1000px) {
+@media (min-width: 900px) {
   .assets-view {
     display: grid;
     grid-template-columns: 1fr 1fr;

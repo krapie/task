@@ -402,6 +402,7 @@ function AddBar({
 
   return (
     <div className="add-bar">
+      <div className="add-bar-row">
       <div className="add-bar-toggle">
         {(allowTodos ? ['daily', 'bonus', 'task'] as const : ['daily', 'bonus'] as const).map(t => (
           <button
@@ -414,14 +415,6 @@ function AddBar({
           </button>
         ))}
       </div>
-      <input
-        ref={inputRef}
-        className="add-task-input"
-        placeholder={placeholder}
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && submit()}
-      />
       {type === 'daily' && (
         <div className="day-toggle-row">
           {SLOTS.map(s => (
@@ -439,6 +432,15 @@ function AddBar({
       {type === 'task' && (
         <DatePicker value={dueDate} onChange={setDueDate} />
       )}
+      </div>
+      <input
+        ref={inputRef}
+        className="add-task-input"
+        placeholder={placeholder}
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && submit()}
+      />
       <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
     </div>
   )
