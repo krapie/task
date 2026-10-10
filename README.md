@@ -15,7 +15,7 @@ node server/index.js
 
 ## Features
 
-- **Routine board** — 6 day slots (Mon–Fri + Weekend) with recurring daily tasks that auto-reset at a configurable hour; drag to reorder; hide a routine for just the active day (it reappears at the next reset, is excluded from progress and the daily reminder, and can be restored from the collapsible "Hidden today" list)
+- **Routine board** — one list per day: Daily tasks, then Bonus, Tasks and today's Events as small labeled groups that only appear when they have items; a single add bar under the list switches between Daily / Bonus / Task. The list is left-aligned; when signed in on a window ≥1100px wide, a **Goals** panel beside it shows this half-year's goals (editable in place, with an *All goals* link to the full Goals view). Drag the separator between the list and the panel to resize them (arrow keys with the separator focused, Shift for bigger steps; double-click or Home resets); the width is remembered in this browser. The layout is sized for a 1200–1280 × 700 desktop window: the list scrolls inside while the add bar stays visible. 6 day slots (Mon–Fri + Weekend) with recurring daily tasks that auto-reset at a configurable hour; drag to reorder; hide a routine for just the active day (it reappears at the next reset, is excluded from progress and the daily reminder, and can be restored from the collapsible "Hidden today" list)
 - **Bonus tasks** — one-off task additions per day slot, separate from the recurring routine
 - **Tasks** — global todo list with optional due dates shown alongside the routine board
 - **Multi-day add** — add a daily task to multiple day slots at once from the quick-add input
@@ -57,7 +57,8 @@ Keyboard (desktop, not while typing): `g` then `t` / `c` / `i` / `l` / `s` jumps
 - Mail and News share one split layout (`split-view`, `split-sidebar`, `split-nav`, `split-toolbar` in `index.css`).
 - `lib/recurrence.ts` expands recurring calendar events.
 - UI text is English throughout (including Assets and Health); holiday names on the calendar stay Korean.
-- Empty states use `Empty` (icon, title, hint, optional action) instead of a bare sentence; Assets and Health show one lock card with the passkey button until unlocked.
+- Empty states use `Empty` (icon, title, hint, optional action) instead of a bare sentence; Assets and Health show one lock card with the passkey button until unlocked. Routine shows one compact empty state only when nothing at all is planned.
 - Deleting a task, bonus task or todo, or hiding a routine for today, shows an Undo toast (`notify(..., { label: 'Undo', run })`). Undo of a delete re-creates the item, so group links and past completions are not restored.
 - Phones get a slim top bar (π, current section, theme toggle). Row actions (edit, hide, delete, reorder) show on hover, on keyboard focus, and always on touch devices wider than 600px; on phones they appear after tapping the task text.
 - Text is never below 12px (`--kp-text-2xs`); body-level gray text uses `--kp-fg-3`, `--kp-fg-4` is for placeholders, disabled and icon-only controls.
+- Calendar week rows share the window height; the number of event lanes per day follows the row height (`maxLanes` in `CalendarView.tsx`), so 5- and 6-week months both fit without scrolling. Assets and Health use two columns from 1000px.

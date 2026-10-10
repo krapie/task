@@ -135,7 +135,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 /* Board view layout */
 .board-date-hero {
-  height: 52px;
+  height: 48px;
   border-bottom: 1px solid var(--kp-border);
   display: flex;
   align-items: center;
@@ -185,7 +185,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 
 .board-chips-bar {
-  height: 44px;
+  height: 40px;
   border-bottom: 1px solid var(--kp-border);
   display: flex;
   align-items: center;
@@ -195,12 +195,16 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 .board-content {
   flex: 1;
-  overflow-y: auto;
-  padding: 24px 28px;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: var(--kp-space-4) 28px;
 }
 
 .board-footer {
-  height: 36px;
+  height: 28px;
   border-top: 1px solid var(--kp-border);
   display: flex;
   align-items: center;
@@ -825,26 +829,6 @@ a { color: var(--kp-fg); text-decoration: none; }
   margin-bottom: var(--kp-space-3);
 }
 
-.task-board {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--kp-space-6);
-  align-items: start;
-}
-
-.task-section {
-  margin-bottom: 0;
-  min-width: 0;
-}
-
-/* Right column: Bonus Tasks + Tasks stacked directly with no grid gap */
-.task-board-right {
-  display: flex;
-  flex-direction: column;
-  gap: var(--kp-space-6);
-  min-width: 0;
-}
-
 /* Task Items */
 .task-list {
   display: flex;
@@ -969,10 +953,58 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .task-delete:hover { color: var(--kp-fg-2); }
 
-/* Mobile unified add input */
-.mobile-add {
-  display: none;
+/* Single add bar under the list (Daily | Bonus | Task) */
+.add-bar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--kp-space-2);
+  margin-top: var(--kp-space-4);
+  padding-top: var(--kp-space-3);
+  border-top: 1px solid var(--kp-border);
 }
+.add-bar-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+  overflow: hidden;
+}
+.add-bar-type {
+  height: 28px;
+  padding: 0 var(--kp-space-3);
+  font-size: var(--kp-text-xs);
+  font-weight: 600;
+  color: var(--kp-fg-3);
+  transition: background var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease);
+}
+.add-bar-type:hover { color: var(--kp-fg); }
+.add-bar-type + .add-bar-type { border-left: 1px solid var(--kp-border); }
+.add-bar-type.selected { background: var(--kp-fg); color: var(--kp-bg); }
+.add-bar .add-task-input { flex: none; width: 100%; }
+.add-bar .date-picker { align-self: flex-start; }
+
+/* Routine list column */
+.routine-col {
+  flex: 1 1 640px;
+  max-width: 640px;
+  min-width: 0;
+  max-height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* The list scrolls inside; the add bar below it stays visible. */
+.task-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--kp-space-5);
+}
+.task-group { min-width: 0; }
+
 
 /* Add task input */
 .add-task {
@@ -1669,7 +1701,6 @@ a { color: var(--kp-fg); text-decoration: none; }
   .board-day-name { font-size: 17px; }
   .board-chips-bar { padding: 0 12px; }
   .board-content { padding: var(--kp-space-4); }
-  .task-board { grid-template-columns: 1fr; gap: 20px; }
   .board-footer { display: none; }
 
   /* Day tabs: horizontally scrollable */
@@ -1700,7 +1731,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   input { font-size: 16px; }
 
   /* Larger touch targets */
-  .task-item { padding: var(--kp-space-4) 0; gap: var(--kp-space-2); }
+  .task-item { padding: var(--kp-space-3) 0; gap: var(--kp-space-2); }
   .task-checkbox { width: 20px; height: 20px; flex-shrink: 0; }
   .add-task-input { height: 40px; font-size: 16px; }
   .add-task-btn { height: 40px; }
@@ -1714,37 +1745,24 @@ a { color: var(--kp-fg); text-decoration: none; }
   .task-item.revealed .task-delete { display: flex; opacity: 1; }
   .task-item.revealed .task-reorder { display: flex; opacity: 1; }
 
-  /* Hide unified add desktop, show mobile */
-  .desktop-add { display: none; }
-  .mobile-add {
+  /* Add bar: full-bleed type switcher on phones */
+  .routine-col { max-width: none; flex-basis: auto; width: 100%; }
+  .add-bar { border-top: none; padding-top: 0; margin-top: var(--kp-space-3); }
+  .add-bar-toggle {
     display: flex;
-    flex-direction: column;
-    gap: var(--kp-space-2);
-    margin-top: var(--kp-space-3);
-  }
-  .mobile-add-toggle {
-    display: flex;
+    align-self: stretch;
+    border: none;
     border-top: 1px solid var(--kp-border);
     border-bottom: 1px solid var(--kp-border);
     border-radius: 0;
-    overflow: hidden;
     margin: 0 -16px;
   }
-  .mobile-add-type {
-    flex: 1;
-    height: 34px;
-    font-size: var(--kp-text-xs);
-    font-weight: 600;
-    color: var(--kp-fg-3);
-    background: none;
-    transition: background var(--kp-dur-fast) var(--kp-ease), color var(--kp-dur-fast) var(--kp-ease);
-  }
-  .mobile-add-type + .mobile-add-type { border-left: 1px solid var(--kp-border); }
-  .mobile-add-type.selected { background: var(--kp-fg); color: var(--kp-bg); }
+  .add-bar-type { flex: 1; height: 34px; }
+  .add-bar .date-picker { align-self: stretch; }
 
   /* DatePicker full-width inside mobile quick-add */
-  .mobile-add .date-picker { width: 100%; }
-  .mobile-add .date-picker-btn {
+  .add-bar .date-picker { width: 100%; }
+  .add-bar .date-picker-btn {
     width: 100%;
     height: 40px;
     font-size: 14px;
@@ -1766,10 +1784,12 @@ a { color: var(--kp-fg); text-decoration: none; }
 /* ── Calendar view ─────────────────────────────────────────────── */
 
 .calendar-view {
-  padding: var(--kp-space-4) 0;
+  padding: var(--kp-space-3) 0;
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .calendar-nav {
@@ -1777,7 +1797,8 @@ a { color: var(--kp-fg); text-decoration: none; }
   align-items: center;
   justify-content: center;
   gap: var(--kp-space-4);
-  padding-bottom: var(--kp-space-5);
+  padding-bottom: var(--kp-space-2);
+  flex-shrink: 0;
 }
 
 .calendar-month-label {
@@ -1792,6 +1813,9 @@ a { color: var(--kp-fg); text-decoration: none; }
   border: 1px solid var(--kp-border);
   border-radius: var(--kp-radius-md);
   overflow: hidden;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .calendar-headers {
@@ -1814,6 +1838,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .calendar-body {
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
 
 /*
@@ -1826,7 +1851,9 @@ a { color: var(--kp-fg); text-decoration: none; }
 .calendar-week {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-template-rows: 128px;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1 1 0;
+  min-height: 0;
   column-gap: 1px;
   background: var(--kp-border);
   border-bottom: 1px solid var(--kp-border);
@@ -2071,11 +2098,6 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 
 /* ── Calendar events in board bonus tasks ──────────────────────── */
-
-.calendar-events-list {
-  margin-top: var(--kp-space-2);
-  border-top: none;
-}
 
 .event-task-icon {
   color: var(--kp-fg-3);
@@ -3394,7 +3416,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 .grow { flex: 1; }
 
-/* Routine hero: Today / Upcoming tag, reset countdown, today dot on day tabs */
+/* Routine hero: Today / Upcoming tag, today dot on day tabs */
 .board-day-tag {
   font-family: var(--kp-font-mono);
   font-size: var(--kp-text-2xs);
@@ -3405,9 +3427,7 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-3);
 }
 .board-day-tag-today { background: var(--kp-fg); border-color: var(--kp-fg); color: var(--kp-bg); }
-.board-reset { font-family: var(--kp-font-mono); font-size: 12px; color: var(--kp-fg-3); white-space: nowrap; }
 .day-tab-dot { display: inline-block; width: 5px; height: 5px; margin-left: 6px; border-radius: 50%; background: currentColor; vertical-align: middle; opacity: 0.6; }
-@media (max-width: 600px) { .board-reset { display: none; } }
 
 /* Meters (goal progress, allocation share) and sleep stages */
 .meter { flex-basis: 100%; height: 3px; margin-top: 6px; border-radius: 99px; background: var(--kp-bg-muted); overflow: hidden; }
@@ -3496,3 +3516,74 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 /* Settings: keep the two columns readable on very wide screens */
 .settings-page-body > * { min-width: 0; }
 .settings-page-body { padding-inline: max(22px, calc((100% - 1100px) / 2)); align-content: start; }
+
+/* Assets / Health: two columns on wide windows so each fits one screen */
+@media (min-width: 1000px) {
+  .assets-view {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px var(--kp-space-6);
+    align-content: start;
+    align-items: start;
+  }
+  .assets-view > .assets-topbar,
+  .assets-view > .assets-error,
+  .assets-view > .empty-state,
+  .assets-view > .assets-grafana-link { grid-column: 1 / -1; }
+  .assets-section { break-inside: avoid; }
+}
+
+/* Denser rows on desktop windows (the checkbox keeps its 44px hit area) */
+@media (min-width: 1000px) {
+  .task-item { padding: 9px 0; }
+}
+
+/* Goals panel beside the routine list (wide windows, signed in) */
+.goals-panel { display: none; }
+.split-handle { display: none; }
+@media (min-width: 1100px) {
+  .goals-panel {
+    display: block;
+    flex: 1 1 0;
+    min-width: 280px;
+    max-height: 100%;
+    overflow-y: auto;
+    padding-left: var(--kp-space-4);
+  }
+  /* Signed in: the list width comes from the drag handle; the Goals panel takes the rest. */
+  .board-content.has-split .routine-col { flex: 0 1 var(--list-w, 640px); max-width: none; min-width: 360px; }
+  .split-handle {
+    display: block;
+    flex: 0 0 17px;
+    align-self: stretch;
+    position: relative;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .split-handle::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 8px;
+    width: 1px;
+    background: var(--kp-border);
+    transition: background var(--kp-dur-fast) var(--kp-ease), left var(--kp-dur-fast) var(--kp-ease), width var(--kp-dur-fast) var(--kp-ease);
+  }
+  .split-handle:hover::before, .split-handle.dragging::before, .split-handle:focus-visible::before {
+    left: 7px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--kp-border-strong);
+  }
+  .split-handle:focus-visible { outline: none; }
+}
+.goals-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--kp-space-3); margin-bottom: var(--kp-space-3); }
+.goals-panel-head .section-label { margin-bottom: 0; }
+
+/* Phones: the day tabs already say which day it is; keep the hero on one line next to Tasks | Goals */
+@media (max-width: 600px) {
+  .board-date-mono { display: none; }
+}
+
+body.is-resizing { cursor: col-resize; user-select: none; }

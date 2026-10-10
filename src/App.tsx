@@ -9,10 +9,11 @@ import { MailInbox } from './components/MailInbox'
 import { NewsView } from './components/NewsView'
 import { SignInRequired } from './components/SignInRequired'
 import { GoalView } from './components/GoalView'
+import { GoalsPanel } from './components/GoalsPanel'
+import { SplitHandle } from './components/SplitHandle'
 import AssetsView from './components/AssetsView'
 import HealthView from './components/HealthView'
 import { Icon } from './components/Icons'
-import { ResetCountdown } from './components/ResetCountdown'
 import { DialogHost, LoadingBar, ToastHost } from './components/Ui'
 import { AUTH_ONLY_VIEWS, GROUPS, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
@@ -24,6 +25,7 @@ import { notify, notifyError } from './lib/notify'
 
 type Theme = 'light' | 'dark'
 const OWNER_USERNAME = 'kevinprk'
+const DEFAULT_LIST_W = 640
 
 const SLOT_DAY_NAMES: Record<string, string> = {
   mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
@@ -921,6 +923,19 @@ export default function App() {
   const latest = useRef({ addTodo: handleAddTodo, addTemplate: handleAddTemplate, addAddition: handleAddAddition, skipTemplate: handleSkipTemplate })
   latest.current = { addTodo: handleAddTodo, addTemplate: handleAddTemplate, addAddition: handleAddAddition, skipTemplate: handleSkipTemplate }
 
+  // Width of the routine list next to the Goals panel; set by dragging the handle between them, remembered in this browser.
+  const [listW, setListW] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem('task_list_w'))
+      return v >= 360 && v <= 3000 ? v : DEFAULT_LIST_W
+    } catch { return DEFAULT_LIST_W }
+  })
+  const updateListW = (w: number, commit = false) => {
+    setListW(w)
+    if (!commit) return
+    try { localStorage.setItem('task_list_w', String(w)) } catch { /* private mode */ }
+  }
+
   const shiftMonth = (delta: number) => setCalendarMonth(prev => {
     const d = new Date(prev.year, prev.month - 1 + delta, 1)
     return { year: d.getFullYear(), month: d.getMonth() + 1 }
@@ -1018,7 +1033,6 @@ export default function App() {
                     {selectedSlot === activeSlot ? 'Today' : 'Upcoming'}
                   </span>
                   <span className="board-date-mono">{selectedSlotDate}</span>
-                  {selectedSlot === activeSlot && <ResetCountdown rotateHour={settings.rotateHour} rotateMinute={settings.rotateMinute} />}
                 </>
               ) : (
                 <span className="board-day-name">Goals</span>
@@ -1073,7 +1087,7 @@ export default function App() {
                 </div>
 
                 {/* Board content */}
-                <div className="board-content">
+                <div className={`board-content${isAuth ? ' has-split' : ''}`} style={isAuth ? ({ '--list-w': `${listW}px` } as React.CSSProperties) : undefined}>
                   <RoutineBoard
                     slot={selectedSlot}
                     slotDate={selectedSlotDate}
@@ -1102,6 +1116,8 @@ export default function App() {
                     onUnlinkTemplate={handleUnlinkTemplate}
                     isAuth={isAuth}
                   />
+                  {isAuth && <SplitHandle value={listW} onChange={updateListW} onReset={() => updateListW(DEFAULT_LIST_W, true)} />}
+                  {isAuth && <GoalsPanel onOpenAll={() => setRoutineTab('goals')} />}
                 </div>
                 <div className="board-footer">
                   <span className="board-footer-label">π  kevinprk.com</span>

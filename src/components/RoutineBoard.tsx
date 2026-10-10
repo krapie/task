@@ -285,13 +285,6 @@ function TodoItemRow({
   )
 }
 
-// --- Shared icon components ---
-// Empty-state buttons: jump to the add input of the same section.
-function focusAdd(e: React.MouseEvent<HTMLButtonElement>) {
-  const input = e.currentTarget.closest('.task-section')?.querySelector<HTMLInputElement>('input') ?? document.querySelector<HTMLInputElement>('.add-task-input')
-  input?.focus()
-}
-
 function CheckIcon() {
   return (
     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -349,122 +342,7 @@ function ChevronDownIcon() {
   )
 }
 
-function DailyTaskAddInput({ slot: currentSlot, onAdd, slotLabels }: { slot: Slot; onAdd: (text: string, slots: Slot[]) => void; slotLabels: Record<Slot, string> }) {
-  const [text, setText] = useState('')
-  const [selectedDays, setSelectedDays] = useState<Slot[]>([currentSlot])
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    setSelectedDays([currentSlot])
-  }, [currentSlot])
-
-  function toggleDay(s: Slot) {
-    setSelectedDays(prev =>
-      prev.includes(s)
-        ? prev.length > 1 ? prev.filter(d => d !== s) : prev
-        : [...prev, s]
-    )
-  }
-
-  function submit() {
-    const t = text.trim()
-    if (!t) return
-    onAdd(t, selectedDays)
-    setText('')
-    inputRef.current?.focus()
-  }
-
-  return (
-    <div className="add-task">
-      <div className="day-toggle-row">
-        {SLOTS.map(s => (
-          <button
-            key={s}
-            type="button"
-            className={`day-toggle-chip${selectedDays.includes(s) ? ' selected' : ''}`}
-            onClick={() => toggleDay(s)}
-          >
-            {slotLabels[s]}
-          </button>
-        ))}
-      </div>
-      <div className="add-task-row">
-        <input
-          ref={inputRef}
-          className="add-task-input"
-          placeholder="Add daily task…"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submit()}
-        />
-      </div>
-      <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
-    </div>
-  )
-}
-
-function AddInput({ placeholder, onAdd }: { placeholder: string; onAdd: (text: string) => void }) {
-  const [text, setText] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  function submit() {
-    const t = text.trim()
-    if (!t) return
-    onAdd(t)
-    setText('')
-    inputRef.current?.focus()
-  }
-
-  return (
-    <div className="add-task">
-      <div className="add-task-row">
-        <input
-          ref={inputRef}
-          className="add-task-input"
-          placeholder={placeholder}
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submit()}
-        />
-      </div>
-      <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
-    </div>
-  )
-}
-
-function AddTodoInput({ onAdd }: { onAdd: (text: string, dueDate?: string) => void }) {
-  const [text, setText] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  function submit() {
-    const t = text.trim()
-    if (!t) return
-    onAdd(t, dueDate || undefined)
-    setText('')
-    setDueDate('')
-    inputRef.current?.focus()
-  }
-
-  return (
-    <div className="add-task">
-      <div className="add-task-row">
-        <input
-          ref={inputRef}
-          className="add-task-input"
-          placeholder="Add a task…"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submit()}
-        />
-        <DatePicker value={dueDate} onChange={setDueDate} />
-      </div>
-      <button className="add-task-btn add-task-btn-full" type="button" onClick={submit}>Add</button>
-    </div>
-  )
-}
-
-function MobileAddInput({
+function AddBar({
   slot,
   isActive,
   onAddTemplate,
@@ -523,13 +401,13 @@ function MobileAddInput({
     : 'Add a task…'
 
   return (
-    <div className="mobile-add">
-      <div className="mobile-add-toggle">
+    <div className="add-bar">
+      <div className="add-bar-toggle">
         {(allowTodos ? ['daily', 'bonus', 'task'] as const : ['daily', 'bonus'] as const).map(t => (
           <button
             key={t}
             type="button"
-            className={`mobile-add-type${type === t ? ' selected' : ''}`}
+            className={`add-bar-type${type === t ? ' selected' : ''}`}
             onClick={() => switchType(t)}
           >
             {t === 'daily' ? 'Daily' : t === 'bonus' ? 'Bonus' : 'Task'}
@@ -653,12 +531,16 @@ export function RoutineBoard({
   function cancelEdit() { setEditingId(null) }
   function toggleReveal(id: string) { setRevealedId(prev => prev === id ? null : id) }
 
+  const todayStr = todayDateStr()
+  const visibleTodos = isAuth ? todos.filter(t => !(t.completed && t.due_date && t.due_date < todayStr)) : []
+  const allEmpty = templates.length === 0 && additions.length === 0 && visibleTodos.length === 0 && calendarEvents.length === 0
+
   return (
-    <div>
-      <div className="task-board">
-        {/* Daily Tasks */}
-        <div className="task-section">
-          <div className="section-label">Daily Tasks</div>
+    <div className="routine-col">
+      <div className="task-scroll">
+        {templates.length > 0 && (
+          <div className="task-group">
+            <div className="section-label">Daily</div>
           {visibleCount > 0 ? (
             <div className="task-list">
               {templates.map((t, i) => {
@@ -772,16 +654,7 @@ export function RoutineBoard({
               })}
             </div>
           ) : (
-            templates.length > 0 ? (
-              <Empty compact icon="eyeOff" title="All daily tasks are hidden today" hint="Restore them from the Hidden today list below." />
-            ) : (
-              <Empty
-                icon="routine"
-                title="No daily tasks yet"
-                hint="Daily tasks repeat on the days you pick and reset every morning."
-                action={{ label: 'Add a daily task', onClick: focusAdd }}
-              />
-            )
+            <Empty compact icon="eyeOff" title="All daily tasks are hidden today" hint="Restore them from the Hidden today list below." />
           )}
           {hiddenTemplates.length > 0 && (
             <div className="task-hidden">
@@ -803,21 +676,19 @@ export function RoutineBoard({
               )}
             </div>
           )}
-          <div className="desktop-add"><DailyTaskAddInput slot={slot} onAdd={onAddTemplate} slotLabels={slotLabels} /></div>
-        </div>
+          </div>
+        )}
 
-        {/* Bonus Tasks + Tasks share right column, stacked directly */}
-        <div className="task-board-right">
-        <div className="task-section">
+        {additions.length > 0 && (
+          <div className="task-group">
           <div className="section-label">
-            Bonus Tasks
+            Bonus
             {!isActive && slotDate && (
-              <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--kp-fg-4)' }}>
+              <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, marginLeft: 6, color: 'var(--kp-fg-3)' }}>
                 — {slotDate}
               </span>
             )}
           </div>
-          {additions.length > 0 ? (
             <div className="task-list">
               {additions.map(a => (
                 <div key={a.id} className={`task-item${revealedId === a.id ? ' revealed' : ''}`}>
@@ -850,18 +721,30 @@ export function RoutineBoard({
                 </div>
               ))}
             </div>
-          ) : (
-            calendarEvents.length === 0 && (
-              <Empty
-                icon="plus"
-                title={isActive ? 'No bonus tasks today' : `No bonus tasks for ${slotLabels[slot]}`}
-                hint="One-offs for just this day, like an errand or a call."
-                action={{ label: 'Add a bonus task', onClick: focusAdd }}
-              />
-            )
-          )}
-          {calendarEvents.length > 0 && (
-            <div className={`task-list${additions.length > 0 ? ' calendar-events-list' : ''}`}>
+          </div>
+        )}
+
+        {visibleTodos.length > 0 && (
+          <div className="task-group">
+            <div className="section-label">Tasks</div>
+            <div className="task-list">
+                {visibleTodos.map(t => (
+                  <TodoItemRow
+                    key={t.id}
+                    todo={t}
+                    onToggle={() => onToggleTodo(t.id)}
+                    onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
+                    onDelete={() => onDeleteTodo(t.id)}
+                  />
+                ))}
+            </div>
+          </div>
+        )}
+
+        {calendarEvents.length > 0 && (
+          <div className="task-group">
+            <div className="section-label">Events</div>
+            <div className="task-list">
               {calendarEvents.map(e => (
                 <div key={e.id} className="task-item">
                   <button
@@ -879,46 +762,20 @@ export function RoutineBoard({
                 </div>
               ))}
             </div>
-          )}
-          <div className="desktop-add"><AddInput
-            placeholder={isActive ? 'Add bonus task for today…' : `Add bonus task for ${slotLabels[slot]}…`}
-            onAdd={onAddAddition}
-          /></div>
-        </div>
+          </div>
+        )}
 
-        {/* Tasks (todos) — server-only, so hidden in guest mode; completed items whose due date has passed are hidden */}
-        {isAuth && <div className="task-section">
-          <div className="section-label">Tasks</div>
-          {(() => {
-            const today = todayDateStr()
-            const visible = todos.filter(t => !(t.completed && t.due_date && t.due_date < today))
-            return visible.length === 0 ? (
-              <Empty
-                icon="checkCircle"
-                title="Nothing to do"
-                hint="Tasks with a due date also show up on the calendar."
-                action={{ label: 'Add a task', onClick: focusAdd }}
-              />
-            ) : (
-              <div className="task-list">
-                {visible.map(t => (
-                  <TodoItemRow
-                    key={t.id}
-                    todo={t}
-                    onToggle={() => onToggleTodo(t.id)}
-                    onEdit={(text, dueDate) => onEditTodo(t.id, text, dueDate)}
-                    onDelete={() => onDeleteTodo(t.id)}
-                  />
-                ))}
-              </div>
-            )
-          })()}
-          <div className="desktop-add"><AddTodoInput onAdd={onAddTodo} /></div>
-        </div>}
-        </div>{/* end task-board-right */}
+        {allEmpty && (
+          <Empty
+            compact
+            icon="routine"
+            title="Nothing here yet"
+            hint="Add a daily task, a one-off bonus task, or a task with a due date."
+          />
+        )}
       </div>
 
-      <MobileAddInput
+      <AddBar
         slot={slot}
         isActive={isActive}
         onAddTemplate={onAddTemplate}

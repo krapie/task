@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CalendarEvent, Addition, TodoItem } from '../types'
 import { getHoliday } from '../lib/holidays'
 
@@ -7,10 +7,12 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
-const MAX_LANES = 3
-// Vertical layout constants (px) — keep in sync with CSS .calendar-week row height
-const DAY_NUM_H = 40   // space reserved for the day number badge (+ holiday label)
-const LANE_H    = 22   // height of each event lane slot
+// Vertical layout constants (px). Week rows share the window height; how many event lanes fit follows from the row height.
+const DAY_NUM_H  = 30  // space reserved for the day number badge (+ holiday label)
+const LANE_H     = 20  // height of each event lane slot
+const OVERFLOW_H = 18  // the "+N" line under the last lane
+const MAX_LANES  = 3
+const MIN_ROW_H  = 80
 
 function pad(n: number) { return String(n).padStart(2, '0') }
 function dateStr(y: number, m: number, d: number) { return `${y}-${pad(m)}-${pad(d)}` }
@@ -107,9 +109,10 @@ interface CalendarWeekProps {
   currentMonth: number
   onDayClick: (date: string) => void
   onEventClick: (event: CalendarEvent) => void
+  maxLanes: number
 }
 
-function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate, currentMonth, onDayClick, onEventClick }: CalendarWeekProps) {
+function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate, currentMonth, onDayClick, onEventClick, maxLanes }: CalendarWeekProps) {
   const items = useMemo<CalendarItem[]>(() => [
     ...events.map(e => ({ kind: 'event' as const, event: e })),
     ...additions.map(a => ({ kind: 'addition' as const, addition: a })),
@@ -120,13 +123,13 @@ function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate
   // Count overflow per column (items with lane >= MAX_LANES)
   const overflowByCol: Record<number, number> = {}
   for (const pe of positioned) {
-    if (pe.lane >= MAX_LANES) {
+    if (pe.lane >= maxLanes) {
       for (let c = pe.colStart; c < pe.colStart + pe.colSpan; c++) {
         overflowByCol[c] = (overflowByCol[c] ?? 0) + 1
       }
     }
   }
-  const visibleItems = positioned.filter(pe => pe.lane < MAX_LANES)
+  const visibleItems = positioned.filter(pe => pe.lane < maxLanes)
 
   return (
     <div className="calendar-week">
@@ -202,7 +205,7 @@ function CalendarWeek({ weekDates, events, additions, todos, today, selectedDate
           <span
             key={`overflow-${date}`}
             className="calendar-overflow-count"
-            style={{ gridRow: 1, gridColumn: col, marginTop: `${DAY_NUM_H + MAX_LANES * LANE_H}px` }}
+            style={{ gridRow: 1, gridColumn: col, marginTop: `${DAY_NUM_H + maxLanes * LANE_H}px` }}
             onClick={() => onDayClick(date)}
           >
             +{count}
@@ -230,6 +233,20 @@ export function CalendarView({ year, month, events, additions, todos, selectedDa
   const today = todayStr()
   const weeks = useMemo(() => buildWeeks(year, month), [year, month])
 
+  // Rows split the available height; fewer lanes are drawn when a row is short.
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [rowH, setRowH] = useState(128)
+  useLayoutEffect(() => {
+    const el = bodyRef.current
+    if (!el) return
+    const measure = () => setRowH(Math.max(MIN_ROW_H, el.clientHeight / weeks.length))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [weeks.length])
+  const maxLanes = Math.max(1, Math.min(MAX_LANES, Math.floor((rowH - DAY_NUM_H - OVERFLOW_H) / LANE_H)))
+
   return (
     <div className="calendar-view">
       <div className="calendar-nav">
@@ -250,7 +267,7 @@ export function CalendarView({ year, month, events, additions, todos, selectedDa
         <div className="calendar-headers">
           {DAY_HEADERS.map(h => <div key={h} className="calendar-day-header">{h}</div>)}
         </div>
-        <div className="calendar-body">
+        <div className="calendar-body" ref={bodyRef} style={{ minHeight: weeks.length * MIN_ROW_H }}>
           {weeks.map(weekDates => (
             <CalendarWeek
               key={weekDates[0]}
@@ -263,6 +280,7 @@ export function CalendarView({ year, month, events, additions, todos, selectedDa
               currentMonth={month}
               onDayClick={onDayClick}
               onEventClick={onEventClick}
+              maxLanes={maxLanes}
             />
           ))}
         </div>
