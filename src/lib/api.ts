@@ -1,4 +1,4 @@
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, PushDevice } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -92,13 +92,14 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return res.json() as Promise<T>
 }
 
-// The asset-scope token is deliberately memory-only, never localStorage —
-// unlike the regular session token, a leaked copy of this one grants
-// financial data directly with no further check. A page reload forces a
-// fresh passkey check, which is the intended tradeoff for a 5-minute,
-// high-sensitivity scope. AssetsView also clears this proactively on
-// backgrounding (visibilitychange) and after 5 minutes idle.
-const ASSET_UNLOCK_PENDING = 'task-asset-unlock'
+// The step-up token (Assets + Health share it) is deliberately memory-only,
+// never localStorage — unlike the regular session token, a leaked copy of
+// this one grants financial and health data directly with no further check.
+// A page reload forces a fresh passkey check, which is the intended tradeoff
+// for a 5-minute, high-sensitivity scope. useStepUp also clears it
+// proactively on backgrounding (visibilitychange) and after 5 minutes idle.
+export type StepUpView = 'assets' | 'health'
+const STEP_UP_PENDING = 'task-step-up-pending'
 let _assetToken: string | null = null
 let _assetTokenExpiresAt = 0
 
@@ -130,6 +131,11 @@ async function assetReq<T>(method: string, path: string, body?: unknown): Promis
   if (res.status === 401) {
     clearAssetToken()
     throw new Error('ASSET_SESSION_EXPIRED')
+  }
+  if (res.status === 403) {
+    // Valid passkey, but this account may not see personal data.
+    clearAssetToken()
+    throw new Error('STEP_UP_FORBIDDEN')
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
@@ -255,12 +261,12 @@ export const api = {
     list: () => req<{ subscriptions: PushDevice[] }>('GET', '/push/subscriptions').then(r => r.subscriptions),
   },
   passkey: {
-    // Step-up for the asset tab: auth issues a step_up token only if a
-    // passkey was used in the last 5 minutes (it expires 5 minutes after that
-    // check). Otherwise the browser goes to auth for a passkey prompt and
-    // comes back to ?tab=assets, where AssetsView retries automatically.
-    authenticate: async () => {
-      const returnTo = `${location.origin}/?tab=assets`
+    // Step-up for the Assets and Health tabs: auth issues a step_up token only
+    // if a passkey was used in the last 5 minutes (it expires 5 minutes after
+    // that check). Otherwise the browser goes to auth for a passkey prompt and
+    // comes back to ?tab=<view>, where useStepUp retries automatically.
+    authenticate: async (view: StepUpView) => {
+      const returnTo = `${location.origin}/?tab=${view}`
       const res = await fetch(tokenURL(true, returnTo), { credentials: 'include' })
       const data = (await res.json().catch(() => ({}))) as Partial<TokenResponse>
       if (res.ok && data.access_token && data.expires_in) {
@@ -268,16 +274,17 @@ export const api = {
         return
       }
       if (data.login_url) {
-        sessionStorage.setItem(ASSET_UNLOCK_PENDING, '1')
+        sessionStorage.setItem(STEP_UP_PENDING, view)
         location.assign(data.login_url)
         throw new Error('REDIRECTING')
       }
       throw new Error(data.error === 'access_denied' ? 'This account has no access to Task.' : 'Passkey unlock failed')
     },
-    // Set before leaving for the auth passkey prompt; consumed on return.
-    takeUnlockPending: (): boolean => {
-      const pending = sessionStorage.getItem(ASSET_UNLOCK_PENDING) === '1'
-      sessionStorage.removeItem(ASSET_UNLOCK_PENDING)
+    // Set before leaving for the auth passkey prompt; consumed on return by
+    // the view that started it.
+    takeUnlockPending: (view: StepUpView): boolean => {
+      const pending = sessionStorage.getItem(STEP_UP_PENDING) === view
+      if (pending) sessionStorage.removeItem(STEP_UP_PENDING)
       return pending
     },
     manageURL: `${AUTH_URL}/account`,
@@ -293,5 +300,8 @@ export const api = {
     setPassword: (password: string) => assetReq<{ ok: boolean }>('POST', '/assets/password', { password }),
     getNotifySettings: () => assetReq<FinanceNotifySettings>('GET', '/assets/notify-settings'),
     updateNotifySettings: (s: Partial<FinanceNotifySettings>) => assetReq<{ ok: boolean }>('POST', '/assets/notify-settings', s),
+  },
+  health: {
+    getSummary: () => assetReq<HealthSummary | null>('GET', '/health-data/summary'),
   },
 }

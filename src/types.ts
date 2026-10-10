@@ -177,6 +177,27 @@ export interface FinanceNotifySettings {
   financeNotifyMinute: string
 }
 
+// Apple Health aggregates (GET /api/health-data/summary, passkey step-up).
+// Everything is as of `asOf`, the last day of the latest manual export.
+export interface HealthSummary {
+  asOf: string | null
+  exportedAt: string | null
+  importedAt: string | null
+  day: {
+    steps: number | null
+    activeKcal: number | null; activeGoal: number | null
+    exerciseMin: number | null; exerciseGoal: number | null
+    standHours: number | null; standGoal: number | null
+  } | null
+  week: { stepsAvg: number | null; sleepAvgH: number | null; restingHr: number | null; hrvMs: number | null } | null
+  vo2max: { value: number; at: string } | null
+  lastNight: {
+    night: string; asleepH: number | null; deepH: number | null; coreH: number | null
+    remH: number | null; awakeH: number | null; bedtime: string | null; wakeTime: string | null
+  } | null
+  runs: { at: string; km: number | null; durationMin: number | null; paceMinKm: number | null; avgHr: number | null }[]
+}
+
 // A browser subscribed to Web Push (one row per device).
 export interface PushDevice {
   endpoint: string

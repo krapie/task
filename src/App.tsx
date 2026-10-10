@@ -10,18 +10,23 @@ import { NewsView } from './components/NewsView'
 import { SignInRequired } from './components/SignInRequired'
 import { GoalView } from './components/GoalView'
 import AssetsView from './components/AssetsView'
+import HealthView from './components/HealthView'
 import { storage } from './lib/storage'
 import { api } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem } from './types'
 
 type Theme = 'light' | 'dark'
-type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'settings'
+type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'settings'
 
 // Views backed only by server data; hidden from guests
-const AUTH_ONLY_VIEWS: View[] = ['mail', 'assets']
+const AUTH_ONLY_VIEWS: View[] = ['mail', 'assets', 'health']
+// Personal-data views: only shown to this account. Hiding the tab is
+// cosmetic; the server enforces it (STEP_UP_USERS + passkey step-up).
+const OWNER_USERNAME = 'kevinprk'
+const OWNER_ONLY_VIEWS: View[] = ['assets', 'health']
 const VIEW_LABELS: Record<View, string> = {
-  routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', settings: 'Settings',
+  routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', settings: 'Settings',
 }
 
 const SLOT_DAY_NAMES: Record<string, string> = {
@@ -154,6 +159,7 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null)
   const [username, setUsername] = useState<string | null>(null)
   const isAuth = token !== null
+  const isOwner = isAuth && username === OWNER_USERNAME
 
   const [settings, setSettings] = useState<Settings>({ rotateHour: 6, rotateMinute: 0, keepBonus: false, workWeek: 'mon-fri' })
 
@@ -176,7 +182,7 @@ export default function App() {
   const [view, setView] = useState<View>(() => {
     const p = new URLSearchParams(window.location.search)
     const t = p.get('tab')
-    const valid: View[] = ['routine', 'calendar', 'mail', 'news', 'assets', 'settings']
+    const valid: View[] = ['routine', 'calendar', 'mail', 'news', 'assets', 'health', 'settings']
     return valid.includes(t as View) ? (t as View) : 'routine'
   })
   // Deep-link: ?mail=<id> opens a specific email (set by push notification URL)
@@ -1011,13 +1017,23 @@ export default function App() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
           </svg>
         </button>
-        {isAuth && (
+        {isOwner && (
           <button
             className={`rail-btn${view === 'assets' ? ' rail-btn-active' : ''}`}
             onClick={() => setView('assets')} title="Assets"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
+            </svg>
+          </button>
+        )}
+        {isOwner && (
+          <button
+            className={`rail-btn${view === 'health' ? ' rail-btn-active' : ''}`}
+            onClick={() => setView('health')} title="Health"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
             </svg>
           </button>
         )}
@@ -1162,8 +1178,14 @@ export default function App() {
           <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} initialMailId={initialMailId} />
         ) : view === 'news' ? (
           <NewsView isAuth={isAuth} />
+        ) : OWNER_ONLY_VIEWS.includes(view) && !isOwner ? (
+          <div className="signin-required">
+            <p className="signin-required-title">{VIEW_LABELS[view]} isn't available for this account</p>
+          </div>
         ) : view === 'assets' ? (
           <AssetsView isAuth={isAuth} />
+        ) : view === 'health' ? (
+          <HealthView isAuth={isAuth} />
         ) : (
           <SettingsPanel
             settings={settings}
@@ -1234,12 +1256,20 @@ export default function App() {
           </svg>
           <span>News</span>
         </button>
-        {isAuth && (
+        {isOwner && (
           <button className={`bottom-nav-btn${view === 'assets' ? ' bottom-nav-active' : ''}`} onClick={() => setView('assets')}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-4-4a4 4 0 0 0 4 4h1a3 3 0 1 0 0-6h-2a3 3 0 1 1 0-6h1a4 4 0 0 1 4 4" />
             </svg>
             <span>Assets</span>
+          </button>
+        )}
+        {isOwner && (
+          <button className={`bottom-nav-btn${view === 'health' ? ' bottom-nav-active' : ''}`} onClick={() => setView('health')}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+            </svg>
+            <span>Health</span>
           </button>
         )}
         <button className={`bottom-nav-btn${view === 'settings' ? ' bottom-nav-active' : ''}`} onClick={() => setView('settings')}>

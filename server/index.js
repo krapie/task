@@ -201,20 +201,52 @@ async function auth(req, res, next) {
   next()
 }
 
-// ── Asset auth (passkey step-up) ───────────────────────────────────────
+// ── Step-up auth (passkey) for Assets and Health ────────────────────────
 // Two-tier trust boundary: a normal session token never reaches
-// /api/assets/*. Only a step-up token does: auth issues it for
-// GET /api/token?aud=task&step_up=1 when a passkey was verified in the last
-// 5 minutes, and it expires 5 minutes after that passkey check.
-async function assetAuth(req, res, next) {
+// /api/assets/* or /api/health-data/*. Only a step-up token does: auth
+// issues it for GET /api/token?aud=task&step_up=1 when a passkey was verified
+// in the last 5 minutes, and it expires 5 minutes after that passkey check.
+// On top of that, only the users in STEP_UP_USERS (personal data of one
+// person) pass; any other admin gets 403 even with a valid passkey.
+const STEP_UP_USERS = new Set(
+  (process.env.STEP_UP_USERS || 'kevinprk').split(',').map(s => s.trim()).filter(Boolean)
+)
+
+async function stepUpAuth(req, res, next) {
+  res.set('Cache-Control', 'no-store')
   const payload = await verifyToken(req)
   if (!payload || payload.step_up !== true || !payload.amr?.includes('hwk')) {
-    return res.status(401).json({ error: 'Asset session expired or invalid' })
+    return res.status(401).json({ error: 'Step-up session expired or invalid' })
+  }
+  if (!STEP_UP_USERS.has(payload.preferred_username)) {
+    await audit('step_up_denied', req)
+    return res.status(403).json({ error: 'Forbidden' })
   }
   req.user = { username: payload.preferred_username, sub: payload.sub }
-  req.assetUser = req.user
   next()
 }
+const assetAuth = stepUpAuth
+
+// ── Health (Apple Health summary) ──────────────────────────────────────
+// Reads ONE view, hk_task_summary, in the health DB on store-postgres as role
+// health_task, which can read nothing else (no raw samples, no GPS routes).
+// See ~/homeserver/docs/health-dashboard.md.
+const healthPool = process.env.HEALTH_POSTGRES_URL
+  ? new pg.Pool({ connectionString: process.env.HEALTH_POSTGRES_URL, max: 2, idleTimeoutMillis: 30_000 })
+  : null
+healthPool?.on('error', err => console.error('health pool:', err.message))
+
+app.get('/api/health-data/summary', stepUpAuth, async (req, res) => {
+  if (!healthPool) return res.status(503).json({ error: 'Health data not configured' })
+  await audit('health_tab_view', req)
+  try {
+    const { rows } = await healthPool.query('SELECT summary FROM hk_task_summary')
+    res.json(rows[0]?.summary ?? null)
+  } catch (err) {
+    console.error('health summary:', err.message)
+    res.status(502).json({ error: 'Health data unavailable' })
+  }
+})
 
 // ── Assets (finance) proxy ──────────────────────────────────────────────
 // Everything below requires BOTH a normal session (auth) and a live

@@ -1,74 +1,38 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
+import { useStepUp } from '../lib/useStepUp'
+import StepUpBar from './StepUpBar'
 import type { AssetSummary, FinanceStatus, FinanceNotifySettings } from '../types'
-
-const IDLE_LOCK_MS = 5 * 60_000
 
 function formatKRW(n: number): string {
   return `₩${n.toLocaleString('ko-KR')}`
 }
 
-function LockIcon() {
-  return (
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
-    </svg>
-  )
-}
-function EyeIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-    </svg>
-  )
-}
-function EyeSlashIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.774 3.162 10.066 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-    </svg>
-  )
-}
+// Shown in every amount slot while locked or hidden.
+const MASK = '••••••'
 
 interface AssetsViewProps {
   isAuth: boolean
 }
 
+// The tab opens without a passkey but shows placeholders only; nothing is
+// requested from /api/assets/* until the passkey step-up succeeds.
 export default function AssetsView({ isAuth }: AssetsViewProps) {
-  const [locked, setLocked] = useState(!api.assets.hasToken())
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const [masked, setMasked] = useState(true)
+  const [masked, setMasked] = useState(false)
   const [summary, setSummary] = useState<AssetSummary | null>(null)
   const [status, setStatus] = useState<FinanceStatus | null>(null)
   const [passwordSet, setPasswordSet] = useState<boolean | null>(null)
   const [notify, setNotify] = useState<FinanceNotifySettings | null>(null)
-  const [remaining, setRemaining] = useState(0)
 
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const lockNow = useCallback(() => {
-    api.assets.clearToken()
-    setLocked(true)
-    setMasked(true)
-    // Drop the fetched amounts too, not just mask them — a locked tab
-    // should hold nothing sensitive in memory to inspect.
+  const clearData = useCallback(() => {
+    setMasked(false)
     setSummary(null)
     setStatus(null)
+    setPasswordSet(null)
+    setNotify(null)
   }, [])
-
-  // Coming back from the auth passkey prompt (see api.passkey.authenticate):
-  // finish the unlock without another click.
-  useEffect(() => {
-    if (isAuth && locked && api.passkey.takeUnlockPending()) void handleUnlock()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuth])
-
-  useEffect(() => {
-    if (!isAuth) return
-  }, [locked, isAuth])
+  const { unlocked, busy, setBusy, error, setError, remaining, lock, unlock, handleError } =
+    useStepUp('assets', isAuth, clearData)
 
   const loadAll = useCallback(async () => {
     setBusy(true)
@@ -85,70 +49,15 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       setPasswordSet(pw.isSet)
       setNotify(ns)
     } catch (err) {
-      if (err instanceof Error && err.message === 'ASSET_SESSION_EXPIRED') {
-        lockNow()
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to load')
-      }
+      handleError(err)
     } finally {
       setBusy(false)
     }
-  }, [lockNow])
+  }, [handleError, setBusy, setError])
 
   useEffect(() => {
-    if (!locked) loadAll()
-  }, [locked, loadAll])
-
-  // Backgrounding this tab must not leave amounts sitting in a PWA app-switcher
-  // screenshot — re-lock immediately, don't wait for the idle timer.
-  useEffect(() => {
-    function onVisibility() {
-      if (document.hidden) lockNow()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [lockNow])
-
-  // 5-minute idle auto-lock while unlocked.
-  useEffect(() => {
-    if (locked) return
-    function resetIdle() {
-      if (idleTimer.current) clearTimeout(idleTimer.current)
-      idleTimer.current = setTimeout(lockNow, IDLE_LOCK_MS)
-    }
-    resetIdle()
-    const events: (keyof DocumentEventMap)[] = ['mousemove', 'keydown', 'touchstart', 'scroll']
-    events.forEach(e => document.addEventListener(e, resetIdle))
-    return () => {
-      events.forEach(e => document.removeEventListener(e, resetIdle))
-      if (idleTimer.current) clearTimeout(idleTimer.current)
-    }
-  }, [locked, lockNow])
-
-  // Countdown display for the asset-token TTL.
-  useEffect(() => {
-    if (locked) return
-    const id = setInterval(() => {
-      const ms = api.assets.remainingMs()
-      setRemaining(ms)
-      if (ms <= 0) lockNow()
-    }, 1000)
-    return () => clearInterval(id)
-  }, [locked, lockNow])
-
-  async function handleUnlock() {
-    setBusy(true)
-    setError(null)
-    try {
-      await api.passkey.authenticate()
-      setLocked(false)
-    } catch (err) {
-      if (err instanceof Error && err.message === 'REDIRECTING') return
-      setError(err instanceof Error ? err.message : 'Passkey unlock failed')
-    } finally {
-      setBusy(false)
-    }
-  }
+    if (unlocked) loadAll()
+  }, [unlocked, loadAll])
 
   async function handleSync() {
     setBusy(true)
@@ -160,8 +69,7 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       setSummary(s)
       setStatus(st)
     } catch (err) {
-      if (err instanceof Error && err.message === 'ASSET_SESSION_EXPIRED') lockNow()
-      else setError(err instanceof Error ? err.message : 'Sync failed')
+      handleError(err)
     } finally {
       setBusy(false)
     }
@@ -176,7 +84,7 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       await api.assets.setPassword(pw)
       setPasswordSet(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to set password')
+      handleError(err)
     } finally {
       setBusy(false)
     }
@@ -185,134 +93,125 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
   async function updateNotify(patch: Partial<FinanceNotifySettings>) {
     const next = { ...notify, ...patch } as FinanceNotifySettings
     setNotify(next)
-    await api.assets.updateNotifySettings(patch).catch(() => {})
+    await api.assets.updateNotifySettings(patch).catch(handleError)
   }
 
-  if (locked) {
-    return (
-      <div className="assets-locked">
-        <LockIcon />
-        <p className="assets-locked-title">자산 탭이 잠겨 있습니다</p>
-        <p className="assets-locked-sub">순자산, 지출 내역 등 금융 데이터는 별도 인증이 필요합니다</p>
-        {error && <p className="assets-error">{error}</p>}
-        <button className="btn-primary" onClick={handleUnlock} disabled={busy}>패스키로 잠금 해제</button>
-        <a className="btn-ghost btn-sm" href={api.passkey.manageURL} target="_blank" rel="noreferrer">패스키 관리</a>
-      </div>
-    )
-  }
-
-  const remainMin = Math.floor(remaining / 60_000)
-  const remainSec = Math.floor((remaining % 60_000) / 1000)
+  const hide = masked || !summary
+  const amount = (n: number | undefined) => (hide || n === undefined ? MASK : formatKRW(n))
 
   return (
     <div className="assets-view">
-      <div className="assets-topbar">
-        <span className="assets-status-chip">🔓 인증됨 · {remainMin}:{String(remainSec).padStart(2, '0')} 남음</span>
-        <div className="assets-topbar-actions">
-          <button className="btn-ghost btn-sm" onClick={() => setMasked(m => !m)}>
-            {masked ? <EyeIcon /> : <EyeSlashIcon />} {masked ? '표시' : '숨기기'}
-          </button>
-          <button className="btn-ghost btn-sm" onClick={lockNow}>잠금</button>
-        </div>
-      </div>
+      <StepUpBar
+        unlocked={unlocked}
+        busy={busy}
+        remaining={remaining}
+        masked={masked}
+        onToggleMask={() => setMasked(m => !m)}
+        onUnlock={unlock}
+        onLock={lock}
+      />
 
       {error && <p className="assets-error">{error}</p>}
 
-      {summary && (
-        <>
-          <div className="assets-stat-grid">
-            <div className="assets-stat assets-stat-primary">
-              <span className="assets-stat-label">순자산</span>
-              <span className="assets-stat-value">{masked ? '••••••••' : formatKRW(summary.netWorth)}</span>
-            </div>
-            <div className="assets-stat">
-              <span className="assets-stat-label">총자산</span>
-              <span className="assets-stat-value">{masked ? '••••••••' : formatKRW(summary.totalAssets)}</span>
-            </div>
-            <div className="assets-stat">
-              <span className="assets-stat-label">총부채</span>
-              <span className="assets-stat-value">{masked ? '••••••••' : formatKRW(summary.totalDebt)}</span>
-            </div>
-            <div className="assets-stat">
-              <span className="assets-stat-label">신용점수</span>
-              <span className="assets-stat-value">{masked ? '••••' : (summary.creditScore ?? '—')}</span>
-            </div>
-          </div>
-
-          <div className="assets-section">
-            <h3 className="assets-section-title">이번 달</h3>
-            <div className="assets-stat-grid">
-              <div className="assets-stat">
-                <span className="assets-stat-label">수입</span>
-                <span className="assets-stat-value">{masked ? '••••••' : formatKRW(summary.thisMonth.income)}</span>
-              </div>
-              <div className="assets-stat">
-                <span className="assets-stat-label">지출</span>
-                <span className="assets-stat-value assets-negative">{masked ? '••••••' : formatKRW(summary.thisMonth.expense)}</span>
-              </div>
-              <div className="assets-stat">
-                <span className="assets-stat-label">순저축</span>
-                <span className="assets-stat-value">{masked ? '••••••' : formatKRW(summary.thisMonth.netSavings)}</span>
-              </div>
-              <div className="assets-stat">
-                <span className="assets-stat-label">투자 손익</span>
-                <span className={`assets-stat-value${summary.investment.pnl < 0 ? ' assets-negative' : ''}`}>
-                  {masked ? '••••••' : formatKRW(summary.investment.pnl)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="assets-section">
-            <h3 className="assets-section-title">자산 구성</h3>
-            <ul className="assets-category-list">
-              {summary.categoryBreakdown.map(c => (
-                <li key={c.category}>
-                  <span>{c.category}</span>
-                  <span>{masked ? '••••••' : formatKRW(c.amount)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </>
-      )}
-
-      <div className="assets-section">
-        <h3 className="assets-section-title">동기화</h3>
-        {status && (
-          <p className="assets-sync-info">
-            마지막 {status.lastIngest ? new Date(status.lastIngest.ingested_at).toLocaleString('ko-KR') : '없음'}
-            {' · '}{status.transactionCount.toLocaleString('ko-KR')}건
-          </p>
-        )}
-        <button className="btn-primary btn-sm" onClick={handleSync} disabled={busy}>지금 동기화</button>
+      <div className="assets-stat-grid">
+        <div className="assets-stat assets-stat-primary">
+          <span className="assets-stat-label">순자산</span>
+          <span className="assets-stat-value">{amount(summary?.netWorth)}</span>
+        </div>
+        <div className="assets-stat">
+          <span className="assets-stat-label">총자산</span>
+          <span className="assets-stat-value">{amount(summary?.totalAssets)}</span>
+        </div>
+        <div className="assets-stat">
+          <span className="assets-stat-label">총부채</span>
+          <span className="assets-stat-value">{amount(summary?.totalDebt)}</span>
+        </div>
+        <div className="assets-stat">
+          <span className="assets-stat-label">신용점수</span>
+          <span className="assets-stat-value">{hide ? '••••' : (summary?.creditScore ?? '—')}</span>
+        </div>
       </div>
 
       <div className="assets-section">
-        <h3 className="assets-section-title">내보내기 비밀번호</h3>
-        <p className="assets-sync-info">{passwordSet ? '설정됨 ●●●●' : '설정되지 않음'}</p>
-        <button className="btn-ghost btn-sm" onClick={handleSetPassword} disabled={busy}>
-          {passwordSet ? '변경' : '설정'}
-        </button>
-      </div>
-
-      {notify && (
-        <div className="assets-section">
-          <h3 className="assets-section-title">월간 알림</h3>
-          <div className="toggle-row">
-            <span className="toggle-label">
-              매월 {notify.financeNotifyDay}일 {notify.financeNotifyHour.padStart(2, '0')}:{notify.financeNotifyMinute.padStart(2, '0')}
+        <h3 className="assets-section-title">이번 달</h3>
+        <div className="assets-stat-grid">
+          <div className="assets-stat">
+            <span className="assets-stat-label">수입</span>
+            <span className="assets-stat-value">{amount(summary?.thisMonth.income)}</span>
+          </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">지출</span>
+            <span className={`assets-stat-value${hide ? '' : ' assets-negative'}`}>{amount(summary?.thisMonth.expense)}</span>
+          </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">순저축</span>
+            <span className="assets-stat-value">{amount(summary?.thisMonth.netSavings)}</span>
+          </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">투자 손익</span>
+            <span className={`assets-stat-value${!hide && summary && summary.investment.pnl < 0 ? ' assets-negative' : ''}`}>
+              {amount(summary?.investment.pnl)}
             </span>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={notify.financeNotifyEnabled === 'true'}
-                onChange={e => updateNotify({ financeNotifyEnabled: String(e.target.checked) })}
-              />
-              <span className="toggle-track" />
-            </label>
           </div>
         </div>
+      </div>
+
+      <div className="assets-section">
+        <h3 className="assets-section-title">자산 구성</h3>
+        <ul className="assets-category-list">
+          {summary
+            ? summary.categoryBreakdown.map(c => (
+                <li key={c.category}>
+                  <span>{masked ? '••••' : c.category}</span>
+                  <span>{amount(c.amount)}</span>
+                </li>
+              ))
+            : [0, 1, 2].map(i => (
+                <li key={i}><span>••••</span><span>{MASK}</span></li>
+              ))}
+        </ul>
+      </div>
+
+      {unlocked && (
+        <>
+          <div className="assets-section">
+            <h3 className="assets-section-title">동기화</h3>
+            {status && (
+              <p className="assets-sync-info">
+                마지막 {status.lastIngest ? new Date(status.lastIngest.ingested_at).toLocaleString('ko-KR') : '없음'}
+                {' · '}{status.transactionCount.toLocaleString('ko-KR')}건
+              </p>
+            )}
+            <button className="btn-primary btn-sm" onClick={handleSync} disabled={busy}>지금 동기화</button>
+          </div>
+
+          <div className="assets-section">
+            <h3 className="assets-section-title">내보내기 비밀번호</h3>
+            <p className="assets-sync-info">{passwordSet ? '설정됨 ●●●●' : '설정되지 않음'}</p>
+            <button className="btn-ghost btn-sm" onClick={handleSetPassword} disabled={busy}>
+              {passwordSet ? '변경' : '설정'}
+            </button>
+          </div>
+
+          {notify && (
+            <div className="assets-section">
+              <h3 className="assets-section-title">월간 알림</h3>
+              <div className="toggle-row">
+                <span className="toggle-label">
+                  매월 {notify.financeNotifyDay}일 {notify.financeNotifyHour.padStart(2, '0')}:{notify.financeNotifyMinute.padStart(2, '0')}
+                </span>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={notify.financeNotifyEnabled === 'true'}
+                    onChange={e => updateNotify({ financeNotifyEnabled: String(e.target.checked) })}
+                  />
+                  <span className="toggle-track" />
+                </label>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <div className="assets-section">
