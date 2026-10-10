@@ -143,7 +143,7 @@ export interface GoalCategory {
   items: GoalItem[]
 }
 
-export type GoalPeriodKind = 'half' | 'general' | 'year'
+export type GoalPeriodKind = 'half' | 'general' | 'year' | 'retro'
 
 export interface GoalPeriod {
   id: string

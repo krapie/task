@@ -481,7 +481,7 @@ interface GoalItemRowProps {
   onDelete: () => void
 }
 
-function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
+export function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
   const [noteVal, setNoteVal] = useState(item.note ?? '')
 
   async function toggleCompleted() {

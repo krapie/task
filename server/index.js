@@ -5,6 +5,7 @@ import fetch from 'node-fetch'
 import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { getOrCreateRetro } from './retro.js'
 
 const PORT = process.env.PORT || 3000
 // Sign-in is on auth.kevinprk.com. The web app sends access tokens from
@@ -125,6 +126,8 @@ async function initDb() {
     CREATE UNIQUE INDEX IF NOT EXISTS goal_periods_general_uniq ON goal_periods (kind) WHERE kind = 'general';
     -- half is NULL for year periods, so UNIQUE(year, half) does not dedupe them.
     CREATE UNIQUE INDEX IF NOT EXISTS goal_periods_year_uniq ON goal_periods (year) WHERE kind = 'year';
+    -- 'retro' is the yearly retrospective (Keep / Problem / Try / Action Items as categories); one per year.
+    CREATE UNIQUE INDEX IF NOT EXISTS goal_periods_retro_uniq ON goal_periods (year) WHERE kind = 'retro';
     CREATE TABLE IF NOT EXISTS goal_categories (
       id TEXT PRIMARY KEY,
       period_id TEXT NOT NULL REFERENCES goal_periods(id) ON DELETE CASCADE,
@@ -1298,8 +1301,11 @@ app.get('/api/goals', auth, async (_req, res) => {
 })
 
 app.post('/api/goals/periods', auth, async (req, res) => {
-  const { year, half } = req.body ?? {}
+  const { year, half, kind } = req.body ?? {}
   if (!year) return res.status(400).json({ error: 'year required' })
+
+  // kind 'retro' -> the yearly retrospective with its four sections (created on first use).
+  if (kind === 'retro') return sendRetro(res, () => getOrCreateRetro(pool, year))
 
   // half omitted/null -> the annual (kind='year') period for that year.
   if (half == null) {
@@ -1326,6 +1332,14 @@ app.post('/api/goals/periods', auth, async (req, res) => {
   )
   res.json({ ...rows[0], categories: [] })
 })
+
+function sendRetro(res, run) {
+  return run().then(period => res.json(period)).catch(e => {
+    if (e.status === 400) return res.status(400).json({ error: e.message })
+    console.error('retro error', e)
+    res.status(500).json({ error: 'Internal error' })
+  })
+}
 
 // Get-or-create the single always-present "general" (bucket-list) period,
 // shown alongside the half-year goals rather than swapped in via a tab.

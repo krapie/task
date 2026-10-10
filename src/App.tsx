@@ -10,6 +10,7 @@ import { NewsView } from './components/NewsView'
 import { SignInRequired } from './components/SignInRequired'
 import { GoalView } from './components/GoalView'
 import { GoalsPanel } from './components/GoalsPanel'
+import { RetroView } from './components/RetroView'
 import { SplitHandle } from './components/SplitHandle'
 import AssetsView from './components/AssetsView'
 import HealthView from './components/HealthView'
@@ -1035,7 +1036,7 @@ export default function App() {
                   <span className="board-date-mono">{selectedSlotDate}</span>
                 </>
               ) : (
-                <span className="board-day-name">Goals</span>
+                <span className="board-day-name">{routineTab === 'retro' ? 'Retro' : 'Goals'}</span>
               )}
               <div className="rail-spacer" />
               {routineTab === 'tasks' && boardTotal > 0 && (
@@ -1061,6 +1062,10 @@ export default function App() {
                   className={`view-tab${routineTab === 'goals' ? ' active' : ''}`}
                   onClick={() => setRoutineTab('goals')}
                 >Goals</button>
+                <button
+                  className={`view-tab${routineTab === 'retro' ? ' active' : ''}`}
+                  onClick={() => setRoutineTab('retro')}
+                >Retro</button>
               </div>}
             </div>
 
@@ -1124,7 +1129,8 @@ export default function App() {
                 </div>
               </>
             ) : (
-              isAuth ? <GoalView isAuth={isAuth} /> : <SignInRequired feature="Goals" onSignIn={() => api.auth.signIn()} />
+              !isAuth ? <SignInRequired feature={routineTab === 'retro' ? 'Retro' : 'Goals'} onSignIn={() => api.auth.signIn()} />
+                : routineTab === 'retro' ? <RetroView /> : <GoalView isAuth={isAuth} />
             )}
           </>
         ) : view === 'calendar' ? (

@@ -1,7 +1,7 @@
 import type { IconName } from '../components/Icons'
 
 export type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'settings'
-export type RoutineTab = 'tasks' | 'goals'
+export type RoutineTab = 'tasks' | 'goals' | 'retro'
 export type YearMonth = { year: number; month: number }
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -45,7 +45,7 @@ const VIEWS = Object.keys(VIEW_LABELS) as View[]
 // #/today[/goals] · #/calendar[/2026-10] · #/inbox/{mail,news} · #/life/{assets,health} · #/settings
 export function hashOf(view: View, tab: RoutineTab, month: YearMonth): string {
   const g = groupOf(view)
-  if (view === 'routine') return tab === 'goals' ? '#/today/goals' : '#/today'
+  if (view === 'routine') return tab === 'goals' ? '#/today/goals' : tab === 'retro' ? '#/today/retro' : '#/today'
   if (view === 'calendar') return `#/calendar/${month.year}-${String(month.month).padStart(2, '0')}`
   if (g.views.length > 1) return `#/${g.id}/${view}`
   return `#/${g.id}`
@@ -63,7 +63,7 @@ export function parseLocation(loc: Pick<Location, 'hash' | 'search'> = location)
   if (g) {
     const sub = g.views.find(v => v === b)
     route.view = sub ?? g.views[0]
-    if (g.id === 'today') route.tab = b === 'goals' ? 'goals' : 'tasks'
+    if (g.id === 'today') route.tab = b === 'goals' ? 'goals' : b === 'retro' ? 'retro' : 'tasks'
     const m = g.id === 'calendar' ? /^(\d{4})-(\d{2})$/.exec(b ?? '') : null
     if (m && +m[2] >= 1 && +m[2] <= 12) route.month = { year: +m[1], month: +m[2] }
   }

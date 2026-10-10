@@ -247,6 +247,12 @@ export const api = {
     getAll: () => req<GoalPeriod[]>('GET', '/goals'),
     createPeriod: (year: number, half?: 1 | 2) => req<GoalPeriod>('POST', '/goals/periods', { year, half: half ?? null }),
     getOrCreateGeneral: () => req<GoalPeriod>('POST', '/goals/periods/general'),
+    // Yearly retrospective: one period per year with Keep / Problem / Try / Action Items categories.
+    // An API that predates retros ignores `kind` and answers with a yearly goals period; refuse that instead of showing it as a retro.
+    getOrCreateRetro: (year: number) => req<GoalPeriod>('POST', '/goals/periods', { year, kind: 'retro' }).then(p => {
+      if (p.kind !== 'retro') throw new Error('The server does not support retros yet. Try again in a minute.')
+      return p
+    }),
     deletePeriod: (id: string) => req<void>('DELETE', `/goals/periods/${id}`),
     createCategory: (period_id: string, name: string) => req<GoalCategory>('POST', '/goals/categories', { period_id, name }),
     updateCategory: (id: string, name: string) => req<GoalCategory>('PUT', `/goals/categories/${id}`, { name }),

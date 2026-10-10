@@ -3597,3 +3597,20 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 }
 
 body.is-resizing { cursor: col-resize; user-select: none; }
+
+/* ── Retro tab ─────────────────────────────────────────────────── */
+.retro-bar { justify-content: space-between; }
+.retro-body { flex: 1; min-height: 0; overflow-y: auto; padding: var(--kp-space-4) 22px var(--kp-space-5); }
+.retro-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--kp-space-5) var(--kp-space-6); align-items: start; }
+@media (min-width: 900px) { .retro-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1500px) { .retro-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.retro-section-head { display: flex; align-items: baseline; gap: var(--kp-space-2); margin-bottom: var(--kp-space-2); }
+.retro-section-head .section-label { margin-bottom: 0; }
+.retro-hint { font-size: var(--kp-text-xs); color: var(--kp-fg-3); }
+
+
+/* Phones: the Tasks | Goals | Retro tabs need the room; the day tab's dot already marks today */
+@media (max-width: 600px) {
+  .board-day-tag { display: none; }
+  .retro-body { padding-left: var(--kp-space-4); padding-right: var(--kp-space-4); }
+}
