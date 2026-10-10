@@ -91,27 +91,18 @@ export default function HealthView({ isAuth }: HealthViewProps) {
       {error && <p className="assets-error">{error}</p>}
 
       <div className="assets-section">
-        <h3 className="assets-section-title">
-          활동 · {show(kst(summary?.asOf, { month: 'long', day: 'numeric', weekday: 'short' }))}
-        </h3>
-        <div className="assets-stat-grid">
-          <div className="assets-stat assets-stat-primary">
-            <span className="assets-stat-label">걸음</span>
-            <span className="assets-stat-value">{show(num(day?.steps))}</span>
-          </div>
-          <div className="assets-stat">
-            <span className="assets-stat-label">활동 에너지</span>
-            <span className="assets-stat-value">{show(ofGoal(day?.activeKcal, day?.activeGoal, ' kcal'))}</span>
-          </div>
-          <div className="assets-stat">
-            <span className="assets-stat-label">운동</span>
-            <span className="assets-stat-value">{show(ofGoal(day?.exerciseMin, day?.exerciseGoal, '분'))}</span>
-          </div>
-          <div className="assets-stat">
-            <span className="assets-stat-label">서 있기</span>
-            <span className="assets-stat-value">{show(ofGoal(day?.standHours, day?.standGoal, '시간'))}</span>
-          </div>
-        </div>
+        <h3 className="assets-section-title">지난밤 수면</h3>
+        <ul className="assets-category-list">
+          <li><span>수면 시간</span><span>{show(hoursText(night?.asleepH))}</span></li>
+          <li><span>깊은 수면</span><span>{show(hoursText(night?.deepH))}</span></li>
+          <li><span>코어 수면</span><span>{show(hoursText(night?.coreH))}</span></li>
+          <li><span>렘 수면</span><span>{show(hoursText(night?.remH))}</span></li>
+          <li><span>깨어 있음</span><span>{show(hoursText(night?.awakeH))}</span></li>
+          <li>
+            <span>취침 · 기상</span>
+            <span>{show(`${kst(night?.bedtime, { hour: '2-digit', minute: '2-digit' })} · ${kst(night?.wakeTime, { hour: '2-digit', minute: '2-digit' })}`)}</span>
+          </li>
+        </ul>
       </div>
 
       <div className="assets-section">
@@ -141,18 +132,27 @@ export default function HealthView({ isAuth }: HealthViewProps) {
       </div>
 
       <div className="assets-section">
-        <h3 className="assets-section-title">지난밤 수면</h3>
-        <ul className="assets-category-list">
-          <li><span>수면 시간</span><span>{show(hoursText(night?.asleepH))}</span></li>
-          <li><span>깊은 수면</span><span>{show(hoursText(night?.deepH))}</span></li>
-          <li><span>코어 수면</span><span>{show(hoursText(night?.coreH))}</span></li>
-          <li><span>렘 수면</span><span>{show(hoursText(night?.remH))}</span></li>
-          <li><span>깨어 있음</span><span>{show(hoursText(night?.awakeH))}</span></li>
-          <li>
-            <span>취침 · 기상</span>
-            <span>{show(`${kst(night?.bedtime, { hour: '2-digit', minute: '2-digit' })} · ${kst(night?.wakeTime, { hour: '2-digit', minute: '2-digit' })}`)}</span>
-          </li>
-        </ul>
+        <h3 className="assets-section-title">
+          활동 · {show(kst(summary?.asOf, { month: 'long', day: 'numeric', weekday: 'short' }))}
+        </h3>
+        <div className="assets-stat-grid">
+          <div className="assets-stat assets-stat-primary">
+            <span className="assets-stat-label">걸음</span>
+            <span className="assets-stat-value">{show(num(day?.steps))}</span>
+          </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">활동 에너지</span>
+            <span className="assets-stat-value">{show(ofGoal(day?.activeKcal, day?.activeGoal, ' kcal'))}</span>
+          </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">운동</span>
+            <span className="assets-stat-value">{show(ofGoal(day?.exerciseMin, day?.exerciseGoal, '분'))}</span>
+          </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">서 있기</span>
+            <span className="assets-stat-value">{show(ofGoal(day?.standHours, day?.standGoal, '시간'))}</span>
+          </div>
+        </div>
       </div>
 
       <div className="assets-section">
