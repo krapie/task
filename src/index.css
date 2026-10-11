@@ -2612,6 +2612,66 @@ a { color: var(--kp-fg); text-decoration: none; }
   word-break: break-word;
 }
 
+/* Conversation rows + messages */
+.mail-count {
+  flex-shrink: 0;
+  font-family: var(--kp-font-mono);
+  font-size: 11px;
+  color: var(--kp-fg-3);
+  padding: 0 6px;
+  border: 1px solid var(--kp-border);
+  border-radius: var(--kp-radius-sm);
+}
+
+.mail-thread-msg {
+  border-bottom: 1px solid var(--kp-border);
+}
+.mail-thread-msg-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  text-align: left;
+  font: inherit;
+  color: var(--kp-fg-2);
+  cursor: pointer;
+}
+.mail-thread-msg-head:hover { background: var(--kp-gray-50); }
+[data-theme="dark"] .mail-thread-msg-head:hover { background: var(--kp-gray-900); }
+.mail-thread-msg-from {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--kp-fg);
+}
+.mail-thread-msg-snippet {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--kp-fg-3);
+}
+.mail-thread-msg-date {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--kp-fg-3);
+}
+.mail-thread-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 8px;
+}
+
 @keyframes mail-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }

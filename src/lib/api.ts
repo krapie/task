@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
+import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -220,6 +220,21 @@ export const api = {
       if (params?.offset) q.set('offset', String(params.offset))
       return req<MailItem[]>('GET', `/mail/items?${q}`)
     },
+    getThreads: (params?: { account_id?: string; unread?: boolean; flagged?: boolean; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams()
+      if (params?.account_id) q.set('account_id', params.account_id)
+      if (params?.unread !== undefined) q.set('unread', String(params.unread))
+      if (params?.flagged !== undefined) q.set('flagged', String(params.flagged))
+      if (params?.limit) q.set('limit', String(params.limit))
+      if (params?.offset) q.set('offset', String(params.offset))
+      return req<MailThread[]>('GET', `/mail/threads?${q}`)
+    },
+    getThreadItems: (accountId: string, threadId: string) =>
+      req<MailItem[]>('GET', `/mail/threads/${accountId}/${encodeURIComponent(threadId)}/items`),
+    markThreadRead: (accountId: string, threadId: string) =>
+      req<void>('POST', `/mail/threads/${accountId}/${encodeURIComponent(threadId)}/read`),
+    toggleThreadFlag: (accountId: string, threadId: string) =>
+      req<{ flagged: boolean }>('POST', `/mail/threads/${accountId}/${encodeURIComponent(threadId)}/flag`),
     getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
     toggleFlag: (id: string) => req<{ flagged: boolean }>('POST', `/mail/items/${id}/flag`),

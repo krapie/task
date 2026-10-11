@@ -987,6 +987,11 @@ app.get('/api/mail/items', auth, mailProxy)
 app.get('/api/mail/items/:id', auth, mailProxy)
 app.post('/api/mail/items/:id/read', auth, mailProxy)
 app.post('/api/mail/items/:id/flag', auth, mailProxy)
+// Conversations: thread ids are URL-encoded Message-IDs; req.url keeps the encoding when proxied.
+app.get('/api/mail/threads', auth, mailProxy)
+app.get('/api/mail/threads/:accountId/:threadId/items', auth, mailProxy)
+app.post('/api/mail/threads/:accountId/:threadId/read', auth, mailProxy)
+app.post('/api/mail/threads/:accountId/:threadId/flag', auth, mailProxy)
 // Sync runs in the background in mail-bridge: POST starts it (202), GET
 // reports progress. New mail is pushed by the 5-minute push poller.
 app.post('/api/mail/sync', auth, mailProxy)

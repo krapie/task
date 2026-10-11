@@ -94,6 +94,7 @@ export interface MailItem {
   id: string
   account_id: string
   message_id: string
+  thread_id?: string | null
   subject: string
   from_address: string
   from_name: string | null
@@ -106,6 +107,23 @@ export interface MailItem {
   translated_body?: string | null
   translated_html?: string | null
   translated_lang?: string | null
+}
+
+// A conversation: the latest message's fields plus thread-wide counts.
+// `id` is the latest message's id (used for push deep links and as a row key helper).
+export interface MailThread {
+  id: string
+  account_id: string
+  thread_id: string
+  subject: string
+  from_address: string
+  from_name: string | null
+  received_at: string
+  snippet: string | null
+  count: number
+  unread_count: number
+  flagged: boolean
+  participants: string[]
 }
 
 export interface TodoItem {

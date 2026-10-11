@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
-import type { MailAccount, MailItem } from '../types'
+import type { MailAccount, MailItem, MailThread } from '../types'
 import { notifyError } from '../lib/notify'
 import { Empty, Loading } from './Ui'
 import { Icon } from './Icons'
@@ -16,12 +16,30 @@ function LanguageIcon() {
   )
 }
 
-function mergeMailItems(existing: MailItem[], fresh: MailItem[]): MailItem[] {
-  const existingMap = new Map(existing.map(m => [m.id, m]))
-  const freshMap = new Map(fresh.map(m => [m.id, m]))
-  const newItems = fresh.filter(m => !existingMap.has(m.id))
-  const updatedExisting = existing.map(m => freshMap.get(m.id) ?? m)
-  return [...newItems, ...updatedExisting]
+const threadKey = (t: Pick<MailThread, 'account_id' | 'thread_id'>) => `${t.account_id}|${t.thread_id}`
+
+// A thread with new activity moves to the top, so fresh rows lead and any
+// older, already-paged-in rows follow.
+function mergeThreads(existing: MailThread[], fresh: MailThread[]): MailThread[] {
+  const freshKeys = new Set(fresh.map(threadKey))
+  return [...fresh, ...existing.filter(t => !freshKeys.has(threadKey(t)))]
+}
+
+function threadFromItem(item: MailItem): MailThread {
+  return {
+    id: item.id,
+    account_id: item.account_id,
+    thread_id: item.thread_id ?? item.message_id,
+    subject: item.subject,
+    from_address: item.from_address,
+    from_name: item.from_name,
+    received_at: item.received_at,
+    snippet: item.snippet,
+    count: 1,
+    unread_count: item.read ? 0 : 1,
+    flagged: item.flagged,
+    participants: [item.from_name || item.from_address],
+  }
 }
 
 function formatDate(iso: string) {
@@ -141,6 +159,100 @@ function AutoIframe({ srcdoc }: { srcdoc: string }) {
   )
 }
 
+interface MailMessageProps {
+  msg: MailItem
+  isDark: boolean
+  expanded: boolean
+  onToggle: () => void
+  onFlag: (msg: MailItem) => void
+  onPatch: (id: string, patch: Partial<MailItem>) => void
+}
+
+// One message of a conversation: collapsed to a one-line header, or expanded
+// with its body and its own translate controls.
+function MailMessage({ msg, isDark, expanded, onToggle, onFlag, onPatch }: MailMessageProps) {
+  const [translating, setTranslating] = useState(false)
+  const [showTranslated, setShowTranslated] = useState(false)
+  const [target, setTarget] = useState<'ko' | 'en'>('ko')
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleTranslate(next: 'ko' | 'en') {
+    setTarget(next)
+    setError(null)
+    // Already translated to this language (cached on the message) — just show it.
+    if (msg.translated_lang === next && (msg.translated_html || msg.translated_body)) {
+      setShowTranslated(true)
+      return
+    }
+    setTranslating(true)
+    try {
+      const { translated, html, lang } = await api.mail.translate(msg.id, next)
+      onPatch(msg.id, { translated_body: translated, translated_html: html, translated_lang: lang })
+      setShowTranslated(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Translation failed')
+    } finally {
+      setTranslating(false)
+    }
+  }
+
+  const sender = msg.from_name || msg.from_address
+
+  return (
+    <div className="mail-thread-msg">
+      <div className="mail-thread-msg-head" role="button" tabIndex={0} onClick={onToggle}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}>
+        <span className="mail-thread-msg-from">{sender}</span>
+        {!expanded && <span className="mail-thread-msg-snippet">{msg.snippet}</span>}
+        {expanded && <span className="mail-thread-msg-snippet">{msg.from_name ? `<${msg.from_address}>` : ''}</span>}
+        <span className="mail-thread-msg-date">{expanded ? new Date(msg.received_at).toLocaleString() : formatDate(msg.received_at)}</span>
+        <button
+          className={`flag-btn${msg.flagged ? ' flag-btn-active' : ''}`}
+          onClick={e => { e.stopPropagation(); onFlag(msg) }}
+          aria-label={msg.flagged ? 'Unflag' : 'Flag'}
+        ><Icon name="star" size={16} /></button>
+      </div>
+      {expanded && (
+        <>
+          <div className="mail-thread-msg-actions">
+            {showTranslated ? (
+              <>
+                <button className="translate-btn" onClick={() => handleTranslate(target === 'ko' ? 'en' : 'ko')} disabled={translating}>
+                  {translating ? '번역 중…' : target === 'ko' ? 'English로' : '한국어로'}
+                </button>
+                <button className="translate-btn" onClick={() => setShowTranslated(false)}>원문 보기</button>
+              </>
+            ) : (
+              <button
+                className="translate-btn icon-btn"
+                onClick={() => handleTranslate(target)}
+                disabled={translating || !msg.body}
+                aria-label="Translate"
+                title="번역"
+              >
+                <LanguageIcon />
+                {translating && '…'}
+              </button>
+            )}
+          </div>
+          {error && <div className="mail-translate-error">{error}</div>}
+          {showTranslated && msg.translated_html ? (
+            <AutoIframe key={`${msg.id}-translated`} srcdoc={buildSrcdoc(msg.translated_html, isDark)} />
+          ) : showTranslated && msg.translated_body ? (
+            <pre className="mail-detail-plain mail-detail-translated">{msg.translated_body}</pre>
+          ) : msg.html_body ? (
+            <AutoIframe key={`${msg.id}-original`} srcdoc={buildSrcdoc(msg.html_body, isDark)} />
+          ) : msg.body ? (
+            <pre className="mail-detail-plain">{msg.body}</pre>
+          ) : (
+            <div className="mail-empty">(no content)</div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 interface AddAccountFormProps {
   onAdd: (account: MailAccount) => void
   onCancel: () => void
@@ -236,24 +348,21 @@ interface MailInboxProps {
 export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: MailInboxProps) {
   const [panel, setPanel] = useState<Panel>('inbox')
   const [accounts, setAccounts] = useState<MailAccount[]>([])
-  const [items, setItems] = useState<MailItem[]>([])
+  const [threads, setThreads] = useState<MailThread[]>([])
   const [loading, setLoading] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [activeAccount, setActiveAccount] = useState<string | null>(null)
   const [showFlagged, setShowFlagged] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<MailItem | null>(null)
-  const [bodyLoading, setBodyLoading] = useState(false)
-  const [translating, setTranslating] = useState(false)
-  const [showTranslated, setShowTranslated] = useState(false)
-  const [translateTarget, setTranslateTarget] = useState<'ko' | 'en'>('ko')
-  const [translateError, setTranslateError] = useState<string | null>(null)
+  const [selectedThread, setSelectedThread] = useState<MailThread | null>(null)
+  const [messages, setMessages] = useState<MailItem[] | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [sidebarOpen, setSidebarOpen] = useSidebarOpen('task_mail_sidebar')
   const [searchQuery, setSearchQuery] = useState('')
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const loadingMoreRef = useRef(false)
-  const itemsLengthRef = useRef(0)
+  const threadsLengthRef = useRef(0)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   const loadAccounts = useCallback(async () => {
@@ -261,36 +370,39 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     setAccounts(accts)
   }, [])
 
-  const loadItems = useCallback(async (silent = false) => {
+  const loadThreads = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
-    const mails = await api.mail.getItems({
+    const rows = await api.mail.getThreads({
       account_id: showFlagged ? undefined : (activeAccount ?? undefined),
       flagged: showFlagged ? true : undefined,
       limit: 100,
     }).catch(() => [])
-    setHasMore(mails.length === 100)
+    setHasMore(rows.length === 100)
     if (silent) {
-      setItems(prev => mergeMailItems(prev, mails))
+      setThreads(prev => mergeThreads(prev, rows))
     } else {
-      setItems(mails)
+      setThreads(rows)
       setLoading(false)
     }
   }, [activeAccount, showFlagged])
 
-  useEffect(() => { itemsLengthRef.current = items.length }, [items])
+  useEffect(() => { threadsLengthRef.current = threads.length }, [threads])
 
   const loadMore = useCallback(async () => {
     if (loadingMoreRef.current || !hasMore) return
     loadingMoreRef.current = true
     setLoadingMore(true)
-    const mails = await api.mail.getItems({
+    const rows = await api.mail.getThreads({
       account_id: showFlagged ? undefined : (activeAccount ?? undefined),
       flagged: showFlagged ? true : undefined,
       limit: 50,
-      offset: itemsLengthRef.current,
+      offset: threadsLengthRef.current,
     }).catch(() => [])
-    setItems(prev => [...prev, ...mails])
-    setHasMore(mails.length === 50)
+    setThreads(prev => {
+      const seen = new Set(prev.map(threadKey))
+      return [...prev, ...rows.filter(t => !seen.has(threadKey(t)))]
+    })
+    setHasMore(rows.length === 50)
     setLoadingMore(false)
     loadingMoreRef.current = false
   }, [activeAccount, showFlagged, hasMore])
@@ -308,8 +420,8 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
   // Initial load
   useEffect(() => {
     loadAccounts()
-    loadItems()
-  }, [loadAccounts, loadItems])
+    loadThreads()
+  }, [loadAccounts, loadThreads])
 
   // Starts a background sync and waits for it (polling every 2s, at most
   // 2 min), then reloads. A sync already running is joined; without force,
@@ -325,10 +437,10 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     } catch (err) {
       console.error(err)
     }
-    await loadItems(true)
+    await loadThreads(true)
     await loadAccounts()
     setSyncing(false)
-  }, [loadItems, loadAccounts])
+  }, [loadThreads, loadAccounts])
 
   // Auto-sync on tab open (MailInbox mounts each time mail tab is selected)
   useEffect(() => {
@@ -338,31 +450,47 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
   // Periodic refresh from DB every 3 minutes (picks up background poller results)
   useEffect(() => {
     const id = setInterval(async () => {
-      await loadItems(true)
+      await loadThreads(true)
       await loadAccounts()
     }, 3 * 60 * 1000)
     return () => clearInterval(id)
-  }, [loadItems, loadAccounts])
+  }, [loadThreads, loadAccounts])
 
-  // Deep-link: open a specific email when initialMailId is set (e.g. from push notification)
+  const patchThread = useCallback((t: Pick<MailThread, 'account_id' | 'thread_id'>, patch: Partial<MailThread>) => {
+    const k = threadKey(t)
+    setThreads(prev => prev.map(x => threadKey(x) === k ? { ...x, ...patch } : x))
+    setSelectedThread(prev => prev && threadKey(prev) === k ? { ...prev, ...patch } : prev)
+  }, [])
+
+  // Opens a conversation: loads every message, expands the newest plus any
+  // unread (or the deep-linked one), then marks the whole thread read.
+  const openThread = useCallback(async (thread: MailThread, focusId?: string) => {
+    setSelectedThread(thread)
+    setMessages(null)
+    const msgs = await api.mail.getThreadItems(thread.account_id, thread.thread_id).catch(() => [] as MailItem[])
+    const open = new Set<string>(msgs.filter(m => !m.read).map(m => m.id))
+    const last = msgs[msgs.length - 1]
+    if (last) open.add(last.id)
+    if (focusId) open.add(focusId)
+    setExpanded(open)
+    setMessages(msgs.map(m => ({ ...m, read: true })))
+    if (msgs.some(m => !m.read)) {
+      api.mail.markThreadRead(thread.account_id, thread.thread_id).catch(notifyError)
+    }
+    patchThread(thread, { unread_count: 0, count: msgs.length || thread.count })
+  }, [patchThread])
+
+  // Deep-link: open the conversation containing a specific email (e.g. from push notification)
   useEffect(() => {
     if (!initialMailId || !isAuth) return
     // Remove ?mail param from URL so re-focusing the tab doesn't reopen it
     const url = new URL(window.location.href)
     url.searchParams.delete('mail')
     window.history.replaceState(null, '', url.toString())
-    // Fetch and open the email
     api.mail.getItem(initialMailId).then(item => {
       if (!item) return
-      setSelectedItem(item)
       setPanel('inbox')
-      api.mail.markRead(item.id).catch(() => {})
-      const opened = { ...item, read: true }
-      setItems(prev => {
-        const exists = prev.some(m => m.id === item.id)
-        const updated = prev.map(m => m.id === item.id ? opened : m)
-        return exists ? updated : [opened, ...prev]
-      })
+      openThread(threadFromItem(item), item.id)
     }).catch(() => {})
   }, [initialMailId, isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -370,26 +498,39 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     await syncAndReload({ account_id: activeAccount ?? undefined, force: true })
   }
 
-  async function handleMarkRead(item: MailItem) {
-    if (item.read) return
-    const ok = await api.mail.markRead(item.id).then(() => true, e => { notifyError(e); return false })
-    if (!ok) return
-    setItems(prev => prev.map(m => m.id === item.id ? { ...m, read: true } : m))
-    if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, read: true } : prev)
+  async function handleMarkRead(thread: MailThread) {
+    if (thread.unread_count === 0) return
+    const ok = await api.mail.markThreadRead(thread.account_id, thread.thread_id).then(() => true, e => { notifyError(e); return false })
+    if (ok) patchThread(thread, { unread_count: 0 })
   }
 
   async function handleMarkAllRead() {
-    const unread = items.filter(m => !m.read)
-    await Promise.all(unread.map(m => api.mail.markRead(m.id).catch(notifyError)))
-    setItems(prev => prev.map(m => ({ ...m, read: true })))
+    const unread = threads.filter(t => t.unread_count > 0)
+    await Promise.all(unread.map(t => api.mail.markThreadRead(t.account_id, t.thread_id).catch(notifyError)))
+    setThreads(prev => prev.map(t => ({ ...t, unread_count: 0 })))
   }
 
-  async function handleToggleFlag(item: MailItem, e?: React.MouseEvent) {
+  async function handleToggleThreadFlag(thread: MailThread, e?: React.MouseEvent) {
     e?.stopPropagation()
-    const { flagged } = await api.mail.toggleFlag(item.id).catch(err => { notifyError(err); return { flagged: item.flagged } })
-    setItems(prev => prev.map(m => m.id === item.id ? { ...m, flagged } : m))
-    if (selectedItem?.id === item.id) setSelectedItem(prev => prev ? { ...prev, flagged } : prev)
+    const { flagged } = await api.mail.toggleThreadFlag(thread.account_id, thread.thread_id)
+      .catch(err => { notifyError(err); return { flagged: thread.flagged } })
+    patchThread(thread, { flagged })
+    // Mirror the server rule: unflag clears every message, flag marks the latest.
+    setMessages(prev => prev && selectedThread && threadKey(selectedThread) === threadKey(thread)
+      ? prev.map((m, i) => ({ ...m, flagged: flagged && i === prev.length - 1 }))
+      : prev)
   }
+
+  async function handleToggleMessageFlag(msg: MailItem) {
+    const { flagged } = await api.mail.toggleFlag(msg.id).catch(err => { notifyError(err); return { flagged: msg.flagged } })
+    const next = (messages ?? []).map(m => m.id === msg.id ? { ...m, flagged } : m)
+    setMessages(next)
+    if (selectedThread) patchThread(selectedThread, { flagged: next.some(m => m.flagged) })
+  }
+
+  const patchMessage = useCallback((id: string, patch: Partial<MailItem>) => {
+    setMessages(prev => prev && prev.map(m => m.id === id ? { ...m, ...patch } : m))
+  }, [])
 
   async function handleDeleteAccount(id: string) {
     await api.mail.removeAccount(id).catch(notifyError)
@@ -397,52 +538,19 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     if (activeAccount === id) setActiveAccount(null)
   }
 
-  // Opening a different email should show its own original text, not the
-  // previous email's translation left over in showTranslated state.
-  useEffect(() => {
-    setShowTranslated(false)
-    setTranslateError(null)
-  }, [selectedItem?.id])
-
-  async function handleTranslate(target: 'ko' | 'en') {
-    if (!selectedItem) return
-    setTranslateTarget(target)
-    setTranslateError(null)
-    // Already translated to this language (cached on the item from a previous call) — just show it.
-    if (selectedItem.translated_lang === target && (selectedItem.translated_html || selectedItem.translated_body)) {
-      setShowTranslated(true)
-      return
-    }
-    setTranslating(true)
-    try {
-      const { translated, html, lang } = await api.mail.translate(selectedItem.id, target)
-      const patch = { translated_body: translated, translated_html: html, translated_lang: lang }
-      setSelectedItem(prev => prev?.id === selectedItem.id ? { ...prev, ...patch } : prev)
-      setItems(prev => prev.map(m => m.id === selectedItem.id ? { ...m, ...patch } : m))
-      setShowTranslated(true)
-    } catch (err) {
-      setTranslateError(err instanceof Error ? err.message : 'Translation failed')
-    } finally {
-      setTranslating(false)
-    }
+  function handleThreadClick(thread: MailThread) {
+    openThread(thread)
   }
 
-  async function handleItemClick(item: MailItem) {
-    setSelectedItem(item)
-    handleMarkRead(item)
-    if (item.html_body === undefined && item.body === undefined) {
-      setBodyLoading(true)
-      const full = await api.mail.getItem(item.id).catch(() => null)
-      if (full) {
-        const patch = { body: full.body, html_body: full.html_body }
-        setSelectedItem(prev => prev?.id === item.id ? { ...prev, ...patch } : prev)
-        setItems(prev => prev.map(m => m.id === item.id ? { ...m, ...patch } : m))
-      }
-      setBodyLoading(false)
-    }
+  function toggleExpanded(id: string) {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
   }
 
-  const unreadCount = items.filter(m => !m.read).length
+  const unreadCount = threads.reduce((n, t) => n + t.unread_count, 0)
 
   useEffect(() => {
     onUnreadCount?.(unreadCount)
@@ -452,21 +560,22 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
   useEffect(() => { setSearchQuery('') }, [panel, showFlagged, activeAccount])
 
   const q = searchQuery.trim().toLowerCase()
-  const displayedItems = q
-    ? items.filter(m =>
-        m.from_name?.toLowerCase().includes(q) ||
-        m.from_address?.toLowerCase().includes(q) ||
-        m.subject?.toLowerCase().includes(q) ||
-        m.snippet?.toLowerCase().includes(q)
+  const displayedThreads = q
+    ? threads.filter(t =>
+        t.participants?.some(p => p.toLowerCase().includes(q)) ||
+        t.from_name?.toLowerCase().includes(q) ||
+        t.from_address?.toLowerCase().includes(q) ||
+        t.subject?.toLowerCase().includes(q) ||
+        t.snippet?.toLowerCase().includes(q)
       )
-    : items
+    : threads
 
-  const showDetail = selectedItem !== null && panel === 'inbox'
+  const showDetail = selectedThread !== null && panel === 'inbox'
 
   // Keyboard: j/k move the cursor, Enter opens, e marks read, s flags (list view only, not while typing).
-  const [cursorId, setCursorId] = useState<string | null>(null)
-  const keyCtx = useRef({ active: false, list: displayedItems, cursor: cursorId, open: handleItemClick, read: handleMarkRead, flag: handleToggleFlag })
-  keyCtx.current = { active: isAuth && panel === 'inbox' && !showDetail, list: displayedItems, cursor: cursorId, open: handleItemClick, read: handleMarkRead, flag: handleToggleFlag }
+  const [cursorKey, setCursorKey] = useState<string | null>(null)
+  const keyCtx = useRef({ active: false, list: displayedThreads, cursor: cursorKey, open: handleThreadClick, read: handleMarkRead, flag: handleToggleThreadFlag })
+  keyCtx.current = { active: isAuth && panel === 'inbox' && !showDetail, list: displayedThreads, cursor: cursorKey, open: handleThreadClick, read: handleMarkRead, flag: handleToggleThreadFlag }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const c = keyCtx.current
@@ -474,14 +583,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
       const t = e.target as HTMLElement | null
       if (t && (/^(INPUT|TEXTAREA|SELECT|BUTTON|A)$/.test(t.tagName) || t.isContentEditable)) return
       if (document.querySelector('.modal-overlay')) return
-      const i = c.list.findIndex(m => m.id === c.cursor)
+      const i = c.list.findIndex(m => threadKey(m) === c.cursor)
       const cur = i >= 0 ? c.list[i] : null
       if (e.key === 'j' || e.key === 'k') {
         e.preventDefault()
         const next = c.list[Math.max(0, Math.min(c.list.length - 1, i < 0 ? 0 : i + (e.key === 'j' ? 1 : -1)))]
         if (!next) return
-        setCursorId(next.id)
-        document.querySelector(`[data-mail-id="${CSS.escape(next.id)}"]`)?.scrollIntoView({ block: 'nearest' })
+        setCursorKey(threadKey(next))
+        document.querySelector(`[data-mail-id="${CSS.escape(threadKey(next))}"]`)?.scrollIntoView({ block: 'nearest' })
       } else if (cur && e.key === 'Enter') { e.preventDefault(); c.open(cur) }
       else if (cur && e.key === 'e') { void c.read(cur) }
       else if (cur && e.key === 's') { void c.flag(cur) }
@@ -502,7 +611,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
           <div className="split-nav">
             <button
               className={`split-nav-item${panel === 'inbox' && !showFlagged ? ' split-nav-active' : ''}`}
-              onClick={() => { setPanel('inbox'); setShowFlagged(false); setSelectedItem(null) }}
+              onClick={() => { setPanel('inbox'); setShowFlagged(false); setSelectedThread(null) }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z" />
@@ -512,14 +621,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
             </button>
             <button
               className={`split-nav-item${showFlagged ? ' split-nav-active' : ''}`}
-              onClick={() => { setShowFlagged(true); setPanel('inbox'); setSelectedItem(null) }}
+              onClick={() => { setShowFlagged(true); setPanel('inbox'); setSelectedThread(null) }}
             >
               <Icon name="flag" size={16} />
               Flagged
             </button>
             <button
               className={`split-nav-item${panel === 'accounts' ? ' split-nav-active' : ''}`}
-              onClick={() => { setPanel('accounts'); setShowFlagged(false); setSelectedItem(null) }}
+              onClick={() => { setPanel('accounts'); setShowFlagged(false); setSelectedThread(null) }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -594,14 +703,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
 
             {loading ? (
               <div className="mail-empty"><Loading /></div>
-            ) : items.length === 0 ? (
+            ) : threads.length === 0 ? (
               <div className="mail-empty">
                 {accounts.length === 0 ? (
                   <Empty
                     icon="mail"
                     title="No mail accounts yet"
                     hint="Connect an IMAP account to read your mail here."
-                    action={{ label: 'Add account', onClick: () => { setPanel('accounts'); setShowFlagged(false); setSelectedItem(null) } }}
+                    action={{ label: 'Add account', onClick: () => { setPanel('accounts'); setShowFlagged(false); setSelectedThread(null) } }}
                   />
                 ) : (
                   <Empty
@@ -612,27 +721,31 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                   />
                 )}
               </div>
-            ) : displayedItems.length === 0 ? (
+            ) : displayedThreads.length === 0 ? (
               <div className="mail-empty"><Empty compact icon="search" title={`No results for "${searchQuery}"`} /></div>
             ) : (
               <div className="mail-list">
-                {displayedItems.map(item => (
+                {displayedThreads.map(t => {
+                  const k = threadKey(t)
+                  const unread = t.unread_count > 0
+                  return (
                   <div
-                    key={item.id}
+                    key={k}
                     role="button"
                     tabIndex={0}
-                    className={`mail-item${!item.read ? ' mail-item-unread' : ''}${selectedItem?.id === item.id ? ' mail-item-selected' : ''}${cursorId === item.id ? ' mail-item-cursor' : ''}`}
-                    data-mail-id={item.id}
-                    onClick={() => handleItemClick(item)}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleItemClick(item) }}
+                    className={`mail-item${unread ? ' mail-item-unread' : ''}${selectedThread && threadKey(selectedThread) === k ? ' mail-item-selected' : ''}${cursorKey === k ? ' mail-item-cursor' : ''}`}
+                    data-mail-id={k}
+                    onClick={() => handleThreadClick(t)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') handleThreadClick(t) }}
                   >
                     <div className="mail-item-header">
-                      <span className="mail-item-from">{item.from_name || item.from_address}</span>
-                      <span className="mail-item-date">{formatDate(item.received_at)}</span>
-                      {!item.read && (
+                      <span className="mail-item-from">{t.participants?.length ? t.participants.join(', ') : (t.from_name || t.from_address)}</span>
+                      {t.count > 1 && <span className="mail-count">{t.count}</span>}
+                      <span className="mail-item-date">{formatDate(t.received_at)}</span>
+                      {unread && (
                         <button
                           className="mail-item-read-btn"
-                          onClick={e => { e.stopPropagation(); handleMarkRead(item) }}
+                          onClick={e => { e.stopPropagation(); handleMarkRead(t) }}
                           aria-label="Mark as read"
                           title="Mark as read"
                         >
@@ -640,15 +753,16 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                         </button>
                       )}
                       <button
-                        className={`flag-btn${item.flagged ? ' flag-btn-active' : ''}`}
-                        onClick={e => handleToggleFlag(item, e)}
-                        aria-label={item.flagged ? 'Unflag' : 'Flag'}
+                        className={`flag-btn${t.flagged ? ' flag-btn-active' : ''}`}
+                        onClick={e => handleToggleThreadFlag(t, e)}
+                        aria-label={t.flagged ? 'Unflag' : 'Flag'}
                       ><Icon name="star" size={16} /></button>
                     </div>
-                    <div className="mail-item-subject">{item.subject}</div>
-                    {item.snippet && <div className="mail-item-snippet">{item.snippet}</div>}
+                    <div className="mail-item-subject">{t.subject}</div>
+                    {t.snippet && <div className="mail-item-snippet">{t.snippet}</div>}
                   </div>
-                ))}
+                  )
+                })}
                 {!searchQuery && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
                 {loadingMore && <div className="mail-empty" style={{ padding: '12px', fontSize: 'var(--kp-text-xs)', color: 'var(--kp-fg-4)' }}>Loading more…</div>}
               </div>
@@ -708,65 +822,39 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
       </div>
 
       {/* Full-width detail pane — replaces list when open */}
-      {showDetail && selectedItem && (
+      {showDetail && selectedThread && (
         <div className="mail-detail">
           <div className="mail-detail-header">
-            <button className="icon-btn" onClick={() => setSelectedItem(null)} aria-label="Back to inbox">
+            <button className="icon-btn" onClick={() => setSelectedThread(null)} aria-label="Back to inbox">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
               </svg>
             </button>
-            <h3 className="mail-detail-subject">{selectedItem.subject}</h3>
-            {showTranslated ? (
-              <>
-                <button
-                  className="translate-btn"
-                  onClick={() => handleTranslate(translateTarget === 'ko' ? 'en' : 'ko')}
-                  disabled={translating}
-                  aria-label="Switch translation language"
-                >
-                  {translating ? '번역 중…' : translateTarget === 'ko' ? 'English로' : '한국어로'}
-                </button>
-                <button className="translate-btn" onClick={() => setShowTranslated(false)} aria-label="Show original">
-                  원문 보기
-                </button>
-              </>
-            ) : (
-              <button
-                className="translate-btn icon-btn"
-                onClick={() => handleTranslate(translateTarget)}
-                disabled={translating || (!selectedItem.body && !bodyLoading)}
-                aria-label="Translate"
-                title="번역"
-              >
-                <LanguageIcon />
-                {translating && '…'}
-              </button>
-            )}
+            <h3 className="mail-detail-subject">{selectedThread.subject}</h3>
+            {selectedThread.count > 1 && <span className="mail-count">{selectedThread.count}</span>}
             <button
-              className={`flag-btn${selectedItem.flagged ? ' flag-btn-active' : ''}`}
-              onClick={e => handleToggleFlag(selectedItem, e)}
-              aria-label={selectedItem.flagged ? 'Unflag' : 'Flag'}
+              className={`flag-btn${selectedThread.flagged ? ' flag-btn-active' : ''}`}
+              onClick={e => handleToggleThreadFlag(selectedThread, e)}
+              aria-label={selectedThread.flagged ? 'Unflag' : 'Flag'}
             >★</button>
           </div>
-          <div className="mail-detail-meta">
-            <span>From: {selectedItem.from_name ? `${selectedItem.from_name} <${selectedItem.from_address}>` : selectedItem.from_address}</span>
-            <span>{new Date(selectedItem.received_at).toLocaleString()}</span>
-          </div>
-          {translateError && <div className="mail-translate-error">{translateError}</div>}
           <div className="mail-detail-body">
-            {bodyLoading ? (
+            {messages === null ? (
               <div className="mail-empty"><Loading /></div>
-            ) : showTranslated && selectedItem.translated_html ? (
-              <AutoIframe key={`${selectedItem.id}-translated`} srcdoc={buildSrcdoc(selectedItem.translated_html, isDark)} />
-            ) : showTranslated && selectedItem.translated_body ? (
-              <pre className="mail-detail-plain mail-detail-translated">{selectedItem.translated_body}</pre>
-            ) : selectedItem.html_body ? (
-              <AutoIframe key={`${selectedItem.id}-original`} srcdoc={buildSrcdoc(selectedItem.html_body, isDark)} />
-            ) : selectedItem.body ? (
-              <pre className="mail-detail-plain">{selectedItem.body}</pre>
-            ) : (
+            ) : messages.length === 0 ? (
               <div className="mail-empty">(no content)</div>
+            ) : (
+              messages.map(m => (
+                <MailMessage
+                  key={m.id}
+                  msg={m}
+                  isDark={isDark}
+                  expanded={expanded.has(m.id)}
+                  onToggle={() => toggleExpanded(m.id)}
+                  onFlag={handleToggleMessageFlag}
+                  onPatch={patchMessage}
+                />
+              ))
             )}
           </div>
         </div>
