@@ -230,11 +230,11 @@ export const api = {
       return req<MailThread[]>('GET', `/mail/threads?${q}`)
     },
     getThreadItems: (accountId: string, threadId: string) =>
-      req<MailItem[]>('GET', `/mail/threads/${accountId}/${encodeURIComponent(threadId)}/items`),
+      req<MailItem[]>('GET', `/mail/threads/items?${new URLSearchParams({ account_id: accountId, thread_id: threadId })}`),
     markThreadRead: (accountId: string, threadId: string) =>
-      req<void>('POST', `/mail/threads/${accountId}/${encodeURIComponent(threadId)}/read`),
+      req<void>('POST', '/mail/threads/read', { account_id: accountId, thread_id: threadId }),
     toggleThreadFlag: (accountId: string, threadId: string) =>
-      req<{ flagged: boolean }>('POST', `/mail/threads/${accountId}/${encodeURIComponent(threadId)}/flag`),
+      req<{ flagged: boolean }>('POST', '/mail/threads/flag', { account_id: accountId, thread_id: threadId }),
     getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),
     markRead: (id: string) => req<void>('POST', `/mail/items/${id}/read`),
     toggleFlag: (id: string) => req<{ flagged: boolean }>('POST', `/mail/items/${id}/flag`),
