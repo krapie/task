@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
+import type { AssistantConversation, AssistantEvent, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -101,18 +101,26 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
 // A page reload forces a fresh passkey check, which is the intended tradeoff
 // for a 5-minute, high-sensitivity scope. useStepUp also clears it
 // proactively on backgrounding (visibilitychange) and after 5 minutes idle.
-export type StepUpView = 'assets' | 'health'
+export type StepUpView = 'assets' | 'health' | 'assistant'
 const STEP_UP_PENDING = 'task-step-up-pending'
 let _assetToken: string | null = null
 let _assetTokenExpiresAt = 0
 
+// Fired whenever the step-up token appears or goes, so every view that depends on it
+// (Assets, Health, the Assistant tab and its chat button) follows one lock state.
+export const STEP_UP_EVENT = 'kp-step-up'
+const stepUpChanged = () => window.dispatchEvent(new Event(STEP_UP_EVENT))
+
 export function setAssetToken(token: string, expiresInSec: number) {
   _assetToken = token
   _assetTokenExpiresAt = Date.now() + expiresInSec * 1000
+  stepUpChanged()
 }
 export function clearAssetToken() {
+  const had = _assetToken !== null
   _assetToken = null
   _assetTokenExpiresAt = 0
+  if (had) stepUpChanged()
 }
 export function hasAssetToken(): boolean {
   return Boolean(_assetToken) && Date.now() < _assetTokenExpiresAt
@@ -144,7 +152,44 @@ async function assetReq<T>(method: string, path: string, body?: unknown): Promis
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error((err as { error?: string }).error ?? res.statusText)
   }
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
+}
+
+// Assistant chat: SSE from the operator's personal profile via task-api. The
+// stream is read with the step-up token, like every other step-up request.
+async function assistantChat(conversationId: string | null, question: string, onEvent: (e: AssistantEvent) => void, signal: AbortSignal): Promise<void> {
+  if (!hasAssetToken()) {
+    clearAssetToken()
+    throw new Error('ASSET_SESSION_EXPIRED')
+  }
+  const res = await fetch('/api/assistant/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${_assetToken}` },
+    body: JSON.stringify({ conversation_id: conversationId ?? undefined, question }),
+    signal,
+  })
+  if (res.status === 401) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }
+  if (res.status === 403) { clearAssetToken(); throw new Error('STEP_UP_FORBIDDEN') }
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(res.status === 429 ? 'The assistant is busy. Try again in a minute.' : data.error ?? `HTTP ${res.status}`)
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+  let buf = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += value
+    let i
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, i)
+      buf = buf.slice(i + 2)
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('data: ')) onEvent(JSON.parse(line.slice(6)) as AssistantEvent)
+      }
+    }
+  }
 }
 
 export const api = {
@@ -324,6 +369,15 @@ export const api = {
     setPassword: (password: string) => assetReq<{ ok: boolean }>('POST', '/assets/password', { password }),
     getNotifySettings: () => assetReq<FinanceNotifySettings>('GET', '/assets/notify-settings'),
     updateNotifySettings: (s: Partial<FinanceNotifySettings>) => assetReq<{ ok: boolean }>('POST', '/assets/notify-settings', s),
+  },
+  assistant: {
+    chat: assistantChat,
+    stop: (turnId: string) => assetReq<{ stopped: boolean }>('POST', '/assistant/chat/stop', { turn_id: turnId }),
+    list: () => assetReq<{ conversations: AssistantSummary[] }>('GET', '/assistant/conversations').then(r => r.conversations),
+    get: (id: string) => assetReq<AssistantConversation>('GET', `/assistant/conversations/${id}`),
+    remove: (id: string) => assetReq<void>('DELETE', `/assistant/conversations/${id}`),
+    getMemory: (key: string) => assetReq<{ key: string; body: string; updated_at: string }>('GET', `/assistant/memory/${key}`),
+    setMemory: (key: string, body: string) => assetReq<{ key: string; updated_at: string }>('PUT', `/assistant/memory/${key}`, { body }),
   },
   health: {
     getSummary: () => assetReq<HealthSummary | null>('GET', '/health-data/summary'),

@@ -1,6 +1,6 @@
 import express from 'express'
 import pg from 'pg'
-import { randomUUID } from 'crypto'
+import { randomUUID, timingSafeEqual } from 'crypto'
 import fetch from 'node-fetch'
 import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
@@ -17,6 +17,11 @@ const JWKS = createRemoteJWKSet(new URL(`${AUTH_ISSUER}/keys`), { cacheMaxAge: 6
 const MAIL_BRIDGE_URL = process.env.MAIL_BRIDGE_URL || 'http://localhost:3001'
 const FINANCE_URL = process.env.FINANCE_URL || 'http://finance-svc:3002'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
+// Personal assistant: the operator's personal profile (in-cluster, bearer token),
+// and the token ops uses to ask for a push when a scheduled report is ready.
+const OPERATOR_URL = (process.env.OPERATOR_URL || 'http://operator-svc.ops.svc').replace(/\/$/, '')
+const PERSONAL_TOKEN = process.env.PERSONAL_TOKEN || ''
+const INTERNAL_PUSH_TOKEN = process.env.INTERNAL_PUSH_TOKEN || ''
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || ''
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@localhost'
@@ -33,6 +38,67 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 }
 
 const pool = new pg.Pool({ connectionString: process.env.POSTGRES_URL })
+
+
+// Starting content of the "portfolio" memory (editable in Settings → Assistant).
+const PORTFOLIO_SEED = `# Portfolio config
+
+## Holdings
+
+| Ticker | Role |
+|---|---|
+| KODEX 미국S&P500 | core index |
+| KODEX 미국나스닥100 | index |
+| KODEX 미국AI전력핵심인프라 | AI theme |
+| KODEX 미국반도체 | AI theme |
+| KODEX 미국배당커버드콜액티브 | dividend / income, monthly distribution |
+
+## Target allocation (2026)
+
+| Asset | Target |
+|---|---|
+| S&P500 | 30.0% |
+| AI power infrastructure | 25.8% |
+| Dividend / income | 17.2% |
+| Semiconductors | 9.0% |
+| Nasdaq 100 | 5.2% |
+| Cash | 12.9% |
+
+Cash at target is a reserve, not idle money. Do not recommend deploying it as a lump sum: it funds the -5% and -8% triggers below.
+
+## Buy triggers (S&P 500 drawdown from recent high)
+
+| Drawdown | Action |
+|---|---|
+| 0 to -2% | Normal. Execute planned amount. |
+| -3% or more | Accelerate: +50% this week. |
+| -5% | 2nd trigger: deploy reserve cash. |
+| -8% to -10% | 3rd trigger: deploy most of reserve. |
+| Recovery / breakout | 4th tranche: finish remainder. |
+
+VIX above 25 counts as accelerate even if drawdown has not reached -3%.
+"Recent high" = the 52-week high from market_quotes (state which high you used; also show the 3-month one).
+
+## Skip conditions
+
+Defer a week or execute half if any are live:
+
+- Geopolitical escalation affecting oil (Iran, Strait of Hormuz)
+- CPI or PCE well above consensus
+- FOMC decision day: wait for the result
+- Index down more than 2% intraday
+- US market holiday
+
+## Contribution plan
+
+- 1,700,000 KRW monthly
+- Annual deposit ceiling: 19,899,900 KRW
+- Execution day: Monday, after the US open (23:00 KST, DST-dependent), or Korean afternoon session as a fallback
+
+## Priority when adding
+
+Fill the cost-basis shortfall first. Default split when nothing is clearly underweight: S&P500 ~62%, dividend ~29%, semiconductors ~9%.
+`
 
 async function initDb() {
   await pool.query(`
@@ -154,7 +220,16 @@ async function initDb() {
     );
     ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS username TEXT;
     ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_agent TEXT;
+    -- Standing notes for the assistant (e.g. the investment plan); read by the operator's personal profile.
+    CREATE TABLE IF NOT EXISTS assistant_memory (
+      key TEXT PRIMARY KEY,
+      body TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `)
+  await pool.query('INSERT INTO assistant_memory (key, body) VALUES ($1, $2) ON CONFLICT DO NOTHING', ['portfolio', PORTFOLIO_SEED])
+  // The operator reads the table as agent_ro; best effort (the role may not exist locally).
+  await pool.query('GRANT SELECT ON assistant_memory TO agent_ro').catch(err => console.warn('assistant_memory grant:', err.message))
   await pool.query(`
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('rotateMinute', '0') ON CONFLICT DO NOTHING;
@@ -1504,6 +1579,97 @@ app.get('/api/news', async (req, res) => {
   } catch {
     res.status(502).json({ error: 'feed unavailable' })
   }
+})
+
+// ── Assistant (operator "personal" profile) ─────────────────────────────
+// Same trust boundary as Assets and Health: the assistant reads both, so every
+// route needs the passkey step-up token (and a STEP_UP_USERS account). The
+// operator trusts this service via PERSONAL_TOKEN and is told who is asking
+// in X-User; it keeps the conversations under "personal:<user>".
+async function operatorFetch(req, path, init = {}, signal) {
+  return fetch(`${OPERATOR_URL}/personal${path}`, {
+    ...init,
+    signal,
+    headers: { Authorization: `Bearer ${PERSONAL_TOKEN}`, 'X-User': req.user.username, 'Content-Type': 'application/json', ...init.headers },
+  })
+}
+
+async function assistantJson(req, res, path, init = {}) {
+  if (!PERSONAL_TOKEN) return res.status(503).json({ error: 'Assistant not configured' })
+  try {
+    const r = await operatorFetch(req, path, init)
+    res.status(r.status)
+    if (r.status === 204) return res.end()
+    res.json(await r.json().catch(() => ({})))
+  } catch {
+    res.status(503).json({ error: 'assistant unavailable' })
+  }
+}
+
+// POST {conversation_id?, question} → text/event-stream, passed through.
+// If the browser leaves, only the stream is dropped: the operator keeps the turn
+// running and saved, so the conversation shows the answer when you come back.
+app.post('/api/assistant/chat', stepUpAuth, async (req, res) => {
+  if (!PERSONAL_TOKEN) return res.status(503).json({ error: 'Assistant not configured' })
+  const abort = new AbortController()
+  res.on('close', () => abort.abort())
+  try {
+    const body = { conversation_id: req.body?.conversation_id, question: req.body?.question }
+    const r = await operatorFetch(req, '/chat', { method: 'POST', body: JSON.stringify(body) }, abort.signal)
+    if (!r.ok || !String(r.headers.get('content-type')).includes('text/event-stream')) {
+      return res.status(r.status).json(await r.json().catch(() => ({ error: 'assistant error' })))
+    }
+    res.set({ 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-store', 'X-Accel-Buffering': 'no' })
+    res.flushHeaders()
+    r.body.on('error', () => res.end())
+    r.body.pipe(res)
+  } catch {
+    if (!res.headersSent) res.status(503).json({ error: 'assistant unavailable' })
+    else res.end()
+  }
+})
+app.post('/api/assistant/chat/stop', stepUpAuth, (req, res) =>
+  assistantJson(req, res, '/chat/stop', { method: 'POST', body: JSON.stringify({ turn_id: req.body?.turn_id }) }))
+app.get('/api/assistant/conversations', stepUpAuth, (req, res) => assistantJson(req, res, '/conversations'))
+app.get('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
+  assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`))
+app.patch('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
+  assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'PATCH', body: JSON.stringify({ title: req.body?.title }) }))
+app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
+  assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' }))
+
+// Standing notes the assistant reads (assistant_memory tool).
+const MEMORY_KEY = /^[a-z][a-z0-9_-]{0,59}$/
+app.get('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
+  if (!MEMORY_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
+  const { rows } = await pool.query('SELECT key, body, updated_at FROM assistant_memory WHERE key = $1', [req.params.key])
+  if (!rows[0]) return res.status(404).json({ error: 'not found' })
+  res.json(rows[0])
+})
+app.put('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
+  const body = req.body?.body
+  if (!MEMORY_KEY.test(req.params.key) || typeof body !== 'string' || !body.trim() || body.length > 20_000) {
+    return res.status(400).json({ error: 'key a-z0-9_-, body 1-20000 chars' })
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO assistant_memory (key, body, updated_at) VALUES ($1, $2, NOW())
+       ON CONFLICT (key) DO UPDATE SET body = EXCLUDED.body, updated_at = NOW() RETURNING key, updated_at`,
+    [req.params.key, body]
+  )
+  await audit(`assistant_memory_edit:${req.params.key}`, req)
+  res.json(rows[0])
+})
+
+// ops asks for a push when a scheduled report (weekly recap, market check) is
+// ready. In-cluster only (not routed by Envoy); bearer INTERNAL_PUSH_TOKEN.
+app.post('/internal/push', async (req, res) => {
+  const got = Buffer.from(String(req.headers.authorization || '').replace(/^Bearer /, ''))
+  const want = Buffer.from(INTERNAL_PUSH_TOKEN)
+  if (!INTERNAL_PUSH_TOKEN || got.length !== want.length || !timingSafeEqual(got, want)) return res.status(401).json({ error: 'unauthorized' })
+  const { title, body, url } = req.body || {}
+  if (typeof title !== 'string' || !title || typeof url !== 'string' || !url.startsWith('/')) return res.status(400).json({ error: 'title and a relative url are required' })
+  const sent = await sendPushToAll({ title: title.slice(0, 120), body: String(body || '').slice(0, 300), tag: 'assistant', url })
+  res.json({ sent })
 })
 
 initDb().then(() => {

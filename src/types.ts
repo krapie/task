@@ -223,3 +223,33 @@ export interface PushDevice {
   user_agent: string | null
   created_at: string
 }
+
+// ── Assistant (operator personal profile) ──
+export interface AssistantSummary { id: string; title: string; created_at: string; updated_at: string; turns: number; streaming: boolean }
+
+export type AssistantPart =
+  | { kind: 'text'; text: string }
+  | { kind: 'tool'; id: string; name: string; input: unknown; result?: { error: boolean; output: string } }
+
+export interface AssistantTurn {
+  id: string
+  question: string
+  parts: AssistantPart[]
+  state: 'streaming' | 'done' | 'error'
+  notice?: string | null
+  error?: string | null
+  status?: string
+  done?: { ok: boolean; duration_ms: number; reason?: string } | null
+}
+
+export interface AssistantConversation { id: string; title: string; created_at: string; updated_at: string; turns: AssistantTurn[] }
+
+export type AssistantEvent =
+  | { type: 'conversation'; id: string; turn_id: string }
+  | { type: 'text'; text: string }
+  | { type: 'tool'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; id: string; error: boolean; output: string }
+  | { type: 'status'; message: string }
+  | { type: 'reset'; notice?: string }
+  | { type: 'done'; ok: boolean; duration_ms: number; reason?: string }
+  | { type: 'error'; message: string }

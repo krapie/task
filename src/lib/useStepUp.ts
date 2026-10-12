@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { api, type StepUpView } from './api'
+import { api, STEP_UP_EVENT, type StepUpView } from './api'
 
 const IDLE_LOCK_MS = 5 * 60_000
 
@@ -18,6 +18,8 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onLockRef = useRef(onLock)
   onLockRef.current = onLock
+  const unlockedRef = useRef(unlocked)
+  unlockedRef.current = unlocked
 
   const lock = useCallback(() => {
     api.assets.clearToken()
@@ -50,6 +52,18 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void)
       setError(err instanceof Error ? err.message : 'Failed to load')
     }
   }, [lock])
+
+  // Another view unlocked or locked (the Assistant tab and its chat button share one state).
+  useEffect(() => {
+    const sync = () => {
+      const has = api.assets.hasToken()
+      if (has === unlockedRef.current) return
+      setUnlocked(has)
+      if (!has) onLockRef.current()
+    }
+    window.addEventListener(STEP_UP_EVENT, sync)
+    return () => window.removeEventListener(STEP_UP_EVENT, sync)
+  }, [])
 
   // Coming back from the auth passkey prompt: finish the unlock without
   // another click, but only in the view that started it.

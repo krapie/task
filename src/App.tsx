@@ -12,6 +12,8 @@ import { GoalView } from './components/GoalView'
 import { RetroView } from './components/RetroView'
 import AssetsView from './components/AssetsView'
 import HealthView from './components/HealthView'
+import AssistantView from './components/AssistantView'
+import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
 import { DialogHost, LoadingBar, ToastHost } from './components/Ui'
 import { AUTH_ONLY_VIEWS, GROUPS, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, type RoutineTab, type View, type YearMonth } from './lib/nav'
@@ -83,6 +85,8 @@ export default function App() {
   const [view, setView] = useState<View>(initialRoute.view)
   // Deep-link: ?mail=<id> opens a specific email (set by push notification URL)
   const [initialMailId] = useState<string | null>(initialRoute.mailId)
+  // #/assistant/<id>: the conversation a finished report's push notification points at.
+  const [initialChatId] = useState<string | null>(initialRoute.chatId)
   const [calendarMonth, setCalendarMonth] = useState<YearMonth>(() => {
     if (initialRoute.month) return initialRoute.month
     const now = new Date()
@@ -939,7 +943,7 @@ export default function App() {
       const k = e.key
       if (gAt && Date.now() - gAt < 1000) {
         gAt = 0
-        const target = ({ t: 'today', c: 'calendar', i: 'inbox', l: 'life', s: 'settings' } as Record<string, string>)[k]
+        const target = ({ t: 'today', c: 'calendar', i: 'inbox', l: 'life', a: 'assistant', s: 'settings' } as Record<string, string>)[k]
         if (target) { e.preventDefault(); keys.current.goGroup(target) }
         return
       }
@@ -953,7 +957,7 @@ export default function App() {
       } else if ((k === '[' || k === ']') && keys.current.view === 'calendar') {
         keys.current.shiftMonth(k === '[' ? -1 : 1)
       } else if (k === '?') {
-        notify('g then t/c/i/l/s: go to Today/Calendar/Inbox/Life/Settings · n: new task · /: search mail · j/k/Enter/e/s: move, open, read, star in the inbox · [ ]: previous/next month', 'info', 10000)
+        notify('g then t/c/i/l/a/s: go to Today/Calendar/Inbox/Life/Assistant/Settings · n: new task · /: search mail · j/k/Enter/e/s: move, open, read, star in the inbox · [ ]: previous/next month', 'info', 10000)
       }
     }
     document.addEventListener('keydown', onKey)
@@ -1142,6 +1146,8 @@ export default function App() {
           <AssetsView isAuth={isAuth} />
         ) : view === 'health' ? (
           <HealthView isAuth={isAuth} />
+        ) : view === 'assistant' ? (
+          <AssistantView isAuth={isAuth} initialChatId={initialChatId} />
         ) : (
           <SettingsPanel
             settings={settings}
@@ -1156,6 +1162,8 @@ export default function App() {
           />
         )}
       </main>
+
+      {isOwner && view !== 'assistant' && <AssistantBubble isAuth={isAuth} onOpenTab={() => setView('assistant')} />}
 
       {view === 'calendar' && selectedCalendarDate && (
         <EventPanel
