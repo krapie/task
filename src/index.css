@@ -3746,9 +3746,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .as-fab-form { display: flex; gap: var(--kp-space-2); align-items: center; padding-top: var(--kp-space-2); border-top: 1px solid var(--kp-border-faint); }
 .as-fab-form .field-input { flex: 1; padding: 6px 10px; font-size: var(--kp-text-sm); }
 .as-fab-locked { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--kp-space-3); text-align: center; padding: var(--kp-space-4); }
+/* Phones: no chat button (the Assistant tab is in the bottom bar). */
 @media (max-width: 600px) {
-  /* Above the bottom tab bar; the panel is a bottom sheet over it. */
-  .as-fab { right: var(--kp-space-4); bottom: calc(54px + env(safe-area-inset-bottom, 0px) + var(--kp-space-3)); }
-  .as-fab-panel { right: 0; left: 0; bottom: 0; width: 100%; height: 85dvh; border-radius: var(--kp-radius-md) var(--kp-radius-md) 0 0; border-bottom: none; z-index: 41; }
-  .as-fab-form .field-input { font-size: 16px; } /* prevent iOS Safari auto-zoom */
+  .as-fab, .as-fab-panel { display: none; }
 }
