@@ -283,7 +283,7 @@ async function auth(req, res, next) {
 // Two-tier trust boundary: a normal session token never reaches
 // /api/assets/* or /api/health-data/*. Only a step-up token does: auth
 // issues it for GET /api/token?aud=task&step_up=1 when a passkey was verified
-// in the last 5 minutes, and it expires 5 minutes after that passkey check.
+// in the last 6 hours; the token itself lives 5 minutes (auth re-issues it silently).
 // On top of that, only the users in STEP_UP_USERS (personal data of one
 // person) pass; any other admin gets 403 even with a valid passkey.
 const STEP_UP_USERS = new Set(
