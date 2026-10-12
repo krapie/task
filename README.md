@@ -57,7 +57,7 @@ Keyboard (desktop, not while typing): `g` then `t` / `c` / `i` / `l` / `a` / `s`
 - `src/colors_and_type.css` is a copy of `~/homeserver/design/colors_and_type.css`; `index.css` only adds a dark lift for `--kp-danger` / `--kp-warning`. No hard-coded colors.
 - `components/Icons.tsx` holds every Heroicon (one place, 18px default). `components/Ui.tsx` has `Dialog`, `Meter`, `Loading` (skeleton), `Empty` and the hosts mounted once in `App` (`ToastHost`, `DialogHost`, `LoadingBar`).
 - `lib/notify.ts` is callable from anywhere without hooks: `notifyError` (use as `.catch(notifyError)`; logs and shows a toast), `notify`, `confirmDialog`, `promptDialog`. No native `confirm()` / `prompt()`.
-- `lib/inflight.ts` counts in-flight API requests for the thin top progress bar.
+- `lib/inflight.ts` counts in-flight API requests per scope (first path segment, e.g. `news`, `mail`) for the thin top progress bar. `LoadingBar` only listens to the scopes of the current tab (`scopesFor` in `lib/nav.ts`), so a refresh of another area never flashes it.
 - Mail and News share one split layout (`split-view`, `split-sidebar`, `split-nav`, `split-toolbar` in `index.css`).
 - `lib/recurrence.ts` expands recurring calendar events.
 - UI text is English throughout (including Assets and Health); holiday names on the calendar stay Korean.
@@ -67,3 +67,10 @@ Keyboard (desktop, not while typing): `g` then `t` / `c` / `i` / `l` / `a` / `s`
 - Text is never below 12px (`--kp-text-2xs`); body-level gray text uses `--kp-fg-3`, `--kp-fg-4` is for placeholders, disabled and icon-only controls.
 - Calendar week rows share the window height; the number of event lanes per day follows the row height (`maxLanes` in `CalendarView.tsx`), so 5- and 6-week months both fit without scrolling. Assets and Health use two columns from 900px.
 - The Mail and News sidebars remember whether you collapsed them (per view, in this browser; phones always start with the overlay closed).
+
+## Startup and sign-in
+
+- `index.html` ships a boot screen (π, "Loading Task…", progress bar, theme set before paint) so the first paint is never blank; after 8 s it offers a Reload button. Fonts load from `<link>` tags there, not CSS `@import`.
+- Auth state is `checking | in | out | error` (`App.tsx`). Without the `kp_auth` hint cookie the app starts as a guest at once; with it, a "Signing in…" screen (`StatusScreen`) shows until `/api/token` answers, so guest data never flashes before the account loads. The token request times out after 8 s; an unreachable auth shows Retry (and retries on focus) instead of silently dropping to guest. A real 401 switches to guest through `AUTH_LOST_EVENT`, without a page reload.
+- Sign in / Sign out show "Opening sign-in…" / "Signing out…" right away while auth.kevinprk.com loads.
+- `public/sw-v2.js` (cache `task-v3`): hashed `/assets/*` are cache-first; page loads are network-first with a 3 s fallback to the cached shell; API calls and cross-origin requests are never touched. nginx serves `sw*.js` with `no-cache`.

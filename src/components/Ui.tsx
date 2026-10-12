@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Icon, type IconName } from './Icons'
 import { dialogStore, toastStore } from '../lib/notify'
-import { inflightStore } from '../lib/inflight'
+import { busy, inflightStore } from '../lib/inflight'
 
 export function Dialog({ title, onClose, children, footer }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -87,8 +87,10 @@ export function ToastHost() {
 }
 
 // Shows only after 150ms so fast responses don't flicker.
-export function LoadingBar() {
-  const n = useSyncExternalStore(inflightStore.subscribe, inflightStore.get)
+// Only requests in `scopes` (the current tab's API areas) count.
+export function LoadingBar({ scopes }: { scopes: readonly string[] }) {
+  useSyncExternalStore(inflightStore.subscribe, inflightStore.get)
+  const n = busy(scopes)
   const [show, setShow] = useState(false)
   useEffect(() => {
     if (!n) { setShow(false); return }
@@ -134,6 +136,23 @@ export function Meter({ value, max, label }: { value: number | null | undefined;
   return (
     <div className="meter" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={max ?? 0} aria-valuenow={value ?? 0}>
       <div className="meter-fill" style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
+
+// Full-screen "working on it" state for boot and sign-in/out hand-offs: the app is never blank or silent.
+export function StatusScreen({ label, action, guestAction }: {
+  label: string
+  action?: { label: string; onClick: () => void }
+  guestAction?: { label: string; onClick: () => void }
+}) {
+  return (
+    <div className="status-screen" role="status" aria-live="polite">
+      <div className="top-progress" />
+      <div className="status-screen-mark">π</div>
+      <p className="status-screen-label">{label}</p>
+      {action && <button className="btn-primary" onClick={action.onClick}>{action.label}</button>}
+      {guestAction && <button className="btn-ghost" onClick={guestAction.onClick}>{guestAction.label}</button>}
     </div>
   )
 }

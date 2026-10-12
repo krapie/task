@@ -1,4 +1,4 @@
-const CACHE = 'task-v2'
+const CACHE = 'task-v3'
 const PRECACHE = ['/', '/index.html']
 
 self.addEventListener('install', e => {
@@ -41,21 +41,43 @@ self.addEventListener('notificationclick', e => {
   )
 })
 
-// Network-first: try network, fall back to cache for navigation requests
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return
-  const url = new URL(e.request.url)
-  if (url.pathname.startsWith('/api/')) return
+// Same-origin GETs only. Hashed /assets/* never change: cache-first. Page loads: network first, but
+// after 3 s fall back to the cached shell so a slow connection shows the app (or its boot screen), not a blank page.
+const NAV_TIMEOUT_MS = 3000
 
-  e.respondWith(
-    fetch(e.request)
-      .then(res => {
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))])
+}
+
+self.addEventListener('fetch', e => {
+  const req = e.request
+  if (req.method !== 'GET') return
+  const url = new URL(req.url)
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return
+
+  if (url.pathname.startsWith('/assets/')) {
+    e.respondWith(
+      caches.match(req).then(hit => hit || fetch(req).then(res => {
         if (res.ok) {
           const clone = res.clone()
-          caches.open(CACHE).then(c => c.put(e.request, clone))
+          caches.open(CACHE).then(c => c.put(req, clone))
         }
         return res
-      })
-      .catch(() => caches.match(e.request))
-  )
+      }))
+    )
+    return
+  }
+
+  if (req.mode === 'navigate') {
+    const network = fetch(req).then(res => {
+      if (res.ok) {
+        const clone = res.clone()
+        caches.open(CACHE).then(c => c.put('/index.html', clone))
+      }
+      return res
+    })
+    e.respondWith(
+      withTimeout(network, NAV_TIMEOUT_MS).catch(() => caches.match('/index.html').then(hit => hit || network))
+    )
+  }
 })

@@ -15,11 +15,11 @@ import HealthView from './components/HealthView'
 import AssistantView from './components/AssistantView'
 import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
-import { DialogHost, LoadingBar, ToastHost } from './components/Ui'
-import { AUTH_ONLY_VIEWS, GROUPS, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, type RoutineTab, type View, type YearMonth } from './lib/nav'
+import { DialogHost, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
+import { AUTH_ONLY_VIEWS, GROUPS, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
 import { expandForView, expandForDate, calendarViewRange } from './lib/recurrence'
-import { api } from './lib/api'
+import { api, AUTH_LOST_EVENT, hasAuthHint } from './lib/api'
 import { getActiveSlotDate, getNextSlotDate, getSlotLabels, getSlotOrder, getSlotDateForCalendarDate } from './lib/slots'
 import type { Slot, Template, TemplateWithState, Addition, Settings, ExportData, DailyData, CalendarEvent, DailyEvent, Recurrence, TodoItem } from './types'
 import { notify, notifyError } from './lib/notify'
@@ -58,10 +58,14 @@ export default function App() {
     document.title = mailUnread > 0 ? `(${mailUnread}) Task` : 'Task'
   }, [mailUnread])
 
-  // Set once the auth.kevinprk.com session resolves (see api.auth.session).
-  const [token, setToken] = useState<string | null>(null)
+  // Resolved from the auth.kevinprk.com session (see api.auth.session). Without the kp_auth hint cookie
+  // we start as a guest at once; with it we wait ('checking') instead of flashing guest data first.
+  const [authState, setAuthState] = useState<'checking' | 'in' | 'out' | 'error'>(() => (hasAuthHint() ? 'checking' : 'out'))
   const [username, setUsername] = useState<string | null>(null)
-  const isAuth = token !== null
+  const isAuth = authState === 'in'
+  const authPending = authState === 'checking' || authState === 'error'
+  // Set right before leaving for auth.kevinprk.com so the tap gives feedback while that page loads.
+  const [leaving, setLeaving] = useState<'in' | 'out' | null>(null)
   const isOwner = isAuth && username === OWNER_USERNAME
 
   const [settings, setSettings] = useState<Settings>({ rotateHour: 6, rotateMinute: 0, keepBonus: false, workWeek: 'mon-fri' })
@@ -184,13 +188,46 @@ export default function App() {
   }, [calendarEvents, selectedCalendarDate])
 
   // Resolve the central SSO session on mount; without one Task stays in local mode.
-  useEffect(() => {
+  const checkSession = useCallback(() => {
+    setAuthState(prev => (prev === 'error' ? 'checking' : prev))
     api.auth.session().then(s => {
-      if (!s) return
-      setToken(s.username)
-      setUsername(s.username)
+      if (s.status === 'in') {
+        setUsername(s.username)
+        setAuthState('in')
+      } else if (s.status === 'out') {
+        setAuthState('out')
+      } else {
+        setAuthState(prev => (prev === 'in' ? prev : 'error'))
+      }
     })
   }, [])
+  useEffect(() => { checkSession() }, [checkSession])
+
+  // Back from the sign-in/out page via the browser cache: drop the "opening…" screen.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) setLeaving(null) }
+    window.addEventListener('pageshow', onShow)
+    return () => window.removeEventListener('pageshow', onShow)
+  }, [])
+
+  // A request found the session gone: drop to guest mode without reloading the page.
+  useEffect(() => {
+    const onLost = () => { setAuthState('out'); setUsername(null) }
+    window.addEventListener(AUTH_LOST_EVENT, onLost)
+    return () => window.removeEventListener(AUTH_LOST_EVENT, onLost)
+  }, [])
+
+  // Auth was unreachable: try again when the app comes back to the foreground.
+  useEffect(() => {
+    if (authState !== 'error') return
+    const retry = () => { if (document.visibilityState === 'visible') checkSession() }
+    document.addEventListener('visibilitychange', retry)
+    window.addEventListener('focus', retry)
+    return () => {
+      document.removeEventListener('visibilitychange', retry)
+      window.removeEventListener('focus', retry)
+    }
+  }, [authState, checkSession])
 
   const loadSettings = useCallback(async () => {
     if (isAuth) {
@@ -290,6 +327,7 @@ export default function App() {
 
   // Bootstrap on auth change
   useEffect(() => {
+    if (authPending) return
     loadedDatesRef.current = new Set()
     setDailyData({})
     loadSettings().then(s => {
@@ -299,7 +337,7 @@ export default function App() {
       loadAllEvents()
       loadTodos()
     })
-  }, [isAuth]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuth, authPending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load daily data whenever the selected slot changes or the Tasks board is
   // opened. The cache entry is dropped first so a day chip always shows
@@ -313,11 +351,11 @@ export default function App() {
 
   // Reload events and additions when switching to or navigating within calendar view
   useEffect(() => {
-    if (view === 'calendar') {
+    if (view === 'calendar' && !authPending) {
       loadAllEvents()
       loadCalendarAdditions(calendarMonth.year, calendarMonth.month)
     }
-  }, [view, calendarMonth]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, calendarMonth, authPending]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync all board data: templates + daily + events
   const [boardSyncing, setBoardSyncing] = useState(false)
@@ -390,9 +428,15 @@ export default function App() {
   }, [settings, activeSlotDate])
 
   // Auth handlers
+  function handleSignIn() {
+    setLeaving('in')
+    api.auth.signIn()
+  }
+
   function handleSignOut() {
+    setLeaving('out')
     api.auth.signOut()
-    setToken(null)
+    setAuthState('out')
     setUsername(null)
     const s = storage.getSettings()
     setSettings(s)
@@ -964,9 +1008,16 @@ export default function App() {
     return () => document.removeEventListener('keydown', onKey)
   }, [])
 
+  if (leaving) return <StatusScreen label={leaving === 'in' ? 'Opening sign-in…' : 'Signing out…'} />
+  if (authPending) {
+    return authState === 'error'
+      ? <StatusScreen label="Couldn't reach sign-in" action={{ label: 'Retry', onClick: checkSession }} guestAction={{ label: 'Continue as guest', onClick: () => setAuthState('out') }} />
+      : <StatusScreen label="Signing in…" />
+  }
+
   return (
     <div className="app">
-      <LoadingBar />
+      <LoadingBar scopes={scopesFor(view, routineTab)} />
       {/* Left rail navigation */}
       <nav className="app-rail" aria-label="Views">
         <a href="https://kevinprk.com" className="rail-pi-mark" title="kevinprk.com">π</a>
@@ -1115,7 +1166,7 @@ export default function App() {
                 </div>
               </>
             ) : (
-              !isAuth ? <SignInRequired feature={routineTab === 'retro' ? 'Retro' : 'Goals'} onSignIn={() => api.auth.signIn()} />
+              !isAuth ? <SignInRequired feature={routineTab === 'retro' ? 'Retro' : 'Goals'} onSignIn={handleSignIn} />
                 : routineTab === 'retro' ? <RetroView /> : <GoalView isAuth={isAuth} />
             )}
           </>
@@ -1133,7 +1184,7 @@ export default function App() {
             onEventClick={event => { setSelectedCalendarDate(event.start_date); setEditingEventId(event.id) }}
           />
         ) : !isAuth && AUTH_ONLY_VIEWS.includes(view) ? (
-          <SignInRequired feature={VIEW_LABELS[view]} onSignIn={() => api.auth.signIn()} />
+          <SignInRequired feature={VIEW_LABELS[view]} onSignIn={handleSignIn} />
         ) : view === 'mail' ? (
           <MailInbox isAuth={isAuth} isDark={theme === 'dark'} onUnreadCount={setMailUnread} initialMailId={initialMailId} />
         ) : view === 'news' ? (
@@ -1155,7 +1206,7 @@ export default function App() {
             theme={theme}
             onToggleTheme={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
             onSave={handleSaveSettings}
-            onSignIn={() => api.auth.signIn()}
+            onSignIn={handleSignIn}
             onSignOut={handleSignOut}
             onExport={handleExport}
             onImport={() => setShowImport(true)}

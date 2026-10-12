@@ -24,16 +24,35 @@ function tokenURL(stepUp: boolean, returnTo: string): string {
   return `${AUTH_URL}/api/token?aud=task${stepUp ? '&step_up=1' : ''}&return=${encodeURIComponent(returnTo)}`
 }
 
-// Returns a valid access token, refreshing it near expiry. null = signed out.
+// Why the last token request returned null: the session is really gone, or auth could not be reached.
+export type TokenFailure = 'signed-out' | 'network'
+let _failure: TokenFailure = 'signed-out'
+const TOKEN_TIMEOUT_MS = 8000
+
+// kp_auth is a non-credential hint cookie on .kevinprk.com: "probably signed in".
+export const hasAuthHint = () => document.cookie.split('; ').some(c => c.startsWith('kp_auth='))
+
+// Fired when a request finds the session gone, so the app drops to guest mode without a page reload.
+export const AUTH_LOST_EVENT = 'kp-auth-lost'
+
+// Returns a valid access token, refreshing it near expiry. null = no token (see _failure).
 async function ensureToken(force = false): Promise<string | null> {
   if (!force && _token && _tokenExpiresAt - 60_000 > Date.now()) return _token
   if (_tokenPromise) return _tokenPromise
   _tokenPromise = (async () => {
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), TOKEN_TIMEOUT_MS)
     try {
-      const res = await fetch(tokenURL(false, location.href), { credentials: 'include' })
+      const res = await fetch(tokenURL(false, location.href), { credentials: 'include', signal: ctl.signal })
       if (!res.ok) {
-        _token = null
-        _username = null
+        // 401/403: no session or not allowed. Anything else is auth being unwell: keep the old token state.
+        if (res.status === 401 || res.status === 403) {
+          _token = null
+          _username = null
+          _failure = 'signed-out'
+        } else {
+          _failure = 'network'
+        }
         return null
       }
       const data = (await res.json()) as TokenResponse
@@ -42,8 +61,10 @@ async function ensureToken(force = false): Promise<string | null> {
       _username = data.user.username
       return _token
     } catch {
+      _failure = 'network'
       return null
     } finally {
+      clearTimeout(timer)
       _tokenPromise = null
     }
   })()
@@ -58,7 +79,8 @@ function headers(token?: string | null): Record<string, string> {
   }
 }
 
-const req = <T,>(method: string, path: string, body?: unknown): Promise<T> => trackInflight(reqInner<T>(method, path, body))
+const req = <T,>(method: string, path: string, body?: unknown): Promise<T> =>
+  trackInflight(reqInner<T>(method, path, body), path.split('/')[1] ?? '')
 
 async function reqInner<T>(method: string, path: string, body?: unknown): Promise<T> {
   if (_token) await ensureToken()
@@ -72,8 +94,9 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
   if (res.status === 401 && _token) {
     const newToken = await ensureToken(true)
     if (!newToken) {
-      window.location.reload()
-      throw new Error('Session expired')
+      // Really signed out: let the app drop to guest mode. A network failure just fails this request.
+      if (_failure === 'signed-out') window.dispatchEvent(new Event(AUTH_LOST_EVENT))
+      throw new Error(_failure === 'signed-out' ? 'Session expired' : 'Network error. Try again.')
     }
     const retry = await fetch(`/api${path}`, {
       method,
@@ -194,10 +217,11 @@ async function assistantChat(conversationId: string | null, question: string, on
 
 export const api = {
   auth: {
-    // Resolves the current SSO session without redirecting (null = signed out).
-    session: async (): Promise<{ username: string } | null> => {
+    // Resolves the current SSO session without redirecting.
+    session: async (): Promise<{ status: 'in'; username: string } | { status: 'out' } | { status: 'error' }> => {
       const t = await ensureToken(true)
-      return t && _username ? { username: _username } : null
+      if (t && _username) return { status: 'in', username: _username }
+      return { status: _failure === 'network' ? 'error' : 'out' }
     },
     me: () => req<{ username: string }>('GET', '/auth/me'),
     signIn: () => {

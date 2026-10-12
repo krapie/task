@@ -31,6 +31,18 @@ export const GROUPS: Group[] = [
   { id: 'settings', label: 'Settings', icon: 'settings', views: ['settings'] },
 ]
 
+// API scopes (first path segment) whose requests the top progress bar shows on each tab.
+export function scopesFor(view: View, tab: RoutineTab): string[] {
+  switch (view) {
+    case 'routine': return tab === 'tasks' ? ['templates', 'daily', 'events', 'settings'] : ['goals']
+    case 'calendar': return ['events', 'daily', 'todos']
+    case 'mail': return ['mail']
+    case 'news': return ['news']
+    case 'settings': return ['settings', 'push', 'export', 'import']
+    default: return []
+  }
+}
+
 export const groupOf = (v: View): Group => GROUPS.find(g => g.views.includes(v)) ?? GROUPS[0]
 
 export function isViewVisible(v: View, isAuth: boolean, isOwner: boolean): boolean {
