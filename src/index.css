@@ -171,7 +171,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 
 .board-progress-bar {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
   height: 2px;
@@ -241,6 +241,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .view-tab:hover { color: var(--kp-fg); }
 .view-tab.active { color: var(--kp-fg); border-bottom-color: var(--kp-fg); }
+.view-tabs-inline .view-tab.active { border-bottom-color: transparent; }
 .view-tab-badge {
   font-family: var(--kp-font-mono);
   font-size: 10px;
