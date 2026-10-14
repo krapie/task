@@ -5,7 +5,7 @@ import { Icon, type IconName } from './Icons'
 import { dialogStore, toastStore } from '../lib/notify'
 import { busy, inflightStore } from '../lib/inflight'
 
-export function Dialog({ title, onClose, children, footer }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Dialog({ title, onClose, children, footer, className }: { title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   // Callers pass inline closures; keep the latest in a ref so the effect (and focus) runs once.
   const closeRef = useRef(onClose)
@@ -19,7 +19,7 @@ export function Dialog({ title, onClose, children, footer }: { title: ReactNode;
   }, [])
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} tabIndex={-1} ref={ref} onClick={e => e.stopPropagation()}>
+      <div className={className ? `modal ${className}` : 'modal'} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} tabIndex={-1} ref={ref} onClick={e => e.stopPropagation()}>
         <div className="modal-header"><span className="modal-title">{title}</span></div>
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-footer">{footer}</div>}

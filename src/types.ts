@@ -225,7 +225,10 @@ export interface PushDevice {
 }
 
 // ── Assistant (operator personal profile) ──
-export interface AssistantSummary { id: string; title: string; created_at: string; updated_at: string; turns: number; streaming: boolean }
+export type AssistantFolder = 'summaries' | 'markets' | 'money' | 'health' | 'tasks' | 'mail' | 'life' | 'other'
+export interface AssistantSummary { id: string; title: string; folder: AssistantFolder | null; created_at: string; updated_at: string; turns: number; streaming: boolean }
+export interface AssistantNoteSummary { key: string; title: string; updated_at: string; chars: number }
+export interface AssistantNote { key: string; title: string; body: string; updated_at: string }
 
 export type AssistantPart =
   | { kind: 'text'; text: string }

@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantConversation, AssistantEvent, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
+import type { AssistantConversation, AssistantEvent, AssistantFolder, AssistantNote, AssistantNoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -410,8 +410,13 @@ export const api = {
     list: () => assetReq<{ conversations: AssistantSummary[] }>('GET', '/assistant/conversations').then(r => r.conversations),
     get: (id: string) => assetReq<AssistantConversation>('GET', `/assistant/conversations/${id}`),
     remove: (id: string) => assetReq<void>('DELETE', `/assistant/conversations/${id}`),
-    getMemory: (key: string) => assetReq<{ key: string; body: string; updated_at: string }>('GET', `/assistant/memory/${key}`),
-    setMemory: (key: string, body: string) => assetReq<{ key: string; updated_at: string }>('PUT', `/assistant/memory/${key}`, { body }),
+    update: (id: string, patch: { title?: string; folder?: AssistantFolder }) => assetReq<void>('PATCH', `/assistant/conversations/${id}`, patch),
+    listNotes: () => assetReq<AssistantNoteSummary[]>('GET', '/assistant/memory'),
+    getNote: (key: string) => assetReq<AssistantNote>('GET', `/assistant/memory/${key}`),
+    createNote: (title: string, body: string) => assetReq<{ key: string; title: string; updated_at: string }>('POST', '/assistant/memory', { title, body }),
+    saveNote: (key: string, note: { title: string; body: string; base_updated_at?: string | null }) =>
+      assetReq<{ key: string; title: string; updated_at: string }>('PUT', `/assistant/memory/${key}`, note),
+    deleteNote: (key: string) => assetReq<void>('DELETE', `/assistant/memory/${key}`),
   },
   health: {
     getSummary: () => assetReq<HealthSummary | null>('GET', '/health-data/summary'),

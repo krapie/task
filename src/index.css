@@ -3638,9 +3638,24 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 /* ── Assistant tab ───────────────────────────────────────────────────── */
 .assistant-view { flex: 1; display: flex; flex-direction: column; gap: var(--kp-space-3); padding: var(--kp-space-4); min-height: 0; overflow: hidden; }
 .as-split { border: 1px solid var(--kp-border); border-radius: var(--kp-radius-md); min-height: 0; flex: 1; position: relative; }
-.as-sidebar { width: 240px; }
+.as-sidebar { width: var(--as-sidebar-w, 240px); }
 .as-sidebar-actions { display: flex; gap: var(--kp-space-2); padding: var(--kp-space-3); border-bottom: 1px solid var(--kp-border); flex-shrink: 0; }
-.as-sidebar-actions button { display: inline-flex; align-items: center; gap: var(--kp-space-1); }
+.as-sidebar-actions button:not(.icon-btn) { display: inline-flex; align-items: center; gap: var(--kp-space-1); }
+.as-sidebar-close { margin-left: auto; flex-shrink: 0; }
+
+/* Draggable divider between the conversation list and the chat (desktop). */
+.as-resizer { width: 5px; margin: 0 -2px 0 -3px; flex-shrink: 0; cursor: col-resize; position: relative; z-index: 1; touch-action: none; }
+.as-resizer:hover, .as-resizer:focus-visible, .as-dragging .as-resizer { background: var(--kp-border-strong); outline: none; }
+.as-dragging { user-select: none; cursor: col-resize; }
+@media (min-width: 601px) { .as-collapsed .as-sidebar, .as-collapsed .as-resizer { display: none; } }
+
+/* Folders in the conversation list */
+.as-history li.as-folder { display: block; border-radius: 0; }
+.as-history li.as-folder:hover { background: none; }
+.as-folder-head { width: 100%; display: flex; align-items: center; gap: var(--kp-space-1); padding: 6px var(--kp-space-2); background: none; border: 0; cursor: pointer; color: var(--kp-fg-3); font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); text-transform: uppercase; letter-spacing: 0.06em; }
+.as-folder-head:hover { color: var(--kp-fg); }
+.as-folder-count { margin-left: auto; }
+.as-chat .as-history-item { padding-left: var(--kp-space-4); }
 .as-history { list-style: none; margin: 0; padding: var(--kp-space-2); overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .as-history li { display: flex; align-items: center; border-radius: var(--kp-radius-sm); }
 .as-history li:hover, .as-history li.active { background: var(--kp-hover-bg); }
@@ -3654,8 +3669,32 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .as-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--kp-fg); flex-shrink: 0; animation: kp-pulse 0.8s var(--kp-ease) infinite alternate; }
 
 .as-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
-.as-topbar { display: none; align-items: center; gap: var(--kp-space-2); padding: var(--kp-space-2) var(--kp-space-3); border-bottom: 1px solid var(--kp-border); }
-.as-topbar-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-topbar { display: flex; align-items: center; gap: var(--kp-space-2); padding: var(--kp-space-2) var(--kp-space-3); border-bottom: 1px solid var(--kp-border); }
+.as-topbar-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.as-topbar .as-menu { display: none; }
+.as-collapsed .as-topbar .as-menu { display: flex; }
+.as-move { display: inline-flex; align-items: center; gap: var(--kp-space-2); flex-shrink: 0; }
+.as-move-select { height: 28px; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); background: var(--kp-bg); color: var(--kp-fg); font: inherit; font-size: 13px; padding: 0 var(--kp-space-2); }
+
+/* Notes dialog and the assistant's note proposals */
+.modal.as-notes-modal { max-width: 760px; }
+.as-notes { display: flex; gap: var(--kp-space-3); min-height: 360px; }
+.as-notes-list { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: var(--kp-space-2); border-right: 1px solid var(--kp-border); padding-right: var(--kp-space-3); }
+.as-notes-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.as-notes-list li button { width: 100%; text-align: left; padding: 7px var(--kp-space-2); font-size: 13px; color: var(--kp-fg-2); background: none; border: 0; border-radius: var(--kp-radius-sm); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-notes-list li:hover button, .as-notes-list li.active button { background: var(--kp-hover-bg); color: var(--kp-fg); }
+.as-notes-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--kp-space-2); }
+.as-notes-editor .as-memory { min-height: 280px; flex: 1; }
+.as-notes-back { display: none; align-self: flex-start; }
+.as-notes-delete { margin-right: auto; color: var(--kp-danger); }
+.as-proposal { border: 1px solid var(--kp-border); border-radius: var(--kp-radius-md); padding: var(--kp-space-3); display: flex; flex-direction: column; gap: var(--kp-space-2); }
+.as-proposal-head { display: flex; align-items: center; gap: var(--kp-space-2); font-size: 13px; min-width: 0; }
+.as-proposal-kind { font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--kp-fg-3); flex-shrink: 0; }
+.as-proposal-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-proposal-summary { margin: 0; font-size: 13px; color: var(--kp-fg-2); }
+.as-proposal-body summary { cursor: pointer; font-size: 12px; color: var(--kp-fg-3); }
+.as-proposal-body pre { font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); background: var(--kp-bg-subtle); border-radius: var(--kp-radius-xs); padding: var(--kp-space-2) var(--kp-space-3); max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--kp-space-2) 0 0; }
+.as-proposal-actions { display: flex; gap: var(--kp-space-2); align-items: center; }
 .as-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: var(--kp-space-4); }
 .as-thread { list-style: none; margin: 0 auto; padding: 0; max-width: 760px; display: flex; flex-direction: column; gap: var(--kp-space-6); }
 .as-turn { display: flex; flex-direction: column; gap: var(--kp-space-3); }
@@ -3717,7 +3756,14 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .as-sidebar { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: 80%; max-width: 300px; transform: translateX(-100%); transition: transform 0.2s var(--kp-ease); }
   .as-sidebar-open .as-sidebar { transform: none; }
   .as-sidebar-open .as-scrim { display: block; position: absolute; inset: 0; z-index: 2; background: rgba(0, 0, 0, 0.35); }
-  .as-topbar { display: flex; }
+  .as-resizer { display: none; }
+  .as-topbar .as-menu { display: flex; }
+  .as-move .as-meta { display: none; }
+  .as-notes { flex-direction: column; min-height: 0; }
+  .as-notes-list { width: auto; border-right: 0; padding-right: 0; }
+  .as-notes-editing .as-notes-list { display: none; }
+  .as-notes:not(.as-notes-editing) .as-notes-editor { display: none; }
+  .as-notes-back { display: inline-flex; }
   .as-composer textarea { font-size: 16px; } /* prevent iOS Safari auto-zoom */
 }
 

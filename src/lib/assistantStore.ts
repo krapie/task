@@ -1,5 +1,5 @@
 import { api, STEP_UP_EVENT } from './api'
-import type { AssistantEvent, AssistantSummary, AssistantTurn } from '../types'
+import type { AssistantEvent, AssistantFolder, AssistantSummary, AssistantTurn } from '../types'
 
 // One assistant conversation shared by the Assistant tab and the chat button
 // (bottom right): asking in either adds a turn to the same chat, streamed in
@@ -160,7 +160,20 @@ export async function ask(question: string) {
   } finally {
     if (abort === controller) abort = null
     set({ live: null })
-    if (api.assets.hasToken()) void refreshList()
+    if (api.assets.hasToken()) {
+      void refreshList()
+      // A new chat is put into a folder a few seconds after its first answer.
+      if (base.id == null) setTimeout(() => { if (api.assets.hasToken()) void refreshList() }, 8000)
+    }
+  }
+}
+
+export async function moveChat(id: string, folder: AssistantFolder) {
+  try {
+    await api.assistant.update(id, { folder })
+    await refreshList()
+  } catch (err) {
+    failure(err)
   }
 }
 

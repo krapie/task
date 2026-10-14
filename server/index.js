@@ -1,6 +1,6 @@
 import express from 'express'
 import pg from 'pg'
-import { randomUUID, timingSafeEqual } from 'crypto'
+import { randomBytes, randomUUID, timingSafeEqual } from 'crypto'
 import fetch from 'node-fetch'
 import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
@@ -227,7 +227,9 @@ async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `)
-  await pool.query('INSERT INTO assistant_memory (key, body) VALUES ($1, $2) ON CONFLICT DO NOTHING', ['portfolio', PORTFOLIO_SEED])
+  await pool.query('ALTER TABLE assistant_memory ADD COLUMN IF NOT EXISTS title TEXT')
+  await pool.query('INSERT INTO assistant_memory (key, title, body) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', ['portfolio', 'Portfolio', PORTFOLIO_SEED])
+  await pool.query(`UPDATE assistant_memory SET title = 'Portfolio' WHERE key = 'portfolio' AND title IS NULL`)
   // The operator reads the table as agent_ro; best effort (the role may not exist locally).
   await pool.query('GRANT SELECT ON assistant_memory TO agent_ro').catch(err => console.warn('assistant_memory grant:', err.message))
   await pool.query(`
@@ -1634,30 +1636,68 @@ app.get('/api/assistant/conversations', stepUpAuth, (req, res) => assistantJson(
 app.get('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`))
 app.patch('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
-  assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'PATCH', body: JSON.stringify({ title: req.body?.title }) }))
+  assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'PATCH', body: JSON.stringify({ title: req.body?.title, folder: req.body?.folder }) }))
 app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' }))
 
-// Standing notes the assistant reads (assistant_memory tool).
+// The owner's standing notes: edited here, read by the assistant (assistant_memory
+// tool), changed by the assistant only through a proposal the owner applies here.
 const MEMORY_KEY = /^[a-z][a-z0-9_-]{0,59}$/
+const PROTECTED_NOTES = new Set(['portfolio']) // read by the Monday market check
+const noteTitle = v => (typeof v === 'string' ? v.trim().slice(0, 80) : '')
+const noteBodyOk = v => typeof v === 'string' && v.trim() && v.length <= 20_000
+
+app.get('/api/assistant/memory', stepUpAuth, async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT key, coalesce(title, key) AS title, updated_at, length(body) AS chars FROM assistant_memory ORDER BY coalesce(title, key)`
+  )
+  res.json(rows)
+})
 app.get('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
   if (!MEMORY_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
-  const { rows } = await pool.query('SELECT key, body, updated_at FROM assistant_memory WHERE key = $1', [req.params.key])
+  const { rows } = await pool.query('SELECT key, coalesce(title, key) AS title, body, updated_at FROM assistant_memory WHERE key = $1', [req.params.key])
   if (!rows[0]) return res.status(404).json({ error: 'not found' })
   res.json(rows[0])
 })
-app.put('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
-  const body = req.body?.body
-  if (!MEMORY_KEY.test(req.params.key) || typeof body !== 'string' || !body.trim() || body.length > 20_000) {
-    return res.status(400).json({ error: 'key a-z0-9_-, body 1-20000 chars' })
-  }
+app.post('/api/assistant/memory', stepUpAuth, async (req, res) => {
+  const title = noteTitle(req.body?.title)
+  if (!title || !noteBodyOk(req.body?.body)) return res.status(400).json({ error: 'title 1-80 chars, body 1-20000 chars' })
+  const key = `n-${randomBytes(4).toString('hex')}`
   const { rows } = await pool.query(
-    `INSERT INTO assistant_memory (key, body, updated_at) VALUES ($1, $2, NOW())
-       ON CONFLICT (key) DO UPDATE SET body = EXCLUDED.body, updated_at = NOW() RETURNING key, updated_at`,
-    [req.params.key, body]
+    'INSERT INTO assistant_memory (key, title, body) VALUES ($1, $2, $3) RETURNING key, title, updated_at',
+    [key, title, req.body.body]
   )
+  await audit(`assistant_memory_create:${key}`, req)
+  res.status(201).json(rows[0])
+})
+app.put('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
+  const { body, base_updated_at: base } = req.body || {}
+  const title = req.body?.title === undefined ? null : noteTitle(req.body.title)
+  if (!MEMORY_KEY.test(req.params.key) || !noteBodyOk(body) || title === '' || (base != null && Number.isNaN(Date.parse(base)))) {
+    return res.status(400).json({ error: 'key a-z0-9_-, title 1-80 chars, body 1-20000 chars' })
+  }
+  // base_updated_at: a proposal or an open editor is only applied to the version it was made from.
+  const { rows } = await pool.query(
+    `UPDATE assistant_memory SET body = $2, title = coalesce($3, title), updated_at = NOW()
+      WHERE key = $1 AND ($4::timestamptz IS NULL OR date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $4::timestamptz))
+      RETURNING key, title, updated_at`,
+    [req.params.key, body, title, base ?? null]
+  )
+  if (!rows[0]) {
+    const exists = await pool.query('SELECT 1 FROM assistant_memory WHERE key = $1', [req.params.key])
+    if (!exists.rowCount) return res.status(404).json({ error: 'not found' })
+    return res.status(409).json({ error: 'The note changed since this version was made' })
+  }
   await audit(`assistant_memory_edit:${req.params.key}`, req)
   res.json(rows[0])
+})
+app.delete('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
+  if (!MEMORY_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
+  if (PROTECTED_NOTES.has(req.params.key)) return res.status(400).json({ error: 'This note is used by the Monday market check' })
+  const { rowCount } = await pool.query('DELETE FROM assistant_memory WHERE key = $1', [req.params.key])
+  if (!rowCount) return res.status(404).json({ error: 'not found' })
+  await audit(`assistant_memory_delete:${req.params.key}`, req)
+  res.status(204).end()
 })
 
 // ops asks for a push when a scheduled report (weekly recap, market check) is

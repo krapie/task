@@ -1,15 +1,39 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import { confirmDialog } from '../lib/notify'
-import { ask, assistantStore, isRemoteStreaming, open, refreshList, remove, setError as setStoreError, startNew, stop } from '../lib/assistantStore'
+import { ask, assistantStore, isRemoteStreaming, moveChat, open, refreshList, remove, setError as setStoreError, startNew, stop } from '../lib/assistantStore'
 import StepUpBar from './StepUpBar'
 import { Icon } from './Icons'
 import { Dialog, Empty, Loading } from './Ui'
 import { Markdown } from './Markdown'
-import type { AssistantPart, AssistantSummary, AssistantTurn } from '../types'
+import type { AssistantFolder, AssistantNoteSummary, AssistantPart, AssistantSummary, AssistantTurn } from '../types'
 
-const MEMORY_KEY = 'portfolio'
+const PROTECTED_NOTE = 'portfolio' // read by the Monday market check; cannot be deleted
+
+export const FOLDERS: { id: AssistantFolder; label: string }[] = [
+  { id: 'summaries', label: 'Summaries' },
+  { id: 'markets', label: 'Markets' },
+  { id: 'money', label: 'Money' },
+  { id: 'health', label: 'Health' },
+  { id: 'tasks', label: 'Tasks' },
+  { id: 'mail', label: 'Mail' },
+  { id: 'life', label: 'Life' },
+  { id: 'other', label: 'Other' },
+]
+
+const SIDEBAR_MIN = 180
+const SIDEBAR_MAX = 480
+const SIDEBAR_DEFAULT = 240
+const isPhone = () => window.matchMedia('(max-width: 600px)').matches
+
+// localStorage is a per-viewer convenience: it can be missing or throw, and the view works without it.
+function readStore(key: string): string | null {
+  try { return localStorage.getItem(key) } catch { return null }
+}
+function writeStore(key: string, value: string) {
+  try { localStorage.setItem(key, value) } catch { /* ignore */ }
+}
 
 export const SUGGESTIONS = [
   'Summarize my week',
@@ -51,6 +75,70 @@ function ToolCall({ part }: { part: Extract<AssistantPart, { kind: 'tool' }> }) 
   )
 }
 
+// A change the assistant drafted for one of the owner's notes. Nothing is saved
+// until Apply; the full text comes from the tool input (the stored result is clipped).
+function NoteProposal({ part }: { part: Extract<AssistantPart, { kind: 'tool' }> }) {
+  const input = part.input as { key?: string; title: string; body: string; summary: string }
+  let base: string | null = null
+  try { base = (JSON.parse(part.result?.output ?? '') as { base_updated_at: string | null }).base_updated_at } catch { /* shown as new */ }
+  const doneKey = `kp-note-applied:${part.id}`
+  const [state, setState] = useState<'idle' | 'applying' | 'applied' | 'dismissed' | 'outdated'>(() => (readStore(doneKey) ? 'applied' : 'idle'))
+  const [error, setError] = useState<string | null>(null)
+
+  // After a reload, a change to an existing note counts as applied when the note already holds this text.
+  useEffect(() => {
+    if (state !== 'idle' || !input.key || !api.assets.hasToken()) return
+    api.assistant.getNote(input.key).then(n => {
+      if (n.body === input.body) setState('applied')
+      else if (n.updated_at !== base) setState('outdated')
+    }, () => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const apply = async () => {
+    setState('applying')
+    setError(null)
+    try {
+      let key = input.key
+      if (key) await api.assistant.saveNote(key, { title: input.title, body: input.body, base_updated_at: base })
+      else key = (await api.assistant.createNote(input.title, input.body)).key
+      writeStore(doneKey, key)
+      setState('applied')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/changed since/i.test(msg)) setState('outdated')
+      else { setState('idle'); setError(msg) }
+    }
+  }
+
+  return (
+    <div className="as-proposal">
+      <div className="as-proposal-head">
+        <Icon name="note" size={14} />
+        <span className="as-proposal-kind">{input.key ? 'Change to note' : 'New note'}</span>
+        <span className="as-proposal-title">{input.title}</span>
+      </div>
+      <p className="as-proposal-summary">{input.summary}</p>
+      <details className="as-proposal-body">
+        <summary>Proposed text</summary>
+        <pre>{input.body}</pre>
+      </details>
+      {error && <p className="as-error">{error}</p>}
+      <div className="as-proposal-actions">
+        {state === 'applied' && <span className="as-meta">Applied</span>}
+        {state === 'dismissed' && <span className="as-meta">Dismissed</span>}
+        {state === 'outdated' && <span className="as-meta">Outdated: the note changed since this was drafted. Ask again for a fresh draft.</span>}
+        {(state === 'idle' || state === 'applying') && (
+          <>
+            <button type="button" className="btn-primary btn-sm" onClick={apply} disabled={state === 'applying'}>Apply</button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setState('dismissed')} disabled={state === 'applying'}>Dismiss</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function TurnView({ turn }: { turn: AssistantTurn }) {
   const tools = turn.parts.filter(p => p.kind === 'tool').length
   const last = turn.parts[turn.parts.length - 1]
@@ -60,7 +148,11 @@ export function TurnView({ turn }: { turn: AssistantTurn }) {
       <div className="as-user"><div className="as-bubble">{turn.question}</div></div>
       <div className="as-answer">
         {turn.notice && <p className="as-meta">{turn.notice}</p>}
-        {turn.parts.map((p, i) => (p.kind === 'text' ? <Markdown key={i} text={p.text} /> : <ToolCall key={p.id} part={p} />))}
+        {turn.parts.map((p, i) => {
+          if (p.kind === 'text') return <Markdown key={i} text={p.text} />
+          if (p.name.endsWith('propose_note') && p.result && !p.result.error) return <NoteProposal key={p.id} part={p} />
+          return <ToolCall key={p.id} part={p} />
+        })}
         {working && <p className="as-meta as-working">{turn.status ?? (tools ? 'Looking into it…' : 'Thinking…')}</p>}
         {turn.state === 'error' && <p className="as-error">{turn.error}</p>}
         {turn.done && (
@@ -104,30 +196,114 @@ function Composer({ value, onChange, onSubmit, onStop, busy }: {
   )
 }
 
-// The standing notes the assistant reads before every market check.
-function MemoryDialog({ onClose, onError }: { onClose: () => void; onError: (err: unknown) => void }) {
-  const [body, setBody] = useState<string | null>(null)
+// The owner's standing notes: several, edited here, read by the assistant, which
+// can only propose changes (see NoteProposal).
+function NotesDialog({ onClose, onError }: { onClose: () => void; onError: (err: unknown) => void }) {
+  const [list, setList] = useState<AssistantNoteSummary[] | null>(null)
+  const [sel, setSel] = useState<string | null>(null) // note key, 'new', or null
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [base, setBase] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState(false) // phones: the editor replaces the list
+  const [error, setError] = useState<string | null>(null)
+
+  const pick = async (key: string, show = true) => {
+    setSel(key)
+    setEditing(show)
+    setError(null)
+    setLoading(true)
+    try {
+      const n = await api.assistant.getNote(key)
+      setTitle(n.title)
+      setBody(n.body)
+      setBase(n.updated_at)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }
   useEffect(() => {
-    api.assistant.getMemory(MEMORY_KEY).then(m => setBody(m.body), err => { onError(err); onClose() })
+    api.assistant.listNotes().then(l => { setList(l); if (l[0]) void pick(l[0].key, false) }, err => { onError(err); onClose() })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const startNew = () => { setSel('new'); setTitle(''); setBody(''); setBase(null); setError(null); setEditing(true) }
   const save = async () => {
-    if (body == null) return
+    if (!sel) return
     setSaving(true)
-    try { await api.assistant.setMemory(MEMORY_KEY, body); onClose() } catch (err) { onError(err) } finally { setSaving(false) }
+    setError(null)
+    try {
+      if (sel === 'new') {
+        const created = await api.assistant.createNote(title.trim(), body)
+        setSel(created.key)
+        setBase(created.updated_at)
+      } else {
+        const saved = await api.assistant.saveNote(sel, { title: title.trim(), body, base_updated_at: base })
+        setBase(saved.updated_at)
+      }
+      setList(await api.assistant.listNotes())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSaving(false)
+    }
   }
+  const del = async () => {
+    if (!sel || sel === 'new' || sel === PROTECTED_NOTE) return
+    if (!await confirmDialog({ title: 'Delete note', body: title, confirmLabel: 'Delete', danger: true })) return
+    try {
+      await api.assistant.deleteNote(sel)
+      const l = await api.assistant.listNotes()
+      setList(l)
+      setEditing(false)
+      if (l[0]) await pick(l[0].key, false)
+      else { setSel(null); setTitle(''); setBody('') }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const canSave = !!sel && !saving && !loading && !!title.trim() && !!body.trim()
   return (
     <Dialog
-      title="Portfolio notes"
+      title="Notes"
+      className="as-notes-modal"
       onClose={onClose}
       footer={<>
-        <button type="button" className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button type="button" className="btn-primary" onClick={save} disabled={saving || !body?.trim()}>Save</button>
+        {sel && sel !== 'new' && sel !== PROTECTED_NOTE && <button type="button" className="btn-ghost as-notes-delete" onClick={del}>Delete</button>}
+        <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
+        <button type="button" className="btn-primary" onClick={save} disabled={!canSave}>Save</button>
       </>}
     >
-      <p className="modal-lead">Targets, buy triggers and skip conditions the Monday market check follows. Markdown.</p>
-      {body == null ? <Loading rows={6} /> : <textarea className="field-input as-memory" value={body} onChange={e => setBody(e.target.value)} spellCheck={false} />}
+      <p className="modal-lead">Standing notes the assistant reads. It can draft changes, but they only apply when you press Apply. Markdown.</p>
+      {list == null ? <Loading rows={6} /> : (
+        <div className={`as-notes${editing ? ' as-notes-editing' : ''}`}>
+          <div className="as-notes-list">
+            <button type="button" className="btn-ghost btn-sm" onClick={startNew}><Icon name="plus" size={14} /> New note</button>
+            <ul>
+              {list.map(n => (
+                <li key={n.key} className={n.key === sel ? 'active' : undefined}>
+                  <button type="button" onClick={() => void pick(n.key)} title={n.title}>{n.title}</button>
+                </li>
+              ))}
+              {list.length === 0 && sel !== 'new' && <li className="as-meta as-history-empty">No notes yet</li>}
+            </ul>
+          </div>
+          <div className="as-notes-editor">
+            {sel == null ? <p className="as-meta">Select a note or create one.</p> : (
+              <>
+                <button type="button" className="btn-ghost btn-sm as-notes-back" onClick={() => setEditing(false)}>Back to notes</button>
+                <input className="field-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={80} aria-label="Title" />
+                {loading ? <Loading rows={6} /> : <textarea className="field-input as-memory" value={body} onChange={e => setBody(e.target.value)} spellCheck={false} aria-label="Note" />}
+                {error && <p className="as-error">{error}</p>}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </Dialog>
   )
 }
@@ -148,6 +324,15 @@ export default function AssistantView({ isAuth, initialChatId }: AssistantViewPr
   const [input, setInput] = useState('')
   const [sidebar, setSidebar] = useState(false)
   const [memoryOpen, setMemoryOpen] = useState(false)
+  const [sbWidth, setSbWidth] = useState(() => {
+    const n = Number(readStore('kp-as-sidebar-w'))
+    return Number.isFinite(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX ? n : SIDEBAR_DEFAULT
+  })
+  const [sbHidden, setSbHidden] = useState(() => readStore('kp-as-sidebar-hidden') === '1')
+  const [dragging, setDragging] = useState(false)
+  const [closedFolders, setClosedFolders] = useState<string[]>(() => {
+    try { const v = JSON.parse(readStore('kp-as-folders-closed') ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { return [] }
+  })
   const { chat, list, live, loading: loadingChat, error: chatError } = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
   const scrollRef = useRef<HTMLDivElement>(null)
   const pendingOpen = useRef(initialChatId)
@@ -183,6 +368,50 @@ export default function AssistantView({ isAuth, initialChatId }: AssistantViewPr
     await remove(c.id)
   }
 
+  const clampWidth = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(w)))
+  const resizeTo = (w: number) => { const v = clampWidth(w); setSbWidth(v); writeStore('kp-as-sidebar-w', String(v)) }
+  const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const el = e.currentTarget
+    const startX = e.clientX
+    const startW = sbWidth
+    el.setPointerCapture(e.pointerId)
+    setDragging(true)
+    const move = (ev: PointerEvent) => setSbWidth(clampWidth(startW + ev.clientX - startX))
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      setDragging(false)
+      resizeTo(startW + ev.clientX - startX)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+  }
+  const onResizerKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); resizeTo(sbWidth - 16) }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); resizeTo(sbWidth + 16) }
+    else if (e.key === 'Home') { e.preventDefault(); resizeTo(SIDEBAR_DEFAULT) }
+  }
+  // Phones: the sidebar is a drawer, so closing it only hides the drawer. Desktop: collapse it, remembered.
+  const closeSidebar = () => {
+    setSidebar(false)
+    if (!isPhone()) { setSbHidden(true); writeStore('kp-as-sidebar-hidden', '1') }
+  }
+  const openSidebar = () => {
+    setSidebar(true)
+    setSbHidden(false)
+    writeStore('kp-as-sidebar-hidden', '0')
+  }
+  const toggleFolder = (id: string) => {
+    const next = closedFolders.includes(id) ? closedFolders.filter(f => f !== id) : [...closedFolders, id]
+    setClosedFolders(next)
+    writeStore('kp-as-folders-closed', JSON.stringify(next))
+  }
+  const groups = FOLDERS.map(f => ({ ...f, items: (list ?? []).filter(c => (c.folder ?? 'other') === f.id) })).filter(g => g.items.length > 0)
+  const currentFolder: AssistantFolder = list?.find(c => c.id === chat.id)?.folder ?? 'other'
+
   const composer = <Composer value={input} onChange={setInput} onSubmit={() => send(input)} onStop={stop} busy={busy || remoteStreaming} />
 
   return (
@@ -192,32 +421,66 @@ export default function AssistantView({ isAuth, initialChatId }: AssistantViewPr
       {!unlocked ? (
         <Empty icon="assistant" title="Assistant is locked" hint="Unlock with your passkey to ask about your tasks, money, health, mail and the market. Reports from the weekly recap and the Monday market check appear here too." />
       ) : (
-        <div className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${masked ? ' as-masked' : ''}`}>
+        <div className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${sbHidden ? ' as-collapsed' : ''}${dragging ? ' as-dragging' : ''}${masked ? ' as-masked' : ''}`} style={{ '--as-sidebar-w': `${sbWidth}px` } as CSSProperties}>
           <aside className="split-sidebar as-sidebar" aria-label="Conversations">
             <div className="as-sidebar-actions">
               <button className="btn-ghost btn-sm" onClick={newChat}><Icon name="plus" size={14} /> New chat</button>
-              <button className="btn-ghost btn-sm" onClick={() => setMemoryOpen(true)} title="Edit the portfolio notes the market check follows"><Icon name="note" size={14} /> Notes</button>
+              <button className="btn-ghost btn-sm" onClick={() => setMemoryOpen(true)} title="Notes the assistant reads and can propose changes to"><Icon name="note" size={14} /> Notes</button>
+              <button className="icon-btn as-sidebar-close" onClick={closeSidebar} aria-label="Close sidebar" title="Close sidebar"><Icon name="close" size={16} /></button>
             </div>
             <ul className="as-history">
               {list === null && <li className="as-meta as-history-empty">Loading…</li>}
               {list?.length === 0 && <li className="as-meta as-history-empty">No conversations yet</li>}
-              {list?.map(c => (
-                <li key={c.id} className={c.id === chat.id ? 'active' : undefined}>
-                  <button className="as-history-item" onClick={() => openChat(c.id)} title={c.title}>
-                    {c.streaming && <span className="as-live-dot" aria-label="answering" />}
-                    {c.title}
-                  </button>
-                  <button className="as-history-delete" onClick={() => removeChat(c)} aria-label={`Delete ${c.title}`} title="Delete"><Icon name="trash" size={14} /></button>
-                </li>
-              ))}
+              {groups.map(g => {
+                const open = !closedFolders.includes(g.id)
+                return [
+                  <li key={`folder-${g.id}`} className="as-folder">
+                    <button className="as-folder-head" onClick={() => toggleFolder(g.id)} aria-expanded={open}>
+                      <Icon name={open ? 'chevronDown' : 'chevronRight'} size={12} />
+                      <span>{g.label}</span>
+                      <span className="as-folder-count">{g.items.length}</span>
+                    </button>
+                  </li>,
+                  ...(open ? g.items.map(c => (
+                    <li key={c.id} className={`as-chat${c.id === chat.id ? ' active' : ''}`}>
+                      <button className="as-history-item" onClick={() => openChat(c.id)} title={c.title}>
+                        {c.streaming && <span className="as-live-dot" aria-label="answering" />}
+                        {c.title}
+                      </button>
+                      <button className="as-history-delete" onClick={() => removeChat(c)} aria-label={`Delete ${c.title}`} title="Delete"><Icon name="trash" size={14} /></button>
+                    </li>
+                  )) : []),
+                ]
+              })}
             </ul>
           </aside>
+          <div
+            className="as-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize conversation list"
+            aria-valuemin={SIDEBAR_MIN}
+            aria-valuemax={SIDEBAR_MAX}
+            aria-valuenow={sbWidth}
+            tabIndex={0}
+            onPointerDown={startDrag}
+            onKeyDown={onResizerKey}
+            onDoubleClick={() => resizeTo(SIDEBAR_DEFAULT)}
+          />
           {sidebar && <div className="as-scrim" onClick={() => setSidebar(false)} />}
 
           <section className="as-main">
             <div className="as-topbar">
-              <button className="icon-btn as-menu" onClick={() => setSidebar(true)} aria-label="Conversations"><Icon name="sidebar" /></button>
+              <button className="icon-btn as-menu" onClick={openSidebar} aria-label="Show conversations" title="Show conversations"><Icon name="sidebar" /></button>
               <span className="as-topbar-title">{chat.turns.length ? chat.title : 'Assistant'}</span>
+              {chat.id && (
+                <label className="as-move">
+                  <span className="as-meta">Folder</span>
+                  <select className="as-move-select" value={currentFolder} onChange={e => void moveChat(chat.id!, e.target.value as AssistantFolder)} aria-label="Move to folder">
+                    {FOLDERS.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
             {loadingChat ? (
               <div className="as-scroll"><Loading rows={5} /></div>
@@ -245,7 +508,7 @@ export default function AssistantView({ isAuth, initialChatId }: AssistantViewPr
           </section>
         </div>
       )}
-      {memoryOpen && <MemoryDialog onClose={() => setMemoryOpen(false)} onError={err => setStoreError(err instanceof Error ? err.message : String(err))} />}
+      {memoryOpen && <NotesDialog onClose={() => setMemoryOpen(false)} onError={err => setStoreError(err instanceof Error ? err.message : String(err))} />}
     </div>
   )
 }
