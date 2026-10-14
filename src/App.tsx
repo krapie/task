@@ -1078,13 +1078,9 @@ export default function App() {
                 <span className="board-day-name">{routineTab === 'retro' ? 'Retro' : 'Goals'}</span>
               )}
               <div className="rail-spacer" />
-              {routineTab === 'tasks' && boardTotal > 0 && (
+              {routineTab === 'tasks' && boardTotal > 0 && boardDone < boardTotal && (
                 <span className="board-progress-count">
-                  {boardDone === boardTotal ? (
-                    <span className="board-progress-done board-all-done"><Icon name="check" size={14} /> All done</span>
-                  ) : (
-                    <><span className="board-progress-done">{boardDone}</span>/{boardTotal}</>
-                  )}
+                  <span className="board-progress-done">{boardDone}</span>/{boardTotal}
                 </span>
               )}
               {routineTab === 'tasks' && boardTotal > 0 && (
