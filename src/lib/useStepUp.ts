@@ -8,8 +8,8 @@ import { api, STEP_UP_EVENT, type StepUpView } from './api'
 //
 // Locks on: the Lock button, the tab going to the background (no amounts in
 // an app-switcher screenshot), and the end of the 1-hour passkey session. There
-// is no idle lock and no refresh: unlocking again inside the hour re-mints a
-// token that ends at the same moment; after it, a new passkey is needed.
+// is no idle lock and no refresh. Locking also tells auth to forget the passkey
+// check, so every unlock after a lock needs a fresh passkey and gets a full hour.
 export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void) {
   const [unlocked, setUnlocked] = useState(() => api.assets.hasToken())
   const [busy, setBusy] = useState(false)
@@ -21,6 +21,7 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void)
   unlockedRef.current = unlocked
 
   const lock = useCallback(() => {
+    api.passkey.lock()
     api.assets.clearToken()
     setUnlocked(false)
     onLockRef.current()

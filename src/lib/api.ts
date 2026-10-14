@@ -124,7 +124,8 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
 // A page reload forces a fresh passkey check, which is the intended tradeoff
 // for a high-sensitivity token. The token lives until 1 hour after the passkey
 // check (no refresh past that). useStepUp also clears it on backgrounding
-// (visibilitychange); unlocking again needs no prompt while that hour lasts.
+// (visibilitychange). Every lock also clears the passkey check on auth, so the
+// next unlock needs a fresh passkey and gets a full hour.
 export type StepUpView = 'assets' | 'health' | 'assistant'
 const STEP_UP_PENDING = 'task-step-up-pending'
 let _assetToken: string | null = null
@@ -356,8 +357,8 @@ export const api = {
   },
   passkey: {
     // Step-up for the Assets and Health tabs: auth issues a step_up token only
-    // if a passkey was used in the last hour (the token ends at that hour and is
-    // re-issued without a prompt until then, never extended). Otherwise the browser goes to auth for a passkey prompt and
+    // if a passkey was used in the last hour (the token ends at that hour; a reload
+    // inside it re-mints the rest without a prompt, never extended; Lock ends it). Otherwise the browser goes to auth for a passkey prompt and
     // comes back to ?tab=<view>, where useStepUp retries automatically.
     authenticate: async (view: StepUpView) => {
       const returnTo = `${location.origin}/?tab=${view}`
@@ -373,6 +374,14 @@ export const api = {
         throw new Error('REDIRECTING')
       }
       throw new Error(data.error === 'access_denied' ? 'This account has no access to Task.' : 'Passkey unlock failed')
+    },
+    // Lock: forget the passkey check on auth, so the next unlock needs a fresh
+    // passkey (and gets a full hour). Only when a token is held: the lock that
+    // fires when leaving for the passkey prompt must not undo the check. Best effort;
+    // the token is dropped locally either way.
+    lock: (): void => {
+      if (!hasAssetToken()) return
+      void fetch(`${AUTH_URL}/api/step-up/lock`, { method: 'POST', credentials: 'include', keepalive: true }).catch(() => {})
     },
     // Set before leaving for the auth passkey prompt; consumed on return by
     // the view that started it.
