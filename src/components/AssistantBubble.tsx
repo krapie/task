@@ -19,7 +19,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
   const last = chat.turns[chat.turns.length - 1]
   const earlier = chat.turns.length - 1
 
-  // Also keeps the lock timers (idle, background, expiry) running while only the button is used.
+  // Also keeps the lock timers (background, expiry) running while only the button is used.
   const { unlocked, busy: unlocking, error, unlock } = useStepUp('assistant', isAuth, () => setInput(''))
 
   // Follow the answer while it streams; a finished one reads from the top.

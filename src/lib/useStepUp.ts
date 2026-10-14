@@ -1,21 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, STEP_UP_EVENT, type StepUpView } from './api'
 
-const IDLE_LOCK_MS = 5 * 60_000
-
 // Passkey step-up lock shared by the Assets and Health tabs. The tab itself
 // renders without a passkey, but with placeholders only: the view must not
 // fetch anything until `unlocked`, and `onLock` must drop every fetched value
 // (not just mask it) so a locked tab holds nothing sensitive in memory.
 //
 // Locks on: the Lock button, the tab going to the background (no amounts in
-// an app-switcher screenshot), 5 minutes idle, and the token's 5-minute TTL.
+// an app-switcher screenshot), and the end of the 1-hour passkey session. There
+// is no idle lock and no refresh: unlocking again inside the hour re-mints a
+// token that ends at the same moment; after it, a new passkey is needed.
 export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void) {
   const [unlocked, setUnlocked] = useState(() => api.assets.hasToken())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [remaining, setRemaining] = useState(0)
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onLockRef = useRef(onLock)
   onLockRef.current = onLock
   const unlockedRef = useRef(unlocked)
@@ -82,21 +81,6 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void)
 
   useEffect(() => {
     if (!unlocked) return
-    function resetIdle() {
-      if (idleTimer.current) clearTimeout(idleTimer.current)
-      idleTimer.current = setTimeout(lock, IDLE_LOCK_MS)
-    }
-    resetIdle()
-    const events: (keyof DocumentEventMap)[] = ['mousemove', 'keydown', 'touchstart', 'scroll']
-    events.forEach(e => document.addEventListener(e, resetIdle))
-    return () => {
-      events.forEach(e => document.removeEventListener(e, resetIdle))
-      if (idleTimer.current) clearTimeout(idleTimer.current)
-    }
-  }, [unlocked, lock])
-
-  useEffect(() => {
-    if (!unlocked) return
     const tick = () => {
       const ms = api.assets.remainingMs()
       setRemaining(ms)
@@ -110,7 +94,7 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void)
   return { unlocked, busy, setBusy, error, setError, remaining, lock, unlock, handleError }
 }
 
-// "4:59" for the step-up countdown chip.
+// "59:59" for the step-up countdown chip.
 export function formatRemaining(ms: number): string {
   const m = Math.floor(ms / 60_000)
   const s = Math.floor((ms % 60_000) / 1000)

@@ -122,9 +122,9 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
 // never localStorage — unlike the regular session token, a leaked copy of
 // this one grants financial and health data directly with no further check.
 // A page reload forces a fresh passkey check, which is the intended tradeoff
-// for a 5-minute, high-sensitivity token. useStepUp also clears it
-// proactively on backgrounding (visibilitychange) and after 5 minutes idle;
-// unlocking again needs no passkey prompt while the last check is under 6 hours old.
+// for a high-sensitivity token. The token lives until 1 hour after the passkey
+// check (no refresh past that). useStepUp also clears it on backgrounding
+// (visibilitychange); unlocking again needs no prompt while that hour lasts.
 export type StepUpView = 'assets' | 'health' | 'assistant'
 const STEP_UP_PENDING = 'task-step-up-pending'
 let _assetToken: string | null = null
@@ -356,8 +356,8 @@ export const api = {
   },
   passkey: {
     // Step-up for the Assets and Health tabs: auth issues a step_up token only
-    // if a passkey was used in the last 6 hours (the token lives 5 minutes and is
-    // re-issued without a prompt in that window). Otherwise the browser goes to auth for a passkey prompt and
+    // if a passkey was used in the last hour (the token ends at that hour and is
+    // re-issued without a prompt until then, never extended). Otherwise the browser goes to auth for a passkey prompt and
     // comes back to ?tab=<view>, where useStepUp retries automatically.
     authenticate: async (view: StepUpView) => {
       const returnTo = `${location.origin}/?tab=${view}`
