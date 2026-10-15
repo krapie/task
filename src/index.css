@@ -3717,6 +3717,10 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .md-live .cm-md-bullet { color: var(--kp-fg-3); display: inline-block; width: 1ch; text-align: center; }
 .md-live .cm-md-check { accent-color: var(--kp-fg); margin: 0 6px 0 0; vertical-align: middle; cursor: pointer; }
 .md-live .cm-md-done { color: var(--kp-fg-3); text-decoration: line-through; }
+.md-live .cm-md-table { font-family: var(--kp-font-mono); font-size: var(--kp-text-ui); border-bottom: 1px solid var(--kp-border-faint); white-space: pre-wrap; padding: 2px var(--kp-space-3); background: var(--kp-bg-subtle); }
+.md-live .cm-md-table-head { font-weight: var(--kp-weight-semi); border-bottom-color: var(--kp-border-strong); }
+.md-live .cm-md-table-sep { color: var(--kp-fg-4); border-bottom-color: var(--kp-border-strong); }
+.md-live .cm-md-pipe { color: var(--kp-fg-4); }
 .md-live .cm-md-hr { border-bottom: 1px solid var(--kp-border); }
 .notes-foot { display: flex; align-items: center; gap: var(--kp-space-2); flex-shrink: 0; }
 .notes-foot .btn-ghost { display: inline-flex; align-items: center; gap: var(--kp-space-1); }

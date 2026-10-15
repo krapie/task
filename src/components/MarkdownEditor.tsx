@@ -119,6 +119,14 @@ function build(view: EditorView): DecorationSet {
           case 'FencedCode':
             for (let l = state.doc.lineAt(node.from).number; l <= state.doc.lineAt(node.to).number; l++) out.push(line('cm-md-codeblock').range(state.doc.line(l).from))
             break
+          // Tables stay raw text (columns line up in monospace); the lines are styled as a grid.
+          case 'TableHeader': out.push(line('cm-md-table cm-md-table-head').range(state.doc.lineAt(node.from).from)); break
+          case 'TableRow': out.push(line('cm-md-table').range(state.doc.lineAt(node.from).from)); break
+          case 'TableDelimiter':
+            // The |---|---| row is a direct child of Table; the single pipes belong to a header or row.
+            if (node.node.parent?.name === 'Table') out.push(line('cm-md-table cm-md-table-sep').range(state.doc.lineAt(node.from).from))
+            else out.push(mark('cm-md-pipe').range(node.from, node.to))
+            break
           case 'HorizontalRule': out.push(line('cm-md-hr').range(state.doc.lineAt(node.from).from)); break
         }
       },
