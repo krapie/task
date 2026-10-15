@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { api } from '../lib/api'
 import { confirmDialog } from '../lib/notify'
 import { Icon } from './Icons'
 import { Loading } from './Ui'
-import { Markdown } from './Markdown'
 import type { NoteSummary } from '../types'
+
+// The editor (CodeMirror) is only downloaded when the Notes tab opens.
+const MarkdownEditor = lazy(() => import('./MarkdownEditor'))
 
 const PROTECTED_NOTE = 'portfolio' // read by the Monday market check; cannot be deleted
 const SEARCH_DELAY_MS = 250
@@ -31,7 +33,7 @@ export default function NotesView({ onAskAbout }: NotesViewProps) {
   const [body, setBody] = useState('')
   const [saved, setSaved] = useState({ title: '', body: '' }) // what the server holds, to tell unsaved edits
   const [base, setBase] = useState<string | null>(null)
-  const [preview, setPreview] = useState(false)
+  const [docId, setDocId] = useState(0) // new editor instance (cursor, undo history) per opened note
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(false) // phones: the editor replaces the list
@@ -62,7 +64,7 @@ export default function NotesView({ onAskAbout }: NotesViewProps) {
     if (!await confirmDiscard()) return
     setSel(key)
     setEditing(true)
-    setPreview(false)
+    setDocId(n => n + 1)
     setError(null)
     setLoading(true)
     try {
@@ -80,7 +82,7 @@ export default function NotesView({ onAskAbout }: NotesViewProps) {
 
   const startNew = async () => {
     if (!await confirmDiscard()) return
-    setSel('new'); setTitle(''); setBody(''); setSaved({ title: '', body: '' }); setBase(null); setPreview(false); setError(null); setEditing(true)
+    setSel('new'); setTitle(''); setBody(''); setSaved({ title: '', body: '' }); setBase(null); setDocId(n => n + 1); setError(null); setEditing(true)
   }
 
   const save = async () => {
@@ -181,15 +183,11 @@ export default function NotesView({ onAskAbout }: NotesViewProps) {
               <div className="notes-bar">
                 <button type="button" className="btn-ghost btn-sm notes-back" onClick={() => setEditing(false)}>Back to notes</button>
                 <input className="field-input notes-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={80} aria-label="Title" />
-                <div className="notes-tabs" role="tablist">
-                  <button type="button" role="tab" aria-selected={!preview} className={`view-tab${!preview ? ' active' : ''}`} onClick={() => setPreview(false)}>Edit</button>
-                  <button type="button" role="tab" aria-selected={preview} className={`view-tab${preview ? ' active' : ''}`} onClick={() => setPreview(true)}>Preview</button>
-                </div>
               </div>
-              {loading ? <Loading rows={8} /> : preview ? (
-                <div className="notes-preview"><Markdown text={body} /></div>
-              ) : (
-                <textarea className="field-input notes-body" value={body} onChange={e => setBody(e.target.value)} placeholder="Markdown" spellCheck={false} aria-label="Note" />
+              {loading ? <Loading rows={8} /> : (
+                <Suspense fallback={<Loading rows={8} />}>
+                  <MarkdownEditor key={docId} value={body} onChange={setBody} />
+                </Suspense>
               )}
               <div className="notes-foot">
                 {sel !== 'new' && sel !== PROTECTED_NOTE && <button type="button" className="btn-ghost notes-delete" onClick={() => void del()}>Delete</button>}
