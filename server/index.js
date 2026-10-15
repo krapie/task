@@ -325,6 +325,19 @@ async function stepUpAuth(req, res, next) {
 }
 const assetAuth = stepUpAuth
 
+// Notes: the normal session token is enough (no passkey), but still only for the owner accounts.
+async function ownerAuth(req, res, next) {
+  res.set('Cache-Control', 'no-store')
+  const payload = await verifyToken(req)
+  if (!payload) return res.status(401).json({ error: 'Unauthorized' })
+  if (!STEP_UP_USERS.has(payload.preferred_username)) {
+    await audit('notes_denied', req)
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  req.user = { username: payload.preferred_username, sub: payload.sub }
+  next()
+}
+
 // ── Health (Apple Health summary) ──────────────────────────────────────
 // Reads ONE view, hk_task_summary, in the health DB on store-postgres as role
 // health_task, which can read nothing else (no raw samples, no GPS routes).
@@ -1658,7 +1671,7 @@ app.patch('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
 app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' }))
 
-// The owner's notes: written in the Note tab, searched and read by the assistant
+// The owner's notes (session token + owner check, no passkey): written in the Note tab, searched and read by the assistant
 // (notes_search / note_get), changed by the assistant only through a proposal the
 // owner applies here.
 const NOTE_KEY = /^[a-z][a-z0-9_-]{0,59}$/
@@ -1666,7 +1679,7 @@ const PROTECTED_NOTES = new Set(['portfolio']) // read by the Monday market chec
 const noteTitle = v => (typeof v === 'string' ? v.trim().slice(0, 80) : '')
 const noteBodyOk = v => typeof v === 'string' && v.trim() && v.length <= 100_000
 
-app.get('/api/notes', stepUpAuth, async (req, res) => {
+app.get('/api/notes', ownerAuth, async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 200) : ''
   if (!q) {
     const { rows } = await pool.query(
@@ -1687,13 +1700,13 @@ app.get('/api/notes', stepUpAuth, async (req, res) => {
   )
   res.json(rows)
 })
-app.get('/api/notes/:key', stepUpAuth, async (req, res) => {
+app.get('/api/notes/:key', ownerAuth, async (req, res) => {
   if (!NOTE_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
   const { rows } = await pool.query('SELECT key, coalesce(title, key) AS title, body, created_at, updated_at FROM notes WHERE key = $1', [req.params.key])
   if (!rows[0]) return res.status(404).json({ error: 'not found' })
   res.json(rows[0])
 })
-app.post('/api/notes', stepUpAuth, async (req, res) => {
+app.post('/api/notes', ownerAuth, async (req, res) => {
   const title = noteTitle(req.body?.title)
   if (!title || !noteBodyOk(req.body?.body)) return res.status(400).json({ error: 'title 1-80 chars, body 1-100000 chars' })
   const key = `n-${randomBytes(4).toString('hex')}`
@@ -1704,7 +1717,7 @@ app.post('/api/notes', stepUpAuth, async (req, res) => {
   await audit(`note_create:${key}`, req)
   res.status(201).json(rows[0])
 })
-app.put('/api/notes/:key', stepUpAuth, async (req, res) => {
+app.put('/api/notes/:key', ownerAuth, async (req, res) => {
   const { body, base_updated_at: base } = req.body || {}
   const title = req.body?.title === undefined ? null : noteTitle(req.body.title)
   if (!NOTE_KEY.test(req.params.key) || !noteBodyOk(body) || title === '' || (base != null && Number.isNaN(Date.parse(base)))) {
@@ -1725,13 +1738,13 @@ app.put('/api/notes/:key', stepUpAuth, async (req, res) => {
   await audit(`note_edit:${req.params.key}`, req)
   res.json(rows[0])
 })
-app.delete('/api/notes/:key', stepUpAuth, async (req, res) => {
+app.delete('/api/notes/:key', ownerAuth, async (req, res) => {
   if (!NOTE_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
   if (PROTECTED_NOTES.has(req.params.key)) return res.status(400).json({ error: 'This note is used by the Monday market check' })
   const { rowCount } = await pool.query('DELETE FROM notes WHERE key = $1', [req.params.key])
   if (!rowCount) return res.status(404).json({ error: 'not found' })
   await audit(`note_delete:${req.params.key}`, req)
-  res.status(204).end()
+  res.json({})
 })
 
 // ops asks for a push when a scheduled report (weekly recap, market check) is

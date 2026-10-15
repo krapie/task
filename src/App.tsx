@@ -1199,7 +1199,7 @@ export default function App() {
         ) : view === 'health' ? (
           <HealthView isAuth={isAuth} />
         ) : view === 'notes' ? (
-          <NotesView isAuth={isAuth} onAskAbout={askAboutNote} />
+          <NotesView onAskAbout={askAboutNote} />
         ) : view === 'chats' ? (
           <AssistantView isAuth={isAuth} initialChatId={initialChatId} onOpenNotes={() => setView('notes')} draft={chatDraft} onDraftUsed={() => setChatDraft(null)} />
         ) : (

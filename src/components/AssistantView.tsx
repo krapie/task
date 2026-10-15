@@ -85,7 +85,7 @@ function NoteProposal({ part }: { part: Extract<AssistantPart, { kind: 'tool' }>
 
   // After a reload, a change to an existing note counts as applied when the note already holds this text.
   useEffect(() => {
-    if (state !== 'idle' || !input.key || !api.assets.hasToken()) return
+    if (state !== 'idle' || !input.key) return
     api.notes.get(input.key).then(n => {
       if (n.body === input.body) setState('applied')
       else if (n.updated_at !== base) setState('outdated')

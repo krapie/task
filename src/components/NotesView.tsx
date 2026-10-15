@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { api } from '../lib/api'
-import { useStepUp } from '../lib/useStepUp'
 import { confirmDialog } from '../lib/notify'
-import StepUpBar from './StepUpBar'
 import { Icon } from './Icons'
-import { Empty, Loading } from './Ui'
+import { Loading } from './Ui'
 import { Markdown } from './Markdown'
 import type { NoteSummary } from '../types'
 
@@ -19,15 +17,13 @@ function fmtDate(iso: string): string {
 }
 
 interface NotesViewProps {
-  isAuth: boolean
   onAskAbout: (title: string) => void
 }
 
 // The owner's notes. The assistant searches and reads them (notes_search / note_get)
-// and can only propose changes, which are applied from a card in Chats. Same passkey
-// step-up as Chats: nothing is requested until unlocked, and a lock drops everything.
-export default function NotesView({ isAuth, onAskAbout }: NotesViewProps) {
-  const [masked, setMasked] = useState(false)
+// and can only propose changes, which are applied from a card in Chats. Owner-only
+// like Chats, but the normal session is enough: no passkey.
+export default function NotesView({ onAskAbout }: NotesViewProps) {
   const [list, setList] = useState<NoteSummary[] | null>(null)
   const [query, setQuery] = useState('')
   const [sel, setSel] = useState<string | null>(null) // note key, 'new', or null
@@ -43,14 +39,9 @@ export default function NotesView({ isAuth, onAskAbout }: NotesViewProps) {
   const queryRef = useRef(query)
   queryRef.current = query
 
-  const onLock = () => { setMasked(false); setList(null); setSel(null); setTitle(''); setBody(''); setQuery(''); setEditing(false) }
-  const { unlocked, busy: unlocking, error: unlockError, remaining, lock, unlock } = useStepUp('assistant', isAuth, onLock)
-
   const fail = useCallback((err: unknown) => {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg === 'ASSET_SESSION_EXPIRED') { api.assets.clearToken(); lock(); return }
-    setError(msg)
-  }, [lock])
+    setError(err instanceof Error ? err.message : String(err))
+  }, [])
 
   const dirty = sel != null && (title !== saved.title || body !== saved.body)
 
@@ -58,12 +49,11 @@ export default function NotesView({ isAuth, onAskAbout }: NotesViewProps) {
     try { setList(await api.notes.list(q)) } catch (err) { fail(err) }
   }, [fail])
 
-  // Unlocked: load the list; typing in the search box re-queries the server after a pause.
+  // Load the list; typing in the search box re-queries the server after a pause.
   useEffect(() => {
-    if (!unlocked) return
     const t = setTimeout(() => void load(query), query ? SEARCH_DELAY_MS : 0)
     return () => clearTimeout(t)
-  }, [unlocked, query, load])
+  }, [query, load])
 
   const confirmDiscard = async () => !dirty || await confirmDialog({ title: 'Discard changes', body: 'This note has unsaved changes.', confirmLabel: 'Discard', danger: true })
 
@@ -144,79 +134,73 @@ export default function NotesView({ isAuth, onAskAbout }: NotesViewProps) {
   }, [dirty])
 
   const canSave = !!sel && !saving && !loading && !!title.trim() && !!body.trim() && (dirty || sel === 'new')
-  const error_ = unlockError ?? error
 
   return (
     <div className="assistant-view notes-view">
-      <StepUpBar unlocked={unlocked} busy={unlocking} remaining={remaining} masked={masked} onToggleMask={() => setMasked(m => !m)} onUnlock={unlock} onLock={lock} />
-      {error_ && <p className="assets-error" onClick={() => setError(null)}>{error_}</p>}
-      {!unlocked ? (
-        <Empty icon="note" title="Notes are locked" hint="Unlock with your passkey to read and write your notes. The assistant searches them when you ask it something." />
-      ) : (
-        <div className={`notes-split${editing ? ' notes-editing' : ''}${masked ? ' notes-masked' : ''}`} onKeyDown={onKeyDown}>
-          <aside className="notes-side" aria-label="Notes">
-            <div className="notes-side-head">
-              <input
-                className="field-input"
-                type="search"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search notes"
-                aria-label="Search notes"
-              />
-              <button type="button" className="btn-ghost btn-sm" onClick={() => void startNew()}><Icon name="plus" size={14} /> New note</button>
-            </div>
-            {list == null ? <Loading rows={5} /> : (
-              <ul className="notes-list">
-                {sel === 'new' && <li className="active"><button type="button"><span className="notes-item-title">{title.trim() || 'Untitled'}</span><span className="as-meta">Not saved</span></button></li>}
-                {list.map(n => (
-                  <li key={n.key} className={n.key === sel ? 'active' : undefined}>
-                    <button type="button" onClick={() => void pick(n.key)} title={n.title}>
-                      <span className="notes-item-title">{n.title}</span>
-                      <span className="as-meta notes-item-date">{fmtDate(n.updated_at)}</span>
-                      {n.snippet && <span className="as-meta notes-item-snippet">{n.snippet}</span>}
-                    </button>
-                  </li>
-                ))}
-                {list.length === 0 && <li className="as-meta as-history-empty">{query ? 'No notes match' : 'No notes yet'}</li>}
-              </ul>
-            )}
-          </aside>
+      {error && <p className="assets-error" onClick={() => setError(null)}>{error}</p>}
+      <div className={`notes-split${editing ? ' notes-editing' : ''}`} onKeyDown={onKeyDown}>
+        <aside className="notes-side" aria-label="Notes">
+          <div className="notes-side-head">
+            <input
+              className="field-input"
+              type="search"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search notes"
+              aria-label="Search notes"
+            />
+            <button type="button" className="btn-ghost btn-sm" onClick={() => void startNew()}><Icon name="plus" size={14} /> New note</button>
+          </div>
+          {list == null ? <Loading rows={5} /> : (
+            <ul className="notes-list">
+              {sel === 'new' && <li className="active"><button type="button"><span className="notes-item-title">{title.trim() || 'Untitled'}</span><span className="as-meta">Not saved</span></button></li>}
+              {list.map(n => (
+                <li key={n.key} className={n.key === sel ? 'active' : undefined}>
+                  <button type="button" onClick={() => void pick(n.key)} title={n.title}>
+                    <span className="notes-item-title">{n.title}</span>
+                    <span className="as-meta notes-item-date">{fmtDate(n.updated_at)}</span>
+                    {n.snippet && <span className="as-meta notes-item-snippet">{n.snippet}</span>}
+                  </button>
+                </li>
+              ))}
+              {list.length === 0 && <li className="as-meta as-history-empty">{query ? 'No notes match' : 'No notes yet'}</li>}
+            </ul>
+          )}
+        </aside>
 
-          <section className="notes-main">
-            {sel == null ? (
-              <div className="as-empty">
-                <Icon name="note" size={28} className="empty-icon" />
-                <h1>Write something down</h1>
-                <p className="as-meta">Plans, preferences, things to remember. The assistant searches your notes when a question touches them, and can draft changes that you apply.</p>
-                <button type="button" className="btn-primary" onClick={() => void startNew()}><Icon name="plus" size={14} /> New note</button>
+        <section className="notes-main">
+          {sel == null ? (
+            <div className="as-empty">
+              <Icon name="note" size={28} className="empty-icon" />
+              <h1>Write something down</h1>
+              <p className="as-meta">Plans, preferences, things to remember. The assistant searches your notes when a question touches them, and can draft changes that you apply.</p>
+              <button type="button" className="btn-primary" onClick={() => void startNew()}><Icon name="plus" size={14} /> New note</button>
+            </div>
+          ) : (
+            <>
+              <div className="notes-bar">
+                <button type="button" className="btn-ghost btn-sm notes-back" onClick={() => setEditing(false)}>Back to notes</button>
+                <input className="field-input notes-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={80} aria-label="Title" />
+                <div className="notes-tabs" role="tablist">
+                  <button type="button" role="tab" aria-selected={!preview} className={`view-tab${!preview ? ' active' : ''}`} onClick={() => setPreview(false)}>Edit</button>
+                  <button type="button" role="tab" aria-selected={preview} className={`view-tab${preview ? ' active' : ''}`} onClick={() => setPreview(true)}>Preview</button>
+                </div>
               </div>
-            ) : (
-              <>
-                <div className="notes-bar">
-                  <button type="button" className="btn-ghost btn-sm notes-back" onClick={() => setEditing(false)}>Back to notes</button>
-                  <input className="field-input notes-title" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={80} aria-label="Title" />
-                  <div className="notes-tabs" role="tablist">
-                    <button type="button" role="tab" aria-selected={!preview} className={`view-tab${!preview ? ' active' : ''}`} onClick={() => setPreview(false)}>Edit</button>
-                    <button type="button" role="tab" aria-selected={preview} className={`view-tab${preview ? ' active' : ''}`} onClick={() => setPreview(true)}>Preview</button>
-                  </div>
-                </div>
-                {loading ? <Loading rows={8} /> : preview ? (
-                  <div className="notes-preview"><Markdown text={body} /></div>
-                ) : (
-                  <textarea className="field-input notes-body" value={body} onChange={e => setBody(e.target.value)} placeholder="Markdown" spellCheck={false} aria-label="Note" />
-                )}
-                <div className="notes-foot">
-                  {sel !== 'new' && sel !== PROTECTED_NOTE && <button type="button" className="btn-ghost notes-delete" onClick={() => void del()}>Delete</button>}
-                  <span className="as-meta notes-state">{saving ? 'Saving…' : dirty ? 'Unsaved changes' : sel === 'new' ? '' : 'Saved'}</span>
-                  {sel !== 'new' && <button type="button" className="btn-ghost" onClick={() => onAskAbout(title)} title="Start a chat about this note"><Icon name="assistant" size={14} /> Ask about this note</button>}
-                  <button type="button" className="btn-primary" onClick={() => void save()} disabled={!canSave}>Save</button>
-                </div>
-              </>
-            )}
-          </section>
-        </div>
-      )}
+              {loading ? <Loading rows={8} /> : preview ? (
+                <div className="notes-preview"><Markdown text={body} /></div>
+              ) : (
+                <textarea className="field-input notes-body" value={body} onChange={e => setBody(e.target.value)} placeholder="Markdown" spellCheck={false} aria-label="Note" />
+              )}
+              <div className="notes-foot">
+                {sel !== 'new' && sel !== PROTECTED_NOTE && <button type="button" className="btn-ghost notes-delete" onClick={() => void del()}>Delete</button>}
+                <span className="as-meta notes-state">{saving ? 'Saving…' : dirty ? 'Unsaved changes' : sel === 'new' ? '' : 'Saved'}</span>
+                {sel !== 'new' && <button type="button" className="btn-ghost" onClick={() => onAskAbout(title)} title="Start a chat about this note"><Icon name="assistant" size={14} /> Ask about this note</button>}
+                <button type="button" className="btn-primary" onClick={() => void save()} disabled={!canSave}>Save</button>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   )
 }
