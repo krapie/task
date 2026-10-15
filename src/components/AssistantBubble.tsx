@@ -59,7 +59,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
               ) : chat.turns.length > 0 && (
                 <button className="btn-ghost btn-sm" onClick={startNew} title="Start a new chat">New</button>
               ))}
-              <button className="icon-btn" onClick={openTab} aria-label="Open the Assistant tab" title="Open the Assistant tab"><Icon name="expand" size={16} /></button>
+              <button className="icon-btn" onClick={openTab} aria-label="Open the Chats tab" title="Open the Chats tab"><Icon name="expand" size={16} /></button>
               <button className="icon-btn" onClick={() => setOpen(false)} aria-label="Close" title="Close"><Icon name="close" size={16} /></button>
             </div>
           </div>

@@ -5,11 +5,9 @@ import { confirmDialog } from '../lib/notify'
 import { ask, assistantStore, isRemoteStreaming, moveChat, open, refreshList, remove, setError as setStoreError, startNew, stop } from '../lib/assistantStore'
 import StepUpBar from './StepUpBar'
 import { Icon } from './Icons'
-import { Dialog, Empty, Loading } from './Ui'
+import { Empty, Loading } from './Ui'
 import { Markdown } from './Markdown'
-import type { AssistantFolder, AssistantNoteSummary, AssistantPart, AssistantSummary, AssistantTurn } from '../types'
-
-const PROTECTED_NOTE = 'portfolio' // read by the Monday market check; cannot be deleted
+import type { AssistantFolder, AssistantPart, AssistantSummary, AssistantTurn } from '../types'
 
 export const FOLDERS: { id: AssistantFolder; label: string }[] = [
   { id: 'summaries', label: 'Summaries' },
@@ -88,7 +86,7 @@ function NoteProposal({ part }: { part: Extract<AssistantPart, { kind: 'tool' }>
   // After a reload, a change to an existing note counts as applied when the note already holds this text.
   useEffect(() => {
     if (state !== 'idle' || !input.key || !api.assets.hasToken()) return
-    api.assistant.getNote(input.key).then(n => {
+    api.notes.get(input.key).then(n => {
       if (n.body === input.body) setState('applied')
       else if (n.updated_at !== base) setState('outdated')
     }, () => {})
@@ -100,8 +98,8 @@ function NoteProposal({ part }: { part: Extract<AssistantPart, { kind: 'tool' }>
     setError(null)
     try {
       let key = input.key
-      if (key) await api.assistant.saveNote(key, { title: input.title, body: input.body, base_updated_at: base })
-      else key = (await api.assistant.createNote(input.title, input.body)).key
+      if (key) await api.notes.save(key, { title: input.title, body: input.body, base_updated_at: base })
+      else key = (await api.notes.create(input.title, input.body)).key
       writeStore(doneKey, key)
       setState('applied')
     } catch (err) {
@@ -196,121 +194,12 @@ function Composer({ value, onChange, onSubmit, onStop, busy }: {
   )
 }
 
-// The owner's standing notes: several, edited here, read by the assistant, which
-// can only propose changes (see NoteProposal).
-function NotesDialog({ onClose, onError }: { onClose: () => void; onError: (err: unknown) => void }) {
-  const [list, setList] = useState<AssistantNoteSummary[] | null>(null)
-  const [sel, setSel] = useState<string | null>(null) // note key, 'new', or null
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [base, setBase] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [editing, setEditing] = useState(false) // phones: the editor replaces the list
-  const [error, setError] = useState<string | null>(null)
-
-  const pick = async (key: string, show = true) => {
-    setSel(key)
-    setEditing(show)
-    setError(null)
-    setLoading(true)
-    try {
-      const n = await api.assistant.getNote(key)
-      setTitle(n.title)
-      setBody(n.body)
-      setBase(n.updated_at)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setLoading(false)
-    }
-  }
-  useEffect(() => {
-    api.assistant.listNotes().then(l => { setList(l); if (l[0]) void pick(l[0].key, false) }, err => { onError(err); onClose() })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const startNew = () => { setSel('new'); setTitle(''); setBody(''); setBase(null); setError(null); setEditing(true) }
-  const save = async () => {
-    if (!sel) return
-    setSaving(true)
-    setError(null)
-    try {
-      if (sel === 'new') {
-        const created = await api.assistant.createNote(title.trim(), body)
-        setSel(created.key)
-        setBase(created.updated_at)
-      } else {
-        const saved = await api.assistant.saveNote(sel, { title: title.trim(), body, base_updated_at: base })
-        setBase(saved.updated_at)
-      }
-      setList(await api.assistant.listNotes())
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setSaving(false)
-    }
-  }
-  const del = async () => {
-    if (!sel || sel === 'new' || sel === PROTECTED_NOTE) return
-    if (!await confirmDialog({ title: 'Delete note', body: title, confirmLabel: 'Delete', danger: true })) return
-    try {
-      await api.assistant.deleteNote(sel)
-      const l = await api.assistant.listNotes()
-      setList(l)
-      setEditing(false)
-      if (l[0]) await pick(l[0].key, false)
-      else { setSel(null); setTitle(''); setBody('') }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const canSave = !!sel && !saving && !loading && !!title.trim() && !!body.trim()
-  return (
-    <Dialog
-      title="Notes"
-      className="as-notes-modal"
-      onClose={onClose}
-      footer={<>
-        {sel && sel !== 'new' && sel !== PROTECTED_NOTE && <button type="button" className="btn-ghost as-notes-delete" onClick={del}>Delete</button>}
-        <button type="button" className="btn-ghost" onClick={onClose}>Close</button>
-        <button type="button" className="btn-primary" onClick={save} disabled={!canSave}>Save</button>
-      </>}
-    >
-      <p className="modal-lead">Standing notes the assistant reads. It can draft changes, but they only apply when you press Apply. Markdown.</p>
-      {list == null ? <Loading rows={6} /> : (
-        <div className={`as-notes${editing ? ' as-notes-editing' : ''}`}>
-          <div className="as-notes-list">
-            <button type="button" className="btn-ghost btn-sm" onClick={startNew}><Icon name="plus" size={14} /> New note</button>
-            <ul>
-              {list.map(n => (
-                <li key={n.key} className={n.key === sel ? 'active' : undefined}>
-                  <button type="button" onClick={() => void pick(n.key)} title={n.title}>{n.title}</button>
-                </li>
-              ))}
-              {list.length === 0 && sel !== 'new' && <li className="as-meta as-history-empty">No notes yet</li>}
-            </ul>
-          </div>
-          <div className="as-notes-editor">
-            {sel == null ? <p className="as-meta">Select a note or create one.</p> : (
-              <>
-                <button type="button" className="btn-ghost btn-sm as-notes-back" onClick={() => setEditing(false)}>Back to notes</button>
-                <input className="field-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" maxLength={80} aria-label="Title" />
-                {loading ? <Loading rows={6} /> : <textarea className="field-input as-memory" value={body} onChange={e => setBody(e.target.value)} spellCheck={false} aria-label="Note" />}
-                {error && <p className="as-error">{error}</p>}
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </Dialog>
-  )
-}
-
 interface AssistantViewProps {
   isAuth: boolean
   initialChatId: string | null
+  onOpenNotes: () => void
+  draft: string | null
+  onDraftUsed: () => void
 }
 
 // Chat with the operator's personal profile: tasks, money, health, mail, news
@@ -319,11 +208,10 @@ interface AssistantViewProps {
 // The server owns each turn: leaving the page does not stop an answer, and a
 // finished weekly recap or market check is just another conversation here.
 // The conversation itself lives in assistantStore, shared with the chat button.
-export default function AssistantView({ isAuth, initialChatId }: AssistantViewProps) {
+export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draft, onDraftUsed }: AssistantViewProps) {
   const [masked, setMasked] = useState(false)
   const [input, setInput] = useState('')
   const [sidebar, setSidebar] = useState(false)
-  const [memoryOpen, setMemoryOpen] = useState(false)
   const [sbWidth, setSbWidth] = useState(() => {
     const n = Number(readStore('kp-as-sidebar-w'))
     return Number.isFinite(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX ? n : SIDEBAR_DEFAULT
@@ -354,6 +242,14 @@ export default function AssistantView({ isAuth, initialChatId }: AssistantViewPr
       void open(id)
     }
   }, [unlocked])
+
+  // A draft from the Notes tab ("Ask about this note") starts the composer.
+  useEffect(() => {
+    if (draft == null) return
+    setInput(draft)
+    onDraftUsed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -425,7 +321,7 @@ export default function AssistantView({ isAuth, initialChatId }: AssistantViewPr
           <aside className="split-sidebar as-sidebar" aria-label="Conversations">
             <div className="as-sidebar-actions">
               <button className="btn-ghost btn-sm" onClick={newChat}><Icon name="plus" size={14} /> New chat</button>
-              <button className="btn-ghost btn-sm" onClick={() => setMemoryOpen(true)} title="Notes the assistant reads and can propose changes to"><Icon name="note" size={14} /> Notes</button>
+              <button className="btn-ghost btn-sm" onClick={onOpenNotes} title="Your notes, which the assistant searches and can propose changes to"><Icon name="note" size={14} /> Notes</button>
               <button className="icon-btn as-sidebar-close" onClick={closeSidebar} aria-label="Close sidebar" title="Close sidebar"><Icon name="close" size={16} /></button>
             </div>
             <ul className="as-history">
@@ -508,7 +404,6 @@ export default function AssistantView({ isAuth, initialChatId }: AssistantViewPr
           </section>
         </div>
       )}
-      {memoryOpen && <NotesDialog onClose={() => setMemoryOpen(false)} onError={err => setStoreError(err instanceof Error ? err.message : String(err))} />}
     </div>
   )
 }

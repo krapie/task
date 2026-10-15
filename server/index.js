@@ -220,18 +220,36 @@ async function initDb() {
     );
     ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS username TEXT;
     ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_agent TEXT;
-    -- Standing notes for the assistant (e.g. the investment plan); read by the operator's personal profile.
-    CREATE TABLE IF NOT EXISTS assistant_memory (
+  `)
+  // Notes (was assistant_memory): the owner's general notes, searched by the assistant.
+  // Rename keeps rows and grants; the assistant_memory view keeps an older operator image working during rollout.
+  await pool.query(`
+    DO $$ BEGIN
+      IF to_regclass('public.notes') IS NULL AND (SELECT relkind FROM pg_class WHERE oid = to_regclass('public.assistant_memory')) = 'r' THEN
+        ALTER TABLE assistant_memory RENAME TO notes;
+      END IF;
+    END $$;
+    CREATE TABLE IF NOT EXISTS notes (
       key TEXT PRIMARY KEY,
+      title TEXT,
       body TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+    ALTER TABLE notes ADD COLUMN IF NOT EXISTS title TEXT;
+    ALTER TABLE notes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
   `)
-  await pool.query('ALTER TABLE assistant_memory ADD COLUMN IF NOT EXISTS title TEXT')
-  await pool.query('INSERT INTO assistant_memory (key, title, body) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', ['portfolio', 'Portfolio', PORTFOLIO_SEED])
-  await pool.query(`UPDATE assistant_memory SET title = 'Portfolio' WHERE key = 'portfolio' AND title IS NULL`)
-  // The operator reads the table as agent_ro; best effort (the role may not exist locally).
-  await pool.query('GRANT SELECT ON assistant_memory TO agent_ro').catch(err => console.warn('assistant_memory grant:', err.message))
+  await pool.query(`UPDATE notes SET created_at = updated_at WHERE created_at > updated_at`)
+  await pool.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS fts tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(title, '') || ' ' || body)) STORED`)
+  await pool.query('CREATE INDEX IF NOT EXISTS notes_fts_idx ON notes USING GIN (fts)')
+  await pool.query('CREATE EXTENSION IF NOT EXISTS pg_trgm').then(
+    () => pool.query(`CREATE INDEX IF NOT EXISTS notes_trgm_idx ON notes USING GIN ((coalesce(title, '') || ' ' || body) gin_trgm_ops)`),
+  ).catch(err => console.warn('notes pg_trgm:', err.message))
+  await pool.query('INSERT INTO notes (key, title, body) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', ['portfolio', 'Portfolio', PORTFOLIO_SEED])
+  await pool.query(`UPDATE notes SET title = 'Portfolio' WHERE key = 'portfolio' AND title IS NULL`)
+  await pool.query('CREATE OR REPLACE VIEW assistant_memory AS SELECT key, title, body, updated_at FROM notes')
+  // The operator reads these as agent_ro; best effort (the role may not exist locally).
+  await pool.query('GRANT SELECT ON notes, assistant_memory TO agent_ro').catch(err => console.warn('notes grant:', err.message))
   await pool.query(`
     INSERT INTO settings VALUES ('rotateHour', '6') ON CONFLICT DO NOTHING;
     INSERT INTO settings VALUES ('rotateMinute', '0') ON CONFLICT DO NOTHING;
@@ -250,7 +268,7 @@ async function initDb() {
 }
 
 const app = express()
-app.use(express.json())
+app.use(express.json({ limit: '400kb' }))
 
 async function audit(event, req) {
   const ip = req.ip || req.headers['x-forwarded-for'] || null
@@ -1640,63 +1658,79 @@ app.patch('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
 app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' }))
 
-// The owner's standing notes: edited here, read by the assistant (assistant_memory
-// tool), changed by the assistant only through a proposal the owner applies here.
-const MEMORY_KEY = /^[a-z][a-z0-9_-]{0,59}$/
+// The owner's notes: written in the Note tab, searched and read by the assistant
+// (notes_search / note_get), changed by the assistant only through a proposal the
+// owner applies here.
+const NOTE_KEY = /^[a-z][a-z0-9_-]{0,59}$/
 const PROTECTED_NOTES = new Set(['portfolio']) // read by the Monday market check
 const noteTitle = v => (typeof v === 'string' ? v.trim().slice(0, 80) : '')
-const noteBodyOk = v => typeof v === 'string' && v.trim() && v.length <= 20_000
+const noteBodyOk = v => typeof v === 'string' && v.trim() && v.length <= 100_000
 
-app.get('/api/assistant/memory', stepUpAuth, async (req, res) => {
+app.get('/api/notes', stepUpAuth, async (req, res) => {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 200) : ''
+  if (!q) {
+    const { rows } = await pool.query(
+      `SELECT key, coalesce(title, key) AS title, created_at, updated_at, length(body) AS chars, left(regexp_replace(body, '\\s+', ' ', 'g'), 140) AS snippet
+         FROM notes ORDER BY updated_at DESC LIMIT 500`
+    )
+    return res.json(rows)
+  }
+  // Full text ('simple' config, no stemming) OR substring: Korean has no word boundaries to match on.
+  const like = `%${q.replace(/[\\%_]/g, m => `\\${m}`)}%`
   const { rows } = await pool.query(
-    `SELECT key, coalesce(title, key) AS title, updated_at, length(body) AS chars FROM assistant_memory ORDER BY coalesce(title, key)`
+    `SELECT key, coalesce(title, key) AS title, created_at, updated_at, length(body) AS chars,
+            left(regexp_replace(CASE WHEN position(lower($2) in lower(body)) > 0 THEN substr(body, greatest(position(lower($2) in lower(body)) - 40, 1)) ELSE body END, '\\s+', ' ', 'g'), 140) AS snippet
+       FROM notes
+      WHERE fts @@ plainto_tsquery('simple', $1) OR coalesce(title, '') ILIKE $3 OR body ILIKE $3
+      ORDER BY (coalesce(title, '') ILIKE $3) DESC, ts_rank(fts, plainto_tsquery('simple', $1)) DESC, updated_at DESC LIMIT 100`,
+    [q, q, like]
   )
   res.json(rows)
 })
-app.get('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
-  if (!MEMORY_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
-  const { rows } = await pool.query('SELECT key, coalesce(title, key) AS title, body, updated_at FROM assistant_memory WHERE key = $1', [req.params.key])
+app.get('/api/notes/:key', stepUpAuth, async (req, res) => {
+  if (!NOTE_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
+  const { rows } = await pool.query('SELECT key, coalesce(title, key) AS title, body, created_at, updated_at FROM notes WHERE key = $1', [req.params.key])
   if (!rows[0]) return res.status(404).json({ error: 'not found' })
   res.json(rows[0])
 })
-app.post('/api/assistant/memory', stepUpAuth, async (req, res) => {
+app.post('/api/notes', stepUpAuth, async (req, res) => {
   const title = noteTitle(req.body?.title)
-  if (!title || !noteBodyOk(req.body?.body)) return res.status(400).json({ error: 'title 1-80 chars, body 1-20000 chars' })
+  if (!title || !noteBodyOk(req.body?.body)) return res.status(400).json({ error: 'title 1-80 chars, body 1-100000 chars' })
   const key = `n-${randomBytes(4).toString('hex')}`
   const { rows } = await pool.query(
-    'INSERT INTO assistant_memory (key, title, body) VALUES ($1, $2, $3) RETURNING key, title, updated_at',
+    'INSERT INTO notes (key, title, body) VALUES ($1, $2, $3) RETURNING key, title, updated_at',
     [key, title, req.body.body]
   )
-  await audit(`assistant_memory_create:${key}`, req)
+  await audit(`note_create:${key}`, req)
   res.status(201).json(rows[0])
 })
-app.put('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
+app.put('/api/notes/:key', stepUpAuth, async (req, res) => {
   const { body, base_updated_at: base } = req.body || {}
   const title = req.body?.title === undefined ? null : noteTitle(req.body.title)
-  if (!MEMORY_KEY.test(req.params.key) || !noteBodyOk(body) || title === '' || (base != null && Number.isNaN(Date.parse(base)))) {
-    return res.status(400).json({ error: 'key a-z0-9_-, title 1-80 chars, body 1-20000 chars' })
+  if (!NOTE_KEY.test(req.params.key) || !noteBodyOk(body) || title === '' || (base != null && Number.isNaN(Date.parse(base)))) {
+    return res.status(400).json({ error: 'key a-z0-9_-, title 1-80 chars, body 1-100000 chars' })
   }
   // base_updated_at: a proposal or an open editor is only applied to the version it was made from.
   const { rows } = await pool.query(
-    `UPDATE assistant_memory SET body = $2, title = coalesce($3, title), updated_at = NOW()
+    `UPDATE notes SET body = $2, title = coalesce($3, title), updated_at = NOW()
       WHERE key = $1 AND ($4::timestamptz IS NULL OR date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $4::timestamptz))
       RETURNING key, title, updated_at`,
     [req.params.key, body, title, base ?? null]
   )
   if (!rows[0]) {
-    const exists = await pool.query('SELECT 1 FROM assistant_memory WHERE key = $1', [req.params.key])
+    const exists = await pool.query('SELECT 1 FROM notes WHERE key = $1', [req.params.key])
     if (!exists.rowCount) return res.status(404).json({ error: 'not found' })
     return res.status(409).json({ error: 'The note changed since this version was made' })
   }
-  await audit(`assistant_memory_edit:${req.params.key}`, req)
+  await audit(`note_edit:${req.params.key}`, req)
   res.json(rows[0])
 })
-app.delete('/api/assistant/memory/:key', stepUpAuth, async (req, res) => {
-  if (!MEMORY_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
+app.delete('/api/notes/:key', stepUpAuth, async (req, res) => {
+  if (!NOTE_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
   if (PROTECTED_NOTES.has(req.params.key)) return res.status(400).json({ error: 'This note is used by the Monday market check' })
-  const { rowCount } = await pool.query('DELETE FROM assistant_memory WHERE key = $1', [req.params.key])
+  const { rowCount } = await pool.query('DELETE FROM notes WHERE key = $1', [req.params.key])
   if (!rowCount) return res.status(404).json({ error: 'not found' })
-  await audit(`assistant_memory_delete:${req.params.key}`, req)
+  await audit(`note_delete:${req.params.key}`, req)
   res.status(204).end()
 })
 

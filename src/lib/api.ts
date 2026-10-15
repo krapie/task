@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantConversation, AssistantEvent, AssistantFolder, AssistantNote, AssistantNoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
+import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -411,12 +411,14 @@ export const api = {
     get: (id: string) => assetReq<AssistantConversation>('GET', `/assistant/conversations/${id}`),
     remove: (id: string) => assetReq<void>('DELETE', `/assistant/conversations/${id}`),
     update: (id: string, patch: { title?: string; folder?: AssistantFolder }) => assetReq<void>('PATCH', `/assistant/conversations/${id}`, patch),
-    listNotes: () => assetReq<AssistantNoteSummary[]>('GET', '/assistant/memory'),
-    getNote: (key: string) => assetReq<AssistantNote>('GET', `/assistant/memory/${key}`),
-    createNote: (title: string, body: string) => assetReq<{ key: string; title: string; updated_at: string }>('POST', '/assistant/memory', { title, body }),
-    saveNote: (key: string, note: { title: string; body: string; base_updated_at?: string | null }) =>
-      assetReq<{ key: string; title: string; updated_at: string }>('PUT', `/assistant/memory/${key}`, note),
-    deleteNote: (key: string) => assetReq<void>('DELETE', `/assistant/memory/${key}`),
+  },
+  notes: {
+    list: (q?: string) => assetReq<NoteSummary[]>('GET', q?.trim() ? `/notes?q=${encodeURIComponent(q.trim())}` : '/notes'),
+    get: (key: string) => assetReq<Note>('GET', `/notes/${key}`),
+    create: (title: string, body: string) => assetReq<{ key: string; title: string; updated_at: string }>('POST', '/notes', { title, body }),
+    save: (key: string, note: { title: string; body: string; base_updated_at?: string | null }) =>
+      assetReq<{ key: string; title: string; updated_at: string }>('PUT', `/notes/${key}`, note),
+    remove: (key: string) => assetReq<void>('DELETE', `/notes/${key}`),
   },
   health: {
     getSummary: () => assetReq<HealthSummary | null>('GET', '/health-data/summary'),

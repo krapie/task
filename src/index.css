@@ -3678,16 +3678,29 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .as-move-select { height: 28px; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); background: var(--kp-bg); color: var(--kp-fg); font: inherit; font-size: 13px; padding: 0 var(--kp-space-2); }
 
 /* Notes dialog and the assistant's note proposals */
-.modal.as-notes-modal { max-width: 760px; }
-.as-notes { display: flex; gap: var(--kp-space-3); min-height: 360px; }
-.as-notes-list { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: var(--kp-space-2); border-right: 1px solid var(--kp-border); padding-right: var(--kp-space-3); }
-.as-notes-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
-.as-notes-list li button { width: 100%; text-align: left; padding: 7px var(--kp-space-2); font-size: 13px; color: var(--kp-fg-2); background: none; border: 0; border-radius: var(--kp-radius-sm); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.as-notes-list li:hover button, .as-notes-list li.active button { background: var(--kp-hover-bg); color: var(--kp-fg); }
-.as-notes-editor { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--kp-space-2); }
-.as-notes-editor .as-memory { min-height: 280px; flex: 1; }
-.as-notes-back { display: none; align-self: flex-start; }
-.as-notes-delete { margin-right: auto; color: var(--kp-danger); }
+.notes-view { gap: var(--kp-space-3); }
+.notes-split { border: 1px solid var(--kp-border); border-radius: var(--kp-radius-md); flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.notes-side { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--kp-border); }
+.notes-side-head { display: flex; flex-direction: column; gap: var(--kp-space-2); padding: var(--kp-space-3); border-bottom: 1px solid var(--kp-border); flex-shrink: 0; }
+.notes-side-head .btn-ghost { align-self: flex-start; display: inline-flex; align-items: center; gap: var(--kp-space-1); }
+.notes-list { list-style: none; margin: 0; padding: var(--kp-space-2); display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; flex: 1; }
+.notes-list li button { width: 100%; display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 8px var(--kp-space-2); background: none; border: 0; border-radius: var(--kp-radius-sm); cursor: pointer; color: var(--kp-fg-2); min-width: 0; }
+.notes-list li:hover button, .notes-list li.active button { background: var(--kp-hover-bg); color: var(--kp-fg); }
+.notes-item-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes-item-date { font-size: 11px; }
+.notes-item-snippet { font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.notes-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--kp-space-2); padding: var(--kp-space-3); min-height: 0; }
+.notes-bar { display: flex; align-items: center; gap: var(--kp-space-2); flex-shrink: 0; }
+.notes-title { flex: 1; min-width: 0; font-weight: 600; }
+.notes-tabs { display: flex; gap: var(--kp-space-1); flex-shrink: 0; }
+.notes-body { flex: 1; min-height: 240px; width: 100%; font-family: var(--kp-font-mono); font-size: 13px; line-height: 1.55; resize: none; }
+.notes-preview { flex: 1; min-height: 0; overflow-y: auto; padding: var(--kp-space-2) var(--kp-space-1); }
+.notes-foot { display: flex; align-items: center; gap: var(--kp-space-2); flex-shrink: 0; }
+.notes-foot .btn-ghost { display: inline-flex; align-items: center; gap: var(--kp-space-1); }
+.notes-state { margin-left: auto; }
+.notes-delete { color: var(--kp-danger); }
+.notes-back { display: none; }
+.notes-masked .notes-list, .notes-masked .notes-body, .notes-masked .notes-preview { filter: blur(8px); user-select: none; }
 .as-proposal { border: 1px solid var(--kp-border); border-radius: var(--kp-radius-md); padding: var(--kp-space-3); display: flex; flex-direction: column; gap: var(--kp-space-2); }
 .as-proposal-head { display: flex; align-items: center; gap: var(--kp-space-2); font-size: 13px; min-width: 0; }
 .as-proposal-kind { font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--kp-fg-3); flex-shrink: 0; }
@@ -3718,7 +3731,6 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .as-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--kp-space-2); max-width: 760px; }
 .as-suggestion { font-size: 13px; color: var(--kp-fg-2); background: none; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-md); padding: 6px var(--kp-space-3); cursor: pointer; }
 .as-suggestion:hover { background: var(--kp-hover-bg); color: var(--kp-fg); }
-.as-memory { width: 100%; min-height: 320px; font-family: var(--kp-font-mono); font-size: 12px; line-height: 1.5; resize: vertical; }
 .as-masked .as-thread, .as-masked .as-history { filter: blur(8px); user-select: none; }
 .as-scrim { display: none; }
 
@@ -3760,11 +3772,13 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .as-resizer { display: none; }
   .as-topbar .as-menu { display: flex; }
   .as-move .as-meta { display: none; }
-  .as-notes { flex-direction: column; min-height: 0; }
-  .as-notes-list { width: auto; border-right: 0; padding-right: 0; }
-  .as-notes-editing .as-notes-list { display: none; }
-  .as-notes:not(.as-notes-editing) .as-notes-editor { display: none; }
-  .as-notes-back { display: inline-flex; }
+  .notes-side { width: 100%; border-right: 0; }
+  .notes-editing .notes-side { display: none; }
+  .notes-split:not(.notes-editing) .notes-main { display: none; }
+  .notes-back { display: inline-flex; }
+  .notes-bar { flex-wrap: wrap; }
+  .notes-title { flex-basis: 100%; order: 2; font-size: 16px; }
+  .notes-body, .notes-side-head .field-input { font-size: 16px; }
   .as-composer textarea { font-size: 16px; } /* prevent iOS Safari auto-zoom */
 }
 

@@ -13,6 +13,8 @@ import { RetroView } from './components/RetroView'
 import AssetsView from './components/AssetsView'
 import HealthView from './components/HealthView'
 import AssistantView from './components/AssistantView'
+import NotesView from './components/NotesView'
+import { startNew as startNewChat } from './lib/assistantStore'
 import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
 import { DialogHost, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
@@ -91,6 +93,9 @@ export default function App() {
   const [initialMailId] = useState<string | null>(initialRoute.mailId)
   // #/assistant/<id>: the conversation a finished report's push notification points at.
   const [initialChatId] = useState<string | null>(initialRoute.chatId)
+  // "Ask about this note" in Notes: a new chat whose composer starts with this text.
+  const [chatDraft, setChatDraft] = useState<string | null>(null)
+  const askAboutNote = (title: string) => { startNewChat(); setChatDraft(`About my note "${title}": `); setView('chats') }
   const [calendarMonth, setCalendarMonth] = useState<YearMonth>(() => {
     if (initialRoute.month) return initialRoute.month
     const now = new Date()
@@ -987,7 +992,7 @@ export default function App() {
       const k = e.key
       if (gAt && Date.now() - gAt < 1000) {
         gAt = 0
-        const target = ({ t: 'today', c: 'calendar', i: 'inbox', l: 'life', a: 'assistant', s: 'settings' } as Record<string, string>)[k]
+        const target = ({ t: 'today', c: 'calendar', i: 'inbox', l: 'life', n: 'note', a: 'note', s: 'settings' } as Record<string, string>)[k]
         if (target) { e.preventDefault(); keys.current.goGroup(target) }
         return
       }
@@ -1193,8 +1198,10 @@ export default function App() {
           <AssetsView isAuth={isAuth} />
         ) : view === 'health' ? (
           <HealthView isAuth={isAuth} />
-        ) : view === 'assistant' ? (
-          <AssistantView isAuth={isAuth} initialChatId={initialChatId} />
+        ) : view === 'notes' ? (
+          <NotesView isAuth={isAuth} onAskAbout={askAboutNote} />
+        ) : view === 'chats' ? (
+          <AssistantView isAuth={isAuth} initialChatId={initialChatId} onOpenNotes={() => setView('notes')} draft={chatDraft} onDraftUsed={() => setChatDraft(null)} />
         ) : (
           <SettingsPanel
             settings={settings}
@@ -1210,7 +1217,7 @@ export default function App() {
         )}
       </main>
 
-      {isOwner && view !== 'assistant' && <AssistantBubble isAuth={isAuth} onOpenTab={() => setView('assistant')} />}
+      {isOwner && view !== 'chats' && <AssistantBubble isAuth={isAuth} onOpenTab={() => setView('chats')} />}
 
       {view === 'calendar' && selectedCalendarDate && (
         <EventPanel
