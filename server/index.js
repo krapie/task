@@ -39,67 +39,6 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 
 const pool = new pg.Pool({ connectionString: process.env.POSTGRES_URL })
 
-
-// Starting content of the "portfolio" memory (editable in Settings → Assistant).
-const PORTFOLIO_SEED = `# Portfolio config
-
-## Holdings
-
-| Ticker | Role |
-|---|---|
-| KODEX 미국S&P500 | core index |
-| KODEX 미국나스닥100 | index |
-| KODEX 미국AI전력핵심인프라 | AI theme |
-| KODEX 미국반도체 | AI theme |
-| KODEX 미국배당커버드콜액티브 | dividend / income, monthly distribution |
-
-## Target allocation (2026)
-
-| Asset | Target |
-|---|---|
-| S&P500 | 30.0% |
-| AI power infrastructure | 25.8% |
-| Dividend / income | 17.2% |
-| Semiconductors | 9.0% |
-| Nasdaq 100 | 5.2% |
-| Cash | 12.9% |
-
-Cash at target is a reserve, not idle money. Do not recommend deploying it as a lump sum: it funds the -5% and -8% triggers below.
-
-## Buy triggers (S&P 500 drawdown from recent high)
-
-| Drawdown | Action |
-|---|---|
-| 0 to -2% | Normal. Execute planned amount. |
-| -3% or more | Accelerate: +50% this week. |
-| -5% | 2nd trigger: deploy reserve cash. |
-| -8% to -10% | 3rd trigger: deploy most of reserve. |
-| Recovery / breakout | 4th tranche: finish remainder. |
-
-VIX above 25 counts as accelerate even if drawdown has not reached -3%.
-"Recent high" = the 52-week high from market_quotes (state which high you used; also show the 3-month one).
-
-## Skip conditions
-
-Defer a week or execute half if any are live:
-
-- Geopolitical escalation affecting oil (Iran, Strait of Hormuz)
-- CPI or PCE well above consensus
-- FOMC decision day: wait for the result
-- Index down more than 2% intraday
-- US market holiday
-
-## Contribution plan
-
-- 1,700,000 KRW monthly
-- Annual deposit ceiling: 19,899,900 KRW
-- Execution day: Monday, after the US open (23:00 KST, DST-dependent), or Korean afternoon session as a fallback
-
-## Priority when adding
-
-Fill the cost-basis shortfall first. Default split when nothing is clearly underweight: S&P500 ~62%, dividend ~29%, semiconductors ~9%.
-`
-
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS templates (
@@ -245,8 +184,6 @@ async function initDb() {
   await pool.query('CREATE EXTENSION IF NOT EXISTS pg_trgm').then(
     () => pool.query(`CREATE INDEX IF NOT EXISTS notes_trgm_idx ON notes USING GIN ((coalesce(title, '') || ' ' || body) gin_trgm_ops)`),
   ).catch(err => console.warn('notes pg_trgm:', err.message))
-  await pool.query('INSERT INTO notes (key, title, body) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING', ['portfolio', 'Portfolio', PORTFOLIO_SEED])
-  await pool.query(`UPDATE notes SET title = 'Portfolio' WHERE key = 'portfolio' AND title IS NULL`)
   await pool.query('CREATE OR REPLACE VIEW assistant_memory AS SELECT key, title, body, updated_at FROM notes')
   // The operator reads these as agent_ro; best effort (the role may not exist locally).
   await pool.query('GRANT SELECT ON notes, assistant_memory TO agent_ro').catch(err => console.warn('notes grant:', err.message))
@@ -1675,7 +1612,6 @@ app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
 // (notes_search / note_get), changed by the assistant only through a proposal the
 // owner applies here.
 const NOTE_KEY = /^[a-z][a-z0-9_-]{0,59}$/
-const PROTECTED_NOTES = new Set(['portfolio']) // read by the Monday market check
 const noteTitle = v => (typeof v === 'string' ? v.trim().slice(0, 80) : '')
 const noteBodyOk = v => typeof v === 'string' && v.trim() && v.length <= 100_000
 
@@ -1740,7 +1676,6 @@ app.put('/api/notes/:key', ownerAuth, async (req, res) => {
 })
 app.delete('/api/notes/:key', ownerAuth, async (req, res) => {
   if (!NOTE_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
-  if (PROTECTED_NOTES.has(req.params.key)) return res.status(400).json({ error: 'This note is used by the Monday market check' })
   const { rowCount } = await pool.query('DELETE FROM notes WHERE key = $1', [req.params.key])
   if (!rowCount) return res.status(404).json({ error: 'not found' })
   await audit(`note_delete:${req.params.key}`, req)

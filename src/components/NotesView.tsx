@@ -8,7 +8,6 @@ import type { NoteSummary } from '../types'
 // The editor (CodeMirror) is only downloaded when the Notes tab opens.
 const MarkdownEditor = lazy(() => import('./MarkdownEditor'))
 
-const PROTECTED_NOTE = 'portfolio' // read by the Monday market check; cannot be deleted
 const SEARCH_DELAY_MS = 250
 
 function fmtDate(iso: string): string {
@@ -112,7 +111,7 @@ export default function NotesView({ onAskAbout }: NotesViewProps) {
   }
 
   const del = async () => {
-    if (!sel || sel === 'new' || sel === PROTECTED_NOTE) return
+    if (!sel || sel === 'new') return
     if (!await confirmDialog({ title: 'Delete note', body: title, confirmLabel: 'Delete', danger: true })) return
     try {
       await api.notes.remove(sel)
@@ -190,7 +189,7 @@ export default function NotesView({ onAskAbout }: NotesViewProps) {
                 </Suspense>
               )}
               <div className="notes-foot">
-                {sel !== 'new' && sel !== PROTECTED_NOTE && <button type="button" className="btn-ghost notes-delete" onClick={() => void del()}>Delete</button>}
+                {sel !== 'new' && <button type="button" className="btn-ghost notes-delete" onClick={() => void del()}>Delete</button>}
                 <span className="as-meta notes-state">{saving ? 'Saving…' : dirty ? 'Unsaved changes' : sel === 'new' ? '' : 'Saved'}</span>
                 {sel !== 'new' && <button type="button" className="btn-ghost" onClick={() => onAskAbout(title)} title="Start a chat about this note"><Icon name="assistant" size={14} /> Ask about this note</button>}
                 <button type="button" className="btn-primary" onClick={() => void save()} disabled={!canSave}>Save</button>
