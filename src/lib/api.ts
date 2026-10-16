@@ -413,12 +413,12 @@ export const api = {
     update: (id: string, patch: { title?: string; folder?: AssistantFolder }) => assetReq<void>('PATCH', `/assistant/conversations/${id}`, patch),
   },
   notes: {
-    list: (q?: string) => req<NoteSummary[]>('GET', q?.trim() ? `/notes?q=${encodeURIComponent(q.trim())}` : '/notes'),
-    get: (key: string) => req<Note>('GET', `/notes/${key}`),
-    create: (title: string, body: string) => req<{ key: string; title: string; updated_at: string }>('POST', '/notes', { title, body }),
+    list: (q?: string) => assetReq<NoteSummary[]>('GET', q?.trim() ? `/notes?q=${encodeURIComponent(q.trim())}` : '/notes'),
+    get: (key: string) => assetReq<Note>('GET', `/notes/${key}`),
+    create: (title: string, body: string) => assetReq<{ key: string; title: string; updated_at: string }>('POST', '/notes', { title, body }),
     save: (key: string, note: { title: string; body: string; base_updated_at?: string | null }) =>
-      req<{ key: string; title: string; updated_at: string }>('PUT', `/notes/${key}`, note),
-    remove: (key: string) => req<void>('DELETE', `/notes/${key}`),
+      assetReq<{ key: string; title: string; updated_at: string }>('PUT', `/notes/${key}`, note),
+    remove: (key: string) => assetReq<void>('DELETE', `/notes/${key}`),
   },
   health: {
     getSummary: () => assetReq<HealthSummary | null>('GET', '/health-data/summary'),
