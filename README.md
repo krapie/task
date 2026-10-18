@@ -74,3 +74,11 @@ Keyboard (desktop, not while typing): `g` then `t` / `c` / `i` / `l` / `a` / `s`
 - Auth state is `checking | in | out | error` (`App.tsx`). Without the `kp_auth` hint cookie the app starts as a guest at once; with it, a "Signing in…" screen (`StatusScreen`) shows until `/api/token` answers, so guest data never flashes before the account loads. The token request times out after 8 s; an unreachable auth shows Retry (and retries on focus) instead of silently dropping to guest. A real 401 switches to guest through `AUTH_LOST_EVENT`, without a page reload.
 - Sign in / Sign out show "Opening sign-in…" / "Signing out…" right away while auth.kevinprk.com loads.
 - `public/sw-v2.js` (cache `task-v3`): hashed `/assets/*` are cache-first; page loads are network-first with a 3 s fallback to the cached shell; API calls and cross-origin requests are never touched. nginx serves `sw*.js` with `no-cache`.
+
+## Staging (mock data)
+
+`npm run dev:staging` runs the app with every API call answered in the browser by MSW from
+synthetic, typed fixtures (`src/mocks/`); nothing real is touched, a reload resets the data.
+`?scenario=empty` shows empty states, `?latency=1500` slows every answer. CI also builds the
+`krapi0314/task-web-staging` image, served at `task-staging.kevinprk.com` behind basic auth. A change to a tab updates that tab's fixtures.
+Unmocked calls return 501 `not mocked: ...`. Details: `docs/staging.md` in krapie/homeserver.
