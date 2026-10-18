@@ -3,7 +3,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# MODE=staging builds the mock-data variant (docs/staging.md).
+ARG MODE=production
+RUN npm run build -- --mode $MODE
 
 # Artifact image: static files only. Served by the shared nginx in
 # krapie/homeserver k8s/web, whose init container copies /site into it.

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:staging": "vite --mode staging",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "server": "node server/index.js"
@@ -30,6 +31,7 @@
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
     "@vitejs/plugin-react": "^4.5.2",
+    "msw": "^2.15.0",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
   }

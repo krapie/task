@@ -3841,3 +3841,17 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 @media (max-width: 600px) {
   .as-fab, .as-fab-panel { display: none; }
 }
+
+/* Staging build only: a 3px ink stripe on top of every screen (mock data); it never blocks clicks. */
+.staging-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 1000;
+  background: var(--kp-fg-1);
+  pointer-events: none;
+  overflow: hidden;
+  font-size: 0;
+}

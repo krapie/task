@@ -55,6 +55,15 @@ jobs:
           push: true
           tags: krapi0314/task-web:${{ steps.tag.outputs.IMAGE_TAG }}
 
+      - name: Build and push task-web staging (mock data)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.web
+          push: true
+          build-args: MODE=staging
+          tags: krapi0314/task-web-staging:${{ steps.tag.outputs.IMAGE_TAG }}
+
   deploy:
     needs: [build-api, build-web]
     runs-on: ubuntu-latest
@@ -72,7 +81,7 @@ jobs:
         run: |
           sed -i "s|krapi0314/task-api:.*|krapi0314/task-api:${IMAGE_TAG}|" \
             homeserver/k8s/task/deployment-api.yaml
-          sed -i "s|krapi0314/task-web:.*|krapi0314/task-web:${IMAGE_TAG}|" \
+          sed -i "s|krapi0314/task-web:.*|krapi0314/task-web:${IMAGE_TAG}|; s|krapi0314/task-web-staging:.*|krapi0314/task-web-staging:${IMAGE_TAG}|" \
             homeserver/k8s/web/deployment.yaml
 
       - name: Commit and push manifest updates
