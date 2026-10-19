@@ -968,6 +968,7 @@ export default function App() {
   const currentGroup = visibleGroups.find(g => g.id === groupOf(view).id)
   const subViews = currentGroup && currentGroup.id !== 'today' ? currentGroup.visible : []
   const goGroup = (g: (typeof visibleGroups)[number]) => { if (groupOf(view).id !== g.id) setView(g.visible[0]) }
+  const goHome = (e: { preventDefault(): void }) => { e.preventDefault(); setView('routine'); setRoutineTab('tasks') }
   const groupBadge = (id: string) => (id === 'inbox' ? mailUnread : 0)
 
   // Undo toasts outlive the render that created them; they call the newest handlers through this ref.
@@ -1025,7 +1026,7 @@ export default function App() {
       <LoadingBar scopes={scopesFor(view, routineTab)} />
       {/* Left rail navigation */}
       <nav className="app-rail" aria-label="Views">
-        <a href="https://kevinprk.com" className="rail-pi-mark" title="kevinprk.com">π</a>
+        <a href="/" className="rail-pi-mark" title="Task home" aria-label="Task home" onClick={goHome}>π</a>
         {visibleGroups.map(g => (
           <button
             key={g.id}
@@ -1049,7 +1050,7 @@ export default function App() {
 
       {/* Phones: slim top bar with the π mark, current section and the theme toggle (desktop has the rail) */}
       <header className="app-topbar">
-        <a href="https://kevinprk.com" className="rail-pi-mark" title="kevinprk.com" aria-label="kevinprk.com">π</a>
+        <a href="/" className="rail-pi-mark" title="Task home" aria-label="Task home" onClick={goHome}>π</a>
         <span className="app-topbar-title">{VIEW_LABELS[view]}</span>
         <button className="icon-btn" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
           <Icon name={theme === 'dark' ? 'sun' : 'moon'} />
