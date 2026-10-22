@@ -1,6 +1,6 @@
 // MSW handlers for the staging build: task-api (/api/*) and auth's token endpoint, from db.ts.
 // Anything under /api without a handler returns 501 "not mocked" so a gap is visible in the UI.
-// Not mocked yet: assets (finance), health, assistant, notes (the passkey step-up tabs).
+// Not mocked yet: assets (finance), health, notes (the passkey step-up tabs); the assistant only lists no conversations, enough to show its empty state.
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import type { DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
 import * as db from './db'
@@ -201,6 +201,7 @@ export const handlers: HttpHandler[] = [
     return ok({ flagged: false })
   }),
 
+  http.get('/api/assistant/conversations', async () => ok({ conversations: [] })),
   http.get('/api/mail/accounts', async () => ok(list(db.mailAccounts))),
   http.get('/api/mail/threads/items', async () => ok(list(db.mailItems))),
   http.get('/api/mail/threads', async ({ request }) => {

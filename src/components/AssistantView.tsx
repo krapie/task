@@ -34,9 +34,9 @@ function writeStore(key: string, value: string) {
 }
 
 export const SUGGESTIONS = [
+  'Summarize my day',
   'Summarize my week',
   'How much did I spend this month, by category?',
-  'Run the Monday market check',
   'Any unread bills or mail that needs a reply?',
   'How did I sleep and train this week?',
 ]
