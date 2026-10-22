@@ -990,10 +990,10 @@ a { color: var(--kp-fg); text-decoration: none; }
 .add-bar-type.selected { background: var(--kp-fg); color: var(--kp-bg); }
 .add-bar .add-task-input { flex: none; width: 100%; }
 
-/* Routine list column */
+/* Routine list column: full width; the groups sit side by side on wide screens */
 .routine-col {
-  flex: 1 1 600px;
-  max-width: 600px;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   max-height: 100%;
   min-height: 0;
@@ -1005,11 +1005,14 @@ a { color: var(--kp-fg); text-decoration: none; }
   flex: 0 1 auto;
   min-height: 0;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--kp-space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  align-items: start;
+  gap: var(--kp-space-5) var(--kp-space-6);
 }
+.task-scroll > .empty-state { grid-column: 1 / -1; }
 .task-group { min-width: 0; }
+.routine-col > .add-bar { max-width: 600px; }
 
 
 /* Add task input */
