@@ -50,6 +50,10 @@ interface GoalViewProps {
 
 type MobileTab = 'general' | 'year' | 'half'
 
+// Temporarily off: hides the General (bucket-list) column and stops creating its period.
+// Existing general goals stay in the database; set to true to bring the column back.
+const SHOW_GENERAL_GOALS = false
+
 export function GoalView({ isAuth }: GoalViewProps) {
   const [periods, setPeriods] = useState<GoalPeriod[]>([])
   const [selectedYear, setSelectedYear] = useState(() => currentHalf().year)
@@ -72,7 +76,7 @@ export function GoalView({ isAuth }: GoalViewProps) {
         // The general (bucket-list) period is always shown next to the
         // half-year goals, so make sure it exists from the first visit
         // instead of requiring an explicit "initialize" step.
-        if (!loaded.some(p => p.kind === 'general')) {
+        if (SHOW_GENERAL_GOALS && !loaded.some(p => p.kind === 'general')) {
           const general = await api.goals.getOrCreateGeneral()
           setPeriods(prev => [...prev, general])
         }
@@ -159,7 +163,7 @@ export function GoalView({ isAuth }: GoalViewProps) {
   }
 
   const mobileTabs: { key: MobileTab; label: string }[] = [
-    { key: 'general', label: 'General' },
+    ...(SHOW_GENERAL_GOALS ? [{ key: 'general' as const, label: 'General' }] : []),
     { key: 'year', label: 'Year' },
     { key: 'half', label: 'Half' },
   ]
@@ -209,18 +213,20 @@ export function GoalView({ isAuth }: GoalViewProps) {
       </div>
 
       <div className={`goal-columns goal-mobile-${mobileTab}`}>
-        <div className="goal-general-column">
-          <div className="goal-period-bar goal-general-bar">
-            <span className="goal-general-label">General goals</span>
+        {SHOW_GENERAL_GOALS && (
+          <div className="goal-general-column">
+            <div className="goal-period-bar goal-general-bar">
+              <span className="goal-general-label">General goals</span>
+            </div>
+            <div className="goal-body">
+              {loading || !generalPeriod ? (
+                <div className="goal-empty"><Loading /></div>
+              ) : (
+                <PeriodContent period={generalPeriod} onUpdate={updatePeriod} />
+              )}
+            </div>
           </div>
-          <div className="goal-body">
-            {loading || !generalPeriod ? (
-              <div className="goal-empty"><Loading /></div>
-            ) : (
-              <PeriodContent period={generalPeriod} onUpdate={updatePeriod} />
-            )}
-          </div>
-        </div>
+        )}
 
         <div className="goal-year-column">
           <div className="goal-period-bar goal-general-bar">

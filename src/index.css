@@ -292,6 +292,7 @@ a { color: var(--kp-fg); text-decoration: none; }
 .goal-half-column {
   border-left: 1px solid var(--kp-border);
 }
+.goal-year-column:first-child { border-left: none; }
 .goal-general-bar {
   justify-content: flex-start;
 }
@@ -1012,7 +1013,6 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 .task-scroll > .empty-state { grid-column: 1 / -1; }
 .task-group { min-width: 0; }
-.routine-col > .add-bar { max-width: 600px; }
 
 
 /* Add task input */
