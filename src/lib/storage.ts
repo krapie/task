@@ -1,4 +1,4 @@
-import type { Slot, Template, Addition, Settings, ExportData, CalendarEvent, DailyEvent } from '../types'
+import type { Slot, Template, Addition, Settings, ExportData, CalendarEvent, DailyEvent, TodoItem } from '../types'
 
 const KEYS = {
   TEMPLATES: 'task_templates',
@@ -6,6 +6,7 @@ const KEYS = {
   SETTINGS: 'task_settings',
   EVENTS: 'calendar_events',
   EVENT_COMPLETIONS: 'calendar_event_completions',
+  CACHE: 'task_cache',
 }
 
 type StoredTemplates = Record<Slot, Template[]>
@@ -28,7 +29,35 @@ function save(key: string, value: unknown): void {
   localStorage.setItem(key, JSON.stringify(value))
 }
 
+// Last server state of the signed-in user, shown at once on the next open while fresh data loads.
+// Owned by one username so another SSO user on the same browser never sees it.
+export interface SignedInCache {
+  user: string
+  settings: Settings
+  templates: StoredTemplates
+  todos: TodoItem[]
+  events: CalendarEvent[]
+  daily: Record<string, { completions: string[]; additions: Addition[]; eventCompletions: string[]; skips?: string[] }>
+}
+const CACHE_DAYS = 7
+
 export const storage = {
+  cache: {
+    get: (user: string): SignedInCache | null => {
+      const c = load<SignedInCache | null>(KEYS.CACHE, null)
+      if (!c || c.user !== user || !c.settings || !c.templates) return null
+      return { ...c, templates: { ...DEFAULT_TEMPLATES, ...c.templates }, todos: c.todos ?? [], events: c.events ?? [], daily: c.daily ?? {} }
+    },
+    put: (c: SignedInCache): void => {
+      const dates = Object.keys(c.daily).sort().slice(-CACHE_DAYS)
+      const daily = Object.fromEntries(dates.map(d => [d, c.daily[d]]))
+      try { save(KEYS.CACHE, { ...c, daily }) } catch { /* quota or private mode: the cache is optional */ }
+    },
+    clear: (): void => {
+      try { localStorage.removeItem(KEYS.CACHE) } catch { /* ignore */ }
+    },
+  },
+
   getTemplates: (): StoredTemplates =>
     ({ ...DEFAULT_TEMPLATES, ...load<StoredTemplates>(KEYS.TEMPLATES, DEFAULT_TEMPLATES) }),
 

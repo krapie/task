@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { DayTabs } from './components/DayTabs'
 import { RoutineBoard } from './components/RoutineBoard'
 import { SettingsPanel, downloadExport } from './components/SettingsPanel'
@@ -17,7 +17,7 @@ import NotesView from './components/NotesView'
 import { startNew as startNewChat } from './lib/assistantStore'
 import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
-import { DialogHost, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
+import { DialogHost, Loading, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
 import { AUTH_ONLY_VIEWS, GROUPS, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
 import { expandForView, expandForDate, calendarViewRange } from './lib/recurrence'
@@ -70,10 +70,12 @@ export default function App() {
   const [leaving, setLeaving] = useState<'in' | 'out' | null>(null)
   const isOwner = isAuth && username === OWNER_USERNAME
 
-  const [settings, setSettings] = useState<Settings>({ rotateHour: 6, rotateMinute: 0, keepBonus: false, workWeek: 'mon-fri' })
+  const [settings, setSettings] = useState<Settings>(() => storage.getSettings())
 
-  const [activeSlot, setActiveSlot] = useState<Slot>('mon')
-  const [activeSlotDate, setActiveSlotDate] = useState<string>('')
+  // Start on today's slot (by the last known rotate time) so the header and chips never flash Monday.
+  const initialDay = useRef(getActiveSlotDate(settings.rotateHour, settings.rotateMinute, settings.workWeek ?? 'mon-fri')).current
+  const [activeSlot, setActiveSlot] = useState<Slot>(initialDay.slot)
+  const [activeSlotDate, setActiveSlotDate] = useState<string>(initialDay.slotDate)
 
   const [templates, setTemplates] = useState<Record<Slot, Template[]>>({
     mon: [], tue: [], wed: [], thu: [], fri: [], weekend: [],
@@ -81,8 +83,10 @@ export default function App() {
 
   const [dailyData, setDailyData] = useState<Record<string, SlotDailyData>>({})
   const loadedDatesRef = useRef<Set<string>>(new Set())
+  // False until the board has either cached or fresh data for today, so it never shows an empty list.
+  const [boardReady, setBoardReady] = useState(false)
 
-  const [selectedSlot, setSelectedSlot] = useState<Slot>('mon')
+  const [selectedSlot, setSelectedSlot] = useState<Slot>(initialDay.slot)
   const [showImport, setShowImport] = useState(false)
 
   // Initial position comes from the hash, or the legacy ?tab=&mail= links in push notifications.
@@ -293,9 +297,8 @@ export default function App() {
     }
   }, [isAuth])
 
-  const loadDaily = useCallback(async (slotDate: string) => {
-    if (!slotDate || loadedDatesRef.current.has(slotDate)) return
-    loadedDatesRef.current.add(slotDate)
+  const dailyPendingRef = useRef(new Map<string, Promise<void>>())
+  const fetchDaily = useCallback(async (slotDate: string) => {
     if (isAuth) {
       const d = await api.daily.get(slotDate).catch(() => null) as DailyData | null
       if (!d) return
@@ -330,19 +333,54 @@ export default function App() {
     }
   }, [isAuth])
 
-  // Bootstrap on auth change
-  useEffect(() => {
+  // A second caller for a date already loading waits for that request instead of returning early.
+  const loadDaily = useCallback((slotDate: string): Promise<void> => {
+    if (!slotDate) return Promise.resolve()
+    if (loadedDatesRef.current.has(slotDate)) return dailyPendingRef.current.get(slotDate) ?? Promise.resolve()
+    loadedDatesRef.current.add(slotDate)
+    const p: Promise<void> = fetchDaily(slotDate).finally(() => {
+      if (dailyPendingRef.current.get(slotDate) === p) dailyPendingRef.current.delete(slotDate)
+    })
+    dailyPendingRef.current.set(slotDate, p)
+    return p
+  }, [fetchDaily])
+
+  // Bootstrap on auth change. A layout effect so the cached board (or the skeleton) is what first paints.
+  useLayoutEffect(() => {
     if (authPending) return
     loadedDatesRef.current = new Set()
+    dailyPendingRef.current = new Map()
     setDailyData({})
-    loadSettings().then(s => {
+    setBoardReady(!isAuth)
+    const cached = isAuth && username ? storage.cache.get(username) : null
+    if (cached) {
+      setSettings(cached.settings)
+      const { slot, slotDate } = getActiveSlotDate(cached.settings.rotateHour, cached.settings.rotateMinute, cached.settings.workWeek ?? 'mon-fri')
+      setActiveSlot(slot)
+      setActiveSlotDate(slotDate)
+      setSelectedSlot(slot)
+      setTemplates(cached.templates)
+      setTodos(cached.todos)
+      setCalendarEvents(cached.events)
+      setDailyData(cached.daily)
+      setBoardReady(true)
+    }
+    loadSettings().then(async s => {
       const { slotDate } = refreshSlot(s)
-      loadTemplates()
-      loadDaily(slotDate)
       loadAllEvents()
       loadTodos()
+      await Promise.all([loadTemplates(), loadDaily(slotDate)])
+      setBoardReady(true)
     })
   }, [isAuth, authPending]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Write the signed-in board through to the cache (optimistic temp rows are not worth keeping).
+  useEffect(() => {
+    if (!isAuth || !username || !boardReady) return
+    const daily = Object.fromEntries(Object.entries(dailyData).map(([d, v]) =>
+      [d, { ...v, additions: v.additions.filter(a => !a.id.startsWith('temp-')) }]))
+    storage.cache.put({ user: username, settings, templates, todos, events: calendarEvents, daily })
+  }, [isAuth, username, boardReady, settings, templates, todos, calendarEvents, dailyData])
 
   // Load daily data whenever the selected slot changes or the Tasks board is
   // opened. The cache entry is dropped first so a day chip always shows
@@ -440,6 +478,7 @@ export default function App() {
 
   function handleSignOut() {
     setLeaving('out')
+    storage.cache.clear()
     api.auth.signOut()
     setAuthState('out')
     setUsername(null)
@@ -1134,7 +1173,7 @@ export default function App() {
 
                 {/* Board content */}
                 <div className="board-content">
-                  <RoutineBoard
+                  {!boardReady ? <Loading rows={5} /> : <RoutineBoard
                     slot={selectedSlot}
                     slotDate={selectedSlotDate}
                     isActive={selectedSlot === activeSlot}
@@ -1161,7 +1200,7 @@ export default function App() {
                     onLinkTemplate={handleLinkTemplate}
                     onUnlinkTemplate={handleUnlinkTemplate}
                     isAuth={isAuth}
-                  />
+                  />}
                 </div>
                 <div className="board-footer">
                   <span className="board-footer-label">π  kevinprk.com</span>
