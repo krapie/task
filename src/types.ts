@@ -90,6 +90,19 @@ export interface MailSyncStatus {
   error: string | null
 }
 
+export type MailCategory = 'general' | 'others'
+
+export interface MailUnreadCounts {
+  general: number
+  others: number
+}
+
+export interface MailSenderRule {
+  from_address: string
+  category: MailCategory
+  created_at: string
+}
+
 export interface MailItem {
   id: string
   account_id: string
@@ -101,6 +114,7 @@ export interface MailItem {
   received_at: string
   read: boolean
   flagged: boolean
+  category?: MailCategory
   snippet: string | null
   body?: string | null
   html_body?: string | null
@@ -123,6 +137,7 @@ export interface MailThread {
   count: number
   unread_count: number
   flagged: boolean
+  category?: MailCategory
   participants: string[]
 }
 

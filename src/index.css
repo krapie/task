@@ -2720,6 +2720,27 @@ a { color: var(--kp-fg); text-decoration: none; }
   color: var(--kp-fg-3);
 }
 
+.mail-move-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--kp-space-3);
+  padding: 6px 16px;
+  font-size: var(--kp-text-xs);
+  color: var(--kp-fg-2);
+  background: var(--kp-bg-subtle);
+  border-bottom: 1px solid var(--kp-border);
+}
+.mail-move-notice > span { white-space: nowrap; }
+.mail-rules-title {
+  padding: 16px 16px 8px;
+  font-family: var(--kp-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--kp-fg-4);
+  border-bottom: 1px solid var(--kp-border);
+}
+
 .mail-account-delete { color: var(--kp-fg-3); }
 .mail-account-delete:hover { color: var(--kp-fg); }
 

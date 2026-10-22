@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
+import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -291,19 +291,29 @@ export const api = {
       if (params?.offset) q.set('offset', String(params.offset))
       return req<MailItem[]>('GET', `/mail/items?${q}`)
     },
-    getThreads: (params?: { account_id?: string; unread?: boolean; flagged?: boolean; limit?: number; offset?: number }) => {
+    getThreads: (params?: { account_id?: string; unread?: boolean; flagged?: boolean; category?: MailCategory; limit?: number; offset?: number }) => {
       const q = new URLSearchParams()
       if (params?.account_id) q.set('account_id', params.account_id)
       if (params?.unread !== undefined) q.set('unread', String(params.unread))
       if (params?.flagged !== undefined) q.set('flagged', String(params.flagged))
+      if (params?.category) q.set('category', params.category)
       if (params?.limit) q.set('limit', String(params.limit))
       if (params?.offset) q.set('offset', String(params.offset))
       return req<MailThread[]>('GET', `/mail/threads?${q}`)
     },
+    getSenderRules: () => req<MailSenderRule[]>('GET', '/mail/sender-rules'),
+    // Also moves everything already synced from that sender; `moved` is how many messages.
+    setSenderRule: (from_address: string, category: MailCategory) =>
+      req<{ from_address: string; category: MailCategory; moved: number }>('PUT', '/mail/sender-rules', { from_address, category }),
+    removeSenderRule: (from_address: string) =>
+      req<{ ok: boolean }>('DELETE', `/mail/sender-rules?${new URLSearchParams({ from_address })}`),
+    unreadCounts: () => req<MailUnreadCounts>('GET', '/mail/unread-counts'),
     getThreadItems: (accountId: string, threadId: string) =>
       req<MailItem[]>('GET', `/mail/threads/items?${new URLSearchParams({ account_id: accountId, thread_id: threadId })}`),
     markThreadRead: (accountId: string, threadId: string) =>
       req<void>('POST', '/mail/threads/read', { account_id: accountId, thread_id: threadId }),
+    moveThread: (accountId: string, threadId: string, category: MailCategory) =>
+      req<{ category: MailCategory }>('POST', '/mail/threads/move', { account_id: accountId, thread_id: threadId, category }),
     toggleThreadFlag: (accountId: string, threadId: string) =>
       req<{ flagged: boolean }>('POST', '/mail/threads/flag', { account_id: accountId, thread_id: threadId }),
     getItem: (id: string) => req<MailItem>('GET', `/mail/items/${id}`),

@@ -1,6 +1,6 @@
 // Synthetic, in-memory state for the staging build (docs/staging.md). Nothing here is real data.
 // Typed against the app's own types so a changed shape fails `tsc`. A page reload resets it.
-import type { Addition, CalendarEvent, GoalPeriod, MailAccount, MailItem, NewsItem, Settings, Slot, Template, TodoItem } from '../types'
+import type { Addition, CalendarEvent, GoalPeriod, MailAccount, MailItem, MailSenderRule, NewsItem, Settings, Slot, Template, TodoItem } from '../types'
 
 const day = (offset = 0) => {
   const d = new Date(Date.now() + offset * 86_400_000)
@@ -65,7 +65,10 @@ export const news: NewsItem[] = [
 ]
 
 export const mailAccounts: MailAccount[] = [{ id: 'ma1', label: 'Personal', email: 'kevin@example.test', host: 'imap.example.test', port: 993, tls: true, username: 'kevin', last_synced: iso(12) }]
+export const mailSenderRules: MailSenderRule[] = []
 export const mailItems: MailItem[] = [
   { id: 'mi1', account_id: 'ma1', message_id: '<1@example.test>', thread_id: 'th1', subject: 'Your invoice for October (mock)', from_address: 'billing@example.test', from_name: 'Billing', received_at: iso(90), read: false, flagged: false, snippet: 'Amount due 12,000 KRW by Friday.', body: 'Amount due 12,000 KRW by Friday.' },
   { id: 'mi2', account_id: 'ma1', message_id: '<2@example.test>', thread_id: 'th2', subject: 'Weekend plans (mock)', from_address: 'friend@example.test', from_name: 'A Friend', received_at: iso(60 * 20), read: true, flagged: true, snippet: 'Are we still on for Saturday?', body: 'Are we still on for Saturday?' },
+  { id: 'mi3', account_id: 'ma1', message_id: '<3@example.test>', thread_id: 'th3', subject: '(광고) 20% off everything this weekend (mock)', from_address: 'sale@shop.example.test', from_name: 'Mock Shop', received_at: iso(30), read: false, flagged: false, category: 'others', snippet: 'Limited time offer, unsubscribe any time.', body: 'Limited time offer, unsubscribe any time.' },
+  { id: 'mi4', account_id: 'ma1', message_id: '<4@example.test>', thread_id: 'th4', subject: 'Newsletter: this week in mock (mock)', from_address: 'news@letters.example.test', from_name: 'Mock Letters', received_at: iso(60 * 5), read: false, flagged: false, category: 'others', snippet: 'Five links worth your time.', body: 'Five links worth your time.' },
 ]

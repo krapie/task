@@ -1022,9 +1022,15 @@ app.post('/api/mail/items/:id/flag', auth, mailProxy)
 // Conversations: thread ids are Message-IDs containing '/', which Envoy unescapes
 // and redirects in paths, so they go in the query string / body, never the path.
 app.get('/api/mail/threads', auth, mailProxy)
+app.get('/api/mail/unread-counts', auth, mailProxy)
+app.post('/api/mail/backfill-categories', auth, mailProxy)
 app.get('/api/mail/threads/items', auth, mailProxy)
 app.post('/api/mail/threads/read', auth, mailProxy)
 app.post('/api/mail/threads/flag', auth, mailProxy)
+app.post('/api/mail/threads/move', auth, mailProxy)
+app.get('/api/mail/sender-rules', auth, mailProxy)
+app.put('/api/mail/sender-rules', auth, mailProxy)
+app.delete('/api/mail/sender-rules', auth, mailProxy)
 // Sync runs in the background in mail-bridge: POST starts it (202), GET
 // reports progress. New mail is pushed by the 5-minute push poller.
 app.post('/api/mail/sync', auth, mailProxy)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
-import type { MailAccount, MailItem, MailThread } from '../types'
+import type { MailAccount, MailCategory, MailItem, MailSenderRule, MailThread, MailUnreadCounts } from '../types'
 import { notifyError } from '../lib/notify'
 import { Empty, Loading } from './Ui'
 import { Icon } from './Icons'
@@ -353,7 +353,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
   const [syncing, setSyncing] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [activeAccount, setActiveAccount] = useState<string | null>(null)
-  const [showFlagged, setShowFlagged] = useState(false)
+  const [view, setView] = useState<'inbox' | 'others' | 'flagged'>('inbox')
+  const showFlagged = view === 'flagged'
+  // Flagged spans both categories; Inbox is general mail only.
+  const category = view === 'inbox' ? 'general' : view === 'others' ? 'others' : undefined
+  const [counts, setCounts] = useState<MailUnreadCounts>({ general: 0, others: 0 })
+  const [senderRules, setSenderRules] = useState<MailSenderRule[]>([])
+  // Shown after a move so the sender can be filed there for good.
+  const [moveNotice, setMoveNotice] = useState<{ thread: MailThread; to: MailCategory } | null>(null)
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null)
   const [messages, setMessages] = useState<MailItem[] | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -370,11 +377,18 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     setAccounts(accts)
   }, [])
 
+  const loadCounts = useCallback(async () => {
+    const c = await api.mail.unreadCounts().catch(() => null)
+    if (c) setCounts(c)
+  }, [])
+
   const loadThreads = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
+    loadCounts()
     const rows = await api.mail.getThreads({
       account_id: showFlagged ? undefined : (activeAccount ?? undefined),
       flagged: showFlagged ? true : undefined,
+      category,
       limit: 100,
     }).catch(() => [])
     setHasMore(rows.length === 100)
@@ -384,7 +398,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
       setThreads(rows)
       setLoading(false)
     }
-  }, [activeAccount, showFlagged])
+  }, [activeAccount, showFlagged, category, loadCounts])
 
   useEffect(() => { threadsLengthRef.current = threads.length }, [threads])
 
@@ -395,6 +409,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     const rows = await api.mail.getThreads({
       account_id: showFlagged ? undefined : (activeAccount ?? undefined),
       flagged: showFlagged ? true : undefined,
+      category,
       limit: 50,
       offset: threadsLengthRef.current,
     }).catch(() => [])
@@ -405,7 +420,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     setHasMore(rows.length === 50)
     setLoadingMore(false)
     loadingMoreRef.current = false
-  }, [activeAccount, showFlagged, hasMore])
+  }, [activeAccount, showFlagged, category, hasMore])
 
   useEffect(() => {
     const el = sentinelRef.current
@@ -510,6 +525,38 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
     setThreads(prev => prev.map(t => ({ ...t, unread_count: 0 })))
   }
 
+  // Moves a conversation between Inbox (general) and Others; it leaves the
+  // current list unless the view is Flagged, which shows both.
+  async function handleMoveThread(thread: MailThread, e?: React.MouseEvent) {
+    e?.stopPropagation()
+    const to = thread.category === 'others' ? 'general' : 'others'
+    const ok = await api.mail.moveThread(thread.account_id, thread.thread_id, to).then(() => true, err => { notifyError(err); return false })
+    if (!ok) return
+    if (showFlagged) {
+      patchThread(thread, { category: to })
+    } else {
+      const k = threadKey(thread)
+      setThreads(prev => prev.filter(x => threadKey(x) !== k))
+      setSelectedThread(prev => prev && threadKey(prev) === k ? null : prev)
+    }
+    loadCounts()
+    setMoveNotice({ thread, to })
+  }
+
+  // "Always": store the rule (it also moves the sender's existing mail), then reload the list.
+  async function handleSenderRule() {
+    if (!moveNotice) return
+    const { thread, to } = moveNotice
+    setMoveNotice(null)
+    const r = await api.mail.setSenderRule(thread.from_address, to).catch(err => { notifyError(err); return null })
+    if (r) await loadThreads()
+  }
+
+  async function handleRemoveSenderRule(from: string) {
+    await api.mail.removeSenderRule(from).catch(notifyError)
+    setSenderRules(prev => prev.filter(r => r.from_address !== from))
+  }
+
   async function handleToggleThreadFlag(thread: MailThread, e?: React.MouseEvent) {
     e?.stopPropagation()
     const { flagged } = await api.mail.toggleThreadFlag(thread.account_id, thread.thread_id)
@@ -552,12 +599,26 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
 
   const unreadCount = threads.reduce((n, t) => n + t.unread_count, 0)
 
+  // Server-side counts keep the sidebar badges right for the view not on screen;
+  // refetch when reading changes the visible list. The tab badge counts Inbox only.
+  useEffect(() => { loadCounts() }, [loadCounts, unreadCount])
   useEffect(() => {
-    onUnreadCount?.(unreadCount)
-  }, [unreadCount, onUnreadCount])
+    onUnreadCount?.(counts.general)
+  }, [counts.general, onUnreadCount])
+
+  useEffect(() => {
+    if (panel === 'accounts') api.mail.getSenderRules().then(setSenderRules).catch(() => {})
+  }, [panel])
+
+  useEffect(() => {
+    if (!moveNotice) return
+    const id = setTimeout(() => setMoveNotice(null), 8000)
+    return () => clearTimeout(id)
+  }, [moveNotice])
 
   // Reset search when switching views
-  useEffect(() => { setSearchQuery('') }, [panel, showFlagged, activeAccount])
+  useEffect(() => { setSearchQuery('') }, [panel, view, activeAccount])
+  useEffect(() => { setMoveNotice(null) }, [panel, view, activeAccount])
 
   const q = searchQuery.trim().toLowerCase()
   const displayedThreads = q
@@ -610,25 +671,36 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
           <div className="split-sidebar-header">Mail</div>
           <div className="split-nav">
             <button
-              className={`split-nav-item${panel === 'inbox' && !showFlagged ? ' split-nav-active' : ''}`}
-              onClick={() => { setPanel('inbox'); setShowFlagged(false); setSelectedThread(null) }}
+              className={`split-nav-item${panel === 'inbox' && view === 'inbox' ? ' split-nav-active' : ''}`}
+              onClick={() => { setPanel('inbox'); setView('inbox'); setSelectedThread(null) }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z" />
               </svg>
               Inbox
-              {unreadCount > 0 && <span className="mail-badge">{unreadCount}</span>}
+              {counts.general > 0 && <span className="mail-badge">{counts.general}</span>}
+            </button>
+            <button
+              className={`split-nav-item${panel === 'inbox' && view === 'others' ? ' split-nav-active' : ''}`}
+              onClick={() => { setPanel('inbox'); setView('others'); setSelectedThread(null) }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6Z" />
+              </svg>
+              Others
+              {counts.others > 0 && <span className="mail-badge">{counts.others}</span>}
             </button>
             <button
               className={`split-nav-item${showFlagged ? ' split-nav-active' : ''}`}
-              onClick={() => { setShowFlagged(true); setPanel('inbox'); setSelectedThread(null) }}
+              onClick={() => { setView('flagged'); setPanel('inbox'); setSelectedThread(null) }}
             >
               <Icon name="flag" size={16} />
               Flagged
             </button>
             <button
               className={`split-nav-item${panel === 'accounts' ? ' split-nav-active' : ''}`}
-              onClick={() => { setPanel('accounts'); setShowFlagged(false); setSelectedThread(null) }}
+              onClick={() => { setPanel('accounts'); setSelectedThread(null) }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
@@ -665,7 +737,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                 <Icon name="sidebar" size={16} />
               </button>
               <span className="split-toolbar-title">
-                {showFlagged ? 'Flagged' : activeAccount ? accounts.find(a => a.id === activeAccount)?.label : 'Inbox'}
+                {showFlagged ? 'Flagged' : view === 'others' ? 'Others' : activeAccount ? accounts.find(a => a.id === activeAccount)?.label : 'Inbox'}
               </span>
               {!showFlagged && unreadCount > 0 && (
                 <span style={{ fontFamily: 'var(--kp-font-mono)', fontSize: '11px', color: 'var(--kp-fg-4)' }}>{unreadCount} unread</span>
@@ -680,6 +752,19 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                 <Icon name="refresh" size={16} style={{ animation: syncing ? 'mail-spin 1s linear infinite' : undefined }} />
               </button>
             </div>
+
+            {moveNotice && (
+              <div className="mail-move-notice" role="status">
+                <span>Moved to {moveNotice.to === 'others' ? 'Others' : 'Inbox'}.</span>
+                {moveNotice.thread.from_address.includes('@') && (
+                  <button className="btn-ghost btn-sm" onClick={handleSenderRule}>
+                    Always move mail from {moveNotice.thread.from_address}
+                  </button>
+                )}
+                <div style={{ flex: 1 }} />
+                <button className="icon-btn" onClick={() => setMoveNotice(null)} aria-label="Dismiss"><Icon name="close" size={14} /></button>
+              </div>
+            )}
 
             <div className="mail-search-bar">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ flexShrink: 0, color: 'var(--kp-fg-4)' }}>
@@ -710,7 +795,7 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                     icon="mail"
                     title="No mail accounts yet"
                     hint="Connect an IMAP account to read your mail here."
-                    action={{ label: 'Add account', onClick: () => { setPanel('accounts'); setShowFlagged(false); setSelectedThread(null) } }}
+                    action={{ label: 'Add account', onClick: () => { setPanel('accounts'); setSelectedThread(null) } }}
                   />
                 ) : (
                   <Empty
@@ -752,6 +837,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                           <Icon name="check" size={14} />
                         </button>
                       )}
+                      <button
+                        className="mail-item-read-btn"
+                        onClick={e => handleMoveThread(t, e)}
+                        aria-label={t.category === 'others' ? 'Move to Inbox' : 'Move to Others'}
+                        title={t.category === 'others' ? 'Move to Inbox' : 'Move to Others'}
+                      >
+                        <Icon name={t.category === 'others' ? 'inboxIn' : 'archive'} size={14} />
+                      </button>
                       <button
                         className={`flag-btn${t.flagged ? ' flag-btn-active' : ''}`}
                         onClick={e => handleToggleThreadFlag(t, e)}
@@ -815,6 +908,24 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
                     </button>
                   </div>
                 ))}
+                {senderRules.length > 0 && (
+                  <div className="mail-rules">
+                    <div className="mail-rules-title">Sender rules</div>
+                    {senderRules.map(r => (
+                      <div key={r.from_address} className="mail-account-row">
+                        <div className="mail-account-info">
+                          <span className="mail-account-email">{r.from_address}</span>
+                          <span className="mail-account-meta">Always to {r.category === 'others' ? 'Others' : 'Inbox'}</span>
+                        </div>
+                        <button
+                          className="icon-btn mail-account-delete"
+                          onClick={() => handleRemoveSenderRule(r.from_address)}
+                          aria-label={`Remove rule for ${r.from_address}`}
+                        ><Icon name="close" size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -832,6 +943,14 @@ export function MailInbox({ isAuth, isDark, onUnreadCount, initialMailId }: Mail
             </button>
             <h3 className="mail-detail-subject">{selectedThread.subject}</h3>
             {selectedThread.count > 1 && <span className="mail-count">{selectedThread.count}</span>}
+            <button
+              className="icon-btn"
+              onClick={e => handleMoveThread(selectedThread, e)}
+              aria-label={selectedThread.category === 'others' ? 'Move to Inbox' : 'Move to Others'}
+              title={selectedThread.category === 'others' ? 'Move to Inbox' : 'Move to Others'}
+            >
+              <Icon name={selectedThread.category === 'others' ? 'inboxIn' : 'archive'} size={16} />
+            </button>
             <button
               className={`flag-btn${selectedThread.flagged ? ' flag-btn-active' : ''}`}
               onClick={e => handleToggleThreadFlag(selectedThread, e)}

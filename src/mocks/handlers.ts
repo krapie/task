@@ -35,7 +35,7 @@ function daily(slotDate: string): DailyData {
 }
 
 const threads = (): MailThread[] =>
-  db.mailItems.map((m) => ({ id: m.id, account_id: m.account_id, thread_id: m.thread_id ?? m.id, subject: m.subject, from_address: m.from_address, from_name: m.from_name, received_at: m.received_at, snippet: m.snippet, count: 1, unread_count: m.read ? 0 : 1, flagged: m.flagged, participants: [m.from_name ?? m.from_address] }))
+  db.mailItems.map((m) => ({ id: m.id, account_id: m.account_id, thread_id: m.thread_id ?? m.id, subject: m.subject, from_address: m.from_address, from_name: m.from_name, received_at: m.received_at, snippet: m.snippet, count: 1, unread_count: m.read ? 0 : 1, flagged: m.flagged, category: m.category ?? 'general', participants: [m.from_name ?? m.from_address] }))
 
 export const handlers: HttpHandler[] = [
   http.get('https://auth.kevinprk.com/api/token', async () => ok({ access_token: 'mock-token', expires_in: 900, user: { username: 'kevinprk' } })),
@@ -203,11 +203,39 @@ export const handlers: HttpHandler[] = [
 
   http.get('/api/mail/accounts', async () => ok(list(db.mailAccounts))),
   http.get('/api/mail/threads/items', async () => ok(list(db.mailItems))),
-  http.get('/api/mail/threads', async () => ok(list(threads()))),
+  http.get('/api/mail/threads', async ({ request }) => {
+    const url = new URL(request.url)
+    const category = url.searchParams.get('category')
+    const flagged = url.searchParams.get('flagged') === 'true'
+    return ok(list(threads().filter((t) => (!category || t.category === category) && (!flagged || t.flagged))))
+  }),
+  http.post('/api/mail/threads/move', async ({ request }) => {
+    const { thread_id, category } = (await request.json()) as { thread_id: string; category: 'general' | 'others' }
+    db.mailItems.forEach((m) => { if ((m.thread_id ?? m.id) === thread_id) m.category = category })
+    return ok({ category })
+  }),
+  http.get('/api/mail/sender-rules', async () => ok(list(db.mailSenderRules))),
+  http.put('/api/mail/sender-rules', async ({ request }) => {
+    const { from_address, category } = (await request.json()) as { from_address: string; category: 'general' | 'others' }
+    const addr = from_address.toLowerCase()
+    db.mailSenderRules.splice(0, db.mailSenderRules.length, { from_address: addr, category, created_at: new Date().toISOString() }, ...db.mailSenderRules.filter((r) => r.from_address !== addr))
+    let moved = 0
+    db.mailItems.forEach((m) => { if (m.from_address.toLowerCase() === addr && (m.category ?? 'general') !== category) { m.category = category; moved++ } })
+    return ok({ from_address: addr, category, moved })
+  }),
+  http.delete('/api/mail/sender-rules', async ({ request }) => {
+    const addr = (new URL(request.url).searchParams.get('from_address') ?? '').toLowerCase()
+    db.mailSenderRules.splice(0, db.mailSenderRules.length, ...db.mailSenderRules.filter((r) => r.from_address !== addr))
+    return ok({ ok: true })
+  }),
+  http.get('/api/mail/unread-counts', async () => {
+    const unread = (c: string) => db.mailItems.filter((m) => !m.read && (m.category ?? 'general') === c).length
+    return ok({ general: unread('general'), others: unread('others') })
+  }),
   http.get('/api/mail/items/:id', async ({ params }) => ok(db.mailItems.find((m) => m.id === params.id))),
   http.get('/api/mail/items', async () => ok(list(db.mailItems))),
-  http.post('/api/mail/threads/read', none),
-  http.post('/api/mail/items/:id/read', none),
+  http.post('/api/mail/threads/read', async () => ok({ ok: true })),
+  http.post('/api/mail/items/:id/read', async () => ok({ ok: true })),
   http.get('/api/mail/sync', async () => ok({ running: false, finished_at: new Date().toISOString(), synced: 0, error: null })),
   http.post('/api/mail/sync', async () => ok({ running: false, finished_at: new Date().toISOString(), synced: 0, error: null })),
 
