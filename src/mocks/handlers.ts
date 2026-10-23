@@ -81,7 +81,7 @@ export const handlers: HttpHandler[] = [
     if (b.type === 'addition') {
       const a = db.additions.find((x) => x.id === b.id)
       if (a) a.completed = b.completed
-      return none()
+      return ok({ ok: true, groupCompleted: [] })
     }
     const key = `${b.id}|${b.slotDate}`
     if (b.completed) db.completions.add(key)

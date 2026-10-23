@@ -18,6 +18,7 @@ import { startNew as startNewChat } from './lib/assistantStore'
 import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
 import { DialogHost, Loading, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
+import { fetchSettled, trackMutation } from './lib/mutationGate'
 import { AUTH_ONLY_VIEWS, GROUPS, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
 import { expandForView, expandForDate, calendarViewRange } from './lib/recurrence'
@@ -283,8 +284,8 @@ export default function App() {
   const loadCalendarAdditions = useCallback(async (year: number, month: number) => {
     const { start, end } = calendarViewRange(year, month)
     if (isAuth) {
-      const additions = await api.daily.getAdditionsRange(start, end).catch(() => [])
-      setCalendarAdditions(additions)
+      const additions = await fetchSettled(() => api.daily.getAdditionsRange(start, end).catch(() => null))
+      if (additions) setCalendarAdditions(additions)
     } else {
       setCalendarAdditions(storage.getAdditionsForRange(start, end))
     }
@@ -292,15 +293,15 @@ export default function App() {
 
   const loadTodos = useCallback(async () => {
     if (isAuth) {
-      const t = await api.todos.getAll().catch(() => [])
-      setTodos(t)
+      const t = await fetchSettled(() => api.todos.getAll().catch(() => null))
+      if (t) setTodos(t)
     }
   }, [isAuth])
 
   const dailyPendingRef = useRef(new Map<string, Promise<void>>())
   const fetchDaily = useCallback(async (slotDate: string) => {
     if (isAuth) {
-      const d = await api.daily.get(slotDate).catch(() => null) as DailyData | null
+      const d = await fetchSettled(() => api.daily.get(slotDate).catch(() => null)) as DailyData | null
       if (!d) return
       const serverCompletions = d.completionIds ?? d.templates.filter(t => t.completed).map(t => t.id)
       const serverAdditions = d.additions
@@ -524,8 +525,14 @@ export default function App() {
   async function handleToggleTodo(id: string) {
     const todo = todos.find(t => t.id === id)
     if (!todo) return
-    const updated = await api.todos.update(id, { completed: !todo.completed }).catch(() => null)
-    if (updated) setTodos(prev => prev.map(t => t.id === id ? updated : t))
+    const completed = !todo.completed
+    setTodos(prev => prev.map(t => t.id === id ? { ...t, completed } : t))
+    try {
+      await trackMutation(api.todos.update(id, { completed }))
+    } catch (e) {
+      setTodos(prev => prev.map(t => t.id === id ? { ...t, completed: todo.completed } : t))
+      notifyError(e)
+    }
   }
 
   async function handleEditTodo(id: string, text: string, due_date: string | null) {
@@ -657,7 +664,7 @@ export default function App() {
       [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), completions: next },
     }))
     if (isAuth) {
-      await api.daily.toggleTemplate(id, slotDate, !done).catch(notifyError)
+      await trackMutation(api.daily.toggleTemplate(id, slotDate, !done).catch(notifyError))
     } else {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, { ...d, completions: next })
@@ -676,7 +683,7 @@ export default function App() {
       [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), skips: next },
     }))
     if (isAuth) {
-      await api.daily.skipTemplate(id, slotDate, !skipped).catch(notifyError)
+      await trackMutation(api.daily.skipTemplate(id, slotDate, !skipped).catch(notifyError))
     } else {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, { ...d, skips: next })
@@ -800,7 +807,7 @@ export default function App() {
     setCalendarAdditions(prev => prev.map(a => a.id === id ? { ...a, completed: !a.completed } : a))
     if (isAuth) {
       if (!id.startsWith('temp-')) {
-        await api.daily.toggleAddition(id, !target.completed).catch(notifyError)
+        await trackMutation(api.daily.toggleAddition(id, !target.completed).catch(notifyError))
       }
     } else {
       const d = storage.getDaily(target.slot_date)
@@ -888,7 +895,7 @@ export default function App() {
       },
     }))
     if (isAuth) {
-      await api.daily.toggleAddition(id, !a.completed).catch(notifyError)
+      await trackMutation(api.daily.toggleAddition(id, !a.completed).catch(notifyError))
     } else {
       const d = storage.getDaily(slotDate)
       storage.setDaily(slotDate, {
@@ -954,7 +961,7 @@ export default function App() {
       [slotDate]: { ...(prev[slotDate] ?? { completions: [], additions: [], eventCompletions: [] }), eventCompletions: next },
     }))
     if (isAuth) {
-      await api.events.toggle(eventId, slotDate, !done).catch(notifyError)
+      await trackMutation(api.events.toggle(eventId, slotDate, !done).catch(notifyError))
     } else {
       storage.toggleEventCompletion(eventId, slotDate, !done)
     }
