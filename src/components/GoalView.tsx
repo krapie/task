@@ -489,6 +489,34 @@ interface GoalItemRowProps {
 
 export function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
   const [noteVal, setNoteVal] = useState(item.note ?? '')
+  const [editing, setEditing] = useState(false)
+  const [textVal, setTextVal] = useState(item.text)
+  const textRef = useRef<HTMLInputElement>(null)
+  // Escape unmounts the input, which may still fire blur; that blur must not save.
+  const cancelled = useRef(false)
+
+  useEffect(() => {
+    if (!editing) return
+    textRef.current?.focus()
+    textRef.current?.select()
+  }, [editing])
+
+  function startEdit() {
+    setTextVal(item.text)
+    cancelled.current = false
+    setEditing(true)
+  }
+
+  async function saveText() {
+    if (cancelled.current) return
+    const text = textVal.trim()
+    setEditing(false)
+    if (!text || text === item.text) return
+    try {
+      const updated = await api.goals.updateItem(item.id, { text })
+      onUpdate(updated)
+    } catch (e) { notifyError(e) }
+  }
 
   async function toggleCompleted() {
     try {
@@ -525,9 +553,27 @@ export function GoalItemRow({ item, onUpdate, onDelete }: GoalItemRowProps) {
       </label>
 
       <div className="goal-item-body">
-        <span className={`goal-item-text${item.crossed_out ? ' goal-text-strike' : ''}`}>
-          {item.text}
-        </span>
+        {editing ? (
+          <input
+            ref={textRef}
+            className="goal-item-input goal-item-edit"
+            value={textVal}
+            onChange={e => setTextVal(e.target.value)}
+            onBlur={saveText}
+            onKeyDown={e => {
+              if (e.key === 'Enter') e.currentTarget.blur()
+              if (e.key === 'Escape') { cancelled.current = true; setEditing(false); setTextVal(item.text) }
+            }}
+          />
+        ) : (
+          <span
+            className={`goal-item-text goal-item-text-edit${item.crossed_out ? ' goal-text-strike' : ''}`}
+            onClick={startEdit}
+            title="Click to edit"
+          >
+            {item.text}
+          </span>
+        )}
         <input
           className="goal-note-input"
           value={noteVal}
