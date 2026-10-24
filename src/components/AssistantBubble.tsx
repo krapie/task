@@ -8,11 +8,28 @@ import { ask, assistantStore, isRemoteStreaming, startNew, stop } from '../lib/a
 import { Icon } from './Icons'
 import { SUGGESTIONS, TurnView } from './AssistantView'
 
+// The passkey prompt leaves the page: remember that the panel was open so it is open again on return.
+// Read once and ignored after 5 minutes, so a later visit never opens it by surprise.
+const REOPEN_KEY = 'task-bubble-reopen'
+const REOPEN_MAX_AGE_MS = 5 * 60_000
+function markReopen() {
+  try { sessionStorage.setItem(REOPEN_KEY, String(Date.now())) } catch { /* the panel stays closed */ }
+}
+function takeReopen(): boolean {
+  try {
+    const at = Number(sessionStorage.getItem(REOPEN_KEY))
+    sessionStorage.removeItem(REOPEN_KEY)
+    return at > 0 && Date.now() - at < REOPEN_MAX_AGE_MS
+  } catch {
+    return false
+  }
+}
+
 export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean; onOpenTab: () => void }) {
   const s = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
   const { chat, live } = s
   const busy = live != null || isRemoteStreaming(s)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(takeReopen)
   const [input, setInput] = useState('')
   const bodyRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -20,7 +37,8 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
   const earlier = chat.turns.length - 1
 
   // Also keeps the lock timers (background, expiry) running while only the button is used.
-  const { unlocked, busy: unlocking, error, unlock } = useStepUp('assistant', isAuth, () => setInput(''))
+  const { unlocked, busy: unlocking, error, unlock: doUnlock } = useStepUp('assistant', isAuth, () => setInput(''))
+  const unlock = () => { markReopen(); void doUnlock() }
 
   // Follow the answer while it streams; a finished one reads from the top.
   useEffect(() => {

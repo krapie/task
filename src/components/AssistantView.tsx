@@ -206,7 +206,7 @@ interface AssistantViewProps {
 // and the market. Same passkey step-up as Assets and Health (it reads both),
 // so nothing is requested until unlocked and a lock drops everything fetched.
 // The server owns each turn: leaving the page does not stop an answer, and a
-// finished weekly recap or market check is just another conversation here.
+// finished market note is just another conversation here.
 // The conversation itself lives in assistantStore, shared with the chat button.
 export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draft, onDraftUsed }: AssistantViewProps) {
   const [masked, setMasked] = useState(false)
@@ -226,7 +226,8 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
   const pendingOpen = useRef(initialChatId)
 
   const onLock = () => { setMasked(false); setInput('') }
-  const { unlocked, busy: unlocking, error: unlockError, remaining, lock, unlock } = useStepUp('assistant', isAuth, onLock)
+  // The open conversation rides in the return address (#/note/chats/<id>), so the passkey prompt gives it back.
+  const { unlocked, busy: unlocking, error: unlockError, remaining, lock, unlock } = useStepUp('assistant', isAuth, onLock, () => (chat.id ? `${location.origin}${location.pathname}#/note/chats/${chat.id}` : undefined))
   const error = unlockError ?? chatError
 
   const busy = live != null
@@ -315,7 +316,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
       <StepUpBar unlocked={unlocked} busy={unlocking} remaining={remaining} masked={masked} onToggleMask={() => setMasked(m => !m)} onUnlock={unlock} onLock={lock} />
       {error && <p className="assets-error" onClick={() => setStoreError(null)}>{error}</p>}
       {!unlocked ? (
-        <Empty icon="assistant" title="Assistant is locked" hint="Unlock with your passkey to ask about your tasks, money, health, mail and the market. Reports from the weekly recap and the Monday market check appear here too." />
+        <Empty icon="assistant" title="Assistant is locked" hint="Unlock with your passkey to ask about your tasks, money, health, mail and the market. The Tuesday market note appears here too." />
       ) : (
         <div className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${sbHidden ? ' as-collapsed' : ''}${dragging ? ' as-dragging' : ''}${masked ? ' as-masked' : ''}`} style={{ '--as-sidebar-w': `${sbWidth}px` } as CSSProperties}>
           <aside className="split-sidebar as-sidebar" aria-label="Conversations">

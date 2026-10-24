@@ -10,7 +10,7 @@ import { api, STEP_UP_EVENT, type StepUpView } from './api'
 // an app-switcher screenshot), and the end of the 1-hour passkey session. There
 // is no idle lock and no refresh. Locking also tells auth to forget the passkey
 // check, so every unlock after a lock needs a fresh passkey and gets a full hour.
-export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void) {
+export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void, returnTo?: () => string | undefined) {
   const [unlocked, setUnlocked] = useState(() => api.assets.hasToken())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -27,17 +27,21 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void)
     onLockRef.current()
   }, [])
 
+  const returnToRef = useRef(returnTo)
+  returnToRef.current = returnTo
+
   const unlock = useCallback(async () => {
     setBusy(true)
     setError(null)
+    let leaving = false
     try {
-      await api.passkey.authenticate(view)
+      await api.passkey.authenticate(view, returnToRef.current?.())
       setUnlocked(true)
     } catch (err) {
-      if (err instanceof Error && err.message === 'REDIRECTING') return
+      if (err instanceof Error && err.message === 'REDIRECTING') { leaving = true; return }
       setError(err instanceof Error ? err.message : 'Passkey unlock failed')
     } finally {
-      setBusy(false)
+      if (!leaving) setBusy(false)
     }
   }, [view])
 

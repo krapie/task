@@ -38,7 +38,18 @@ const threads = (): MailThread[] =>
   db.mailItems.map((m) => ({ id: m.id, account_id: m.account_id, thread_id: m.thread_id ?? m.id, subject: m.subject, from_address: m.from_address, from_name: m.from_name, received_at: m.received_at, snippet: m.snippet, count: 1, unread_count: m.read ? 0 : 1, flagged: m.flagged, category: m.category ?? 'general', participants: [m.from_name ?? m.from_address] }))
 
 export const handlers: HttpHandler[] = [
-  http.get('https://auth.kevinprk.com/api/token', async () => ok({ access_token: 'mock-token', expires_in: 900, user: { username: 'kevinprk' } })),
+  // ?scenario=stepup: the first step-up token request answers with a login_url that comes straight back
+  // (a full page load, like auth's passkey page), the next one passes. Tests the return-to-screen flow.
+  http.get('https://auth.kevinprk.com/api/token', async ({ request }) => {
+    const u = new URL(request.url)
+    if (u.searchParams.get('step_up') && q().get('scenario') === 'stepup' && sessionStorage.getItem('kp-mock-stepup') !== 'done') {
+      sessionStorage.setItem('kp-mock-stepup', 'done')
+      const back = new URL(u.searchParams.get('return') ?? location.href)
+      back.searchParams.set('stepup', 'back') // a different URL, so the browser really reloads
+      return ok({ login_url: back.toString() }, 401)
+    }
+    return ok({ access_token: 'mock-token', expires_in: 900, user: { username: 'kevinprk' } })
+  }),
   http.post('https://auth.kevinprk.com/api/step-up/lock', none),
   http.get('/api/auth/me', async () => ok({ username: 'kevinprk' })),
 

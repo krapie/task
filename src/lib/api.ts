@@ -128,6 +128,15 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
 // next unlock needs a fresh passkey and gets a full hour.
 export type StepUpView = 'assets' | 'health' | 'assistant'
 const STEP_UP_PENDING = 'task-step-up-pending'
+
+// Where the passkey prompt sends the browser back: this very page, hash route included, so the
+// user lands on the screen they left (view, Today tab, calendar month). The old ?tab=<view> link
+// could not name the Assistant views and fell back to Today.
+function stepUpReturn(): string {
+  const u = new URL(location.href)
+  u.searchParams.delete('tab')
+  return u.toString()
+}
 let _assetToken: string | null = null
 let _assetTokenExpiresAt = 0
 
@@ -369,9 +378,8 @@ export const api = {
     // Step-up for the Assets and Health tabs: auth issues a step_up token only
     // if a passkey was used in the last hour (the token ends at that hour; a reload
     // inside it re-mints the rest without a prompt, never extended; Lock ends it). Otherwise the browser goes to auth for a passkey prompt and
-    // comes back to ?tab=<view>, where useStepUp retries automatically.
-    authenticate: async (view: StepUpView) => {
-      const returnTo = `${location.origin}/?tab=${view}`
+    // comes back to the page it left (returnTo), where useStepUp retries automatically.
+    authenticate: async (view: StepUpView, returnTo = stepUpReturn()) => {
       const res = await fetch(tokenURL(true, returnTo), { credentials: 'include' })
       const data = (await res.json().catch(() => ({}))) as Partial<TokenResponse>
       if (res.ok && data.access_token && data.expires_in) {
