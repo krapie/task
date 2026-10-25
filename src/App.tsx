@@ -21,7 +21,7 @@ import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
 import { DialogHost, Loading, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
 import { fetchSettled, trackMutation } from './lib/mutationGate'
-import { AUTH_ONLY_VIEWS, GROUPS, defaultRoutineTab, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
+import { AUTH_ONLY_VIEWS, GROUPS, defaultView, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
 import { expandForView, expandForDate, calendarViewRange } from './lib/recurrence'
 import { api, AUTH_LOST_EVENT, hasAuthHint } from './lib/api'
@@ -389,7 +389,7 @@ export default function App() {
   // Overview, which pins the slot to today) is opened. The cache entry is dropped first so a day chip always shows
   // completions made on another device (e.g. the iPhone app).
   useEffect(() => {
-    if (!activeSlotDate || view !== 'routine' || (routineTab !== 'tasks' && routineTab !== 'overview')) return
+    if (!activeSlotDate || !((view === 'routine' && routineTab === 'tasks') || view === 'overview')) return
     const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
     loadedDatesRef.current.delete(slotDate)
     loadDaily(slotDate)
@@ -397,8 +397,8 @@ export default function App() {
 
   // The Overview is about today: pin the board's slot to it, so toggles, refreshes and the header count all follow today.
   useEffect(() => {
-    if (view === 'routine' && routineTab === 'overview') setSelectedSlot(activeSlot)
-  }, [view, routineTab, activeSlot])
+    if (view === 'overview') setSelectedSlot(activeSlot)
+  }, [view, activeSlot])
 
   // Reload events and additions when switching to or navigating within calendar view
   useEffect(() => {
@@ -1021,7 +1021,7 @@ export default function App() {
   const currentGroup = visibleGroups.find(g => g.id === groupOf(view).id)
   const subViews = currentGroup && currentGroup.id !== 'today' ? currentGroup.visible : []
   const goGroup = (g: (typeof visibleGroups)[number]) => { if (groupOf(view).id !== g.id) setView(g.visible[0]) }
-  const goHome = (e: { preventDefault(): void }) => { e.preventDefault(); setView('routine'); setRoutineTab(defaultRoutineTab()) }
+  const goHome = (e: { preventDefault(): void }) => { e.preventDefault(); setView(defaultView()); setRoutineTab('tasks') }
   const groupBadge = (id: string) => (id === 'inbox' ? mailUnread : 0)
 
   // Undo toasts outlive the render that created them; they call the newest handlers through this ref.
@@ -1046,7 +1046,7 @@ export default function App() {
       const k = e.key
       if (gAt && Date.now() - gAt < 1000) {
         gAt = 0
-        const target = ({ t: 'today', c: 'calendar', i: 'inbox', l: 'life', n: 'note', a: 'note', s: 'settings' } as Record<string, string>)[k]
+        const target = ({ o: 'overview', t: 'today', c: 'calendar', i: 'inbox', l: 'life', n: 'note', a: 'note', s: 'settings' } as Record<string, string>)[k]
         if (target) { e.preventDefault(); keys.current.goGroup(target) }
         return
       }
@@ -1121,11 +1121,61 @@ export default function App() {
             ))}
           </nav>
         )}
-        {view === 'routine' ? (
+        {view === 'overview' ? (
+          <>
+            {/* Today's date and progress; the Overview has no tabs of its own */}
+            <div className="board-date-hero">
+              <span className="board-day-name">{SLOT_DAY_NAMES[selectedSlot] ?? selectedSlot}</span>
+              <span className={`board-day-tag${selectedSlot === activeSlot ? ' board-day-tag-today' : ''}`}>
+                {selectedSlot === activeSlot ? 'Today' : 'Upcoming'}
+              </span>
+              <span className="board-date-mono">{selectedSlotDate}</span>
+              <div className="rail-spacer" />
+              {boardTotal > 0 && boardDone < boardTotal && (
+                <span className="board-progress-count">
+                  <span className="board-progress-done">{boardDone}</span>/{boardTotal}
+                </span>
+              )}
+              {boardTotal > 0 && (
+                <div className="board-progress-bar">
+                  <div className="board-progress-fill" style={{ width: `${boardDone / boardTotal * 100}%` }} />
+                </div>
+              )}
+            </div>
+            <OverviewView
+              isAuth={isAuth}
+              isOwner={isOwner}
+              chatButton={isOwner}
+              ready={boardReady}
+              templates={templates}
+              dailyData={dailyData}
+              events={calendarEvents}
+              todos={todos}
+              activeSlot={activeSlot}
+              activeSlotDate={activeSlotDate}
+              rotateHour={settings.rotateHour}
+              rotateMinute={settings.rotateMinute}
+              onToggleRoutine={handleToggleTemplate}
+              onToggleBonus={handleToggleAddition}
+              onToggleEvent={handleToggleEvent}
+              onToggleTodo={handleToggleTodo}
+              onOpenTasks={() => { setView('routine'); setRoutineTab('tasks') }}
+              onOpenCalendar={date => {
+                const [y, m] = date.split('-').map(Number)
+                setCalendarMonth({ year: y, month: m })
+                setSelectedCalendarDate(date)
+                setView('calendar')
+              }}
+              onOpenMail={() => setView('mail')}
+              onOpenLife={v => setView(v)}
+              onMailUnread={setMailUnread}
+            />
+          </>
+        ) : view === 'routine' ? (
           <>
             {/* Date hero / Goals header */}
             <div className="board-date-hero">
-              {routineTab === 'tasks' || routineTab === 'overview' ? (
+              {routineTab === 'tasks' ? (
                 <>
                   <span className="board-day-name">{SLOT_DAY_NAMES[selectedSlot] ?? selectedSlot}</span>
                   <span className={`board-day-tag${selectedSlot === activeSlot ? ' board-day-tag-today' : ''}`}>
@@ -1137,68 +1187,33 @@ export default function App() {
                 <span className="board-day-name">{routineTab === 'retro' ? 'Retro' : 'Goals'}</span>
               )}
               <div className="rail-spacer" />
-              {(routineTab === 'tasks' || routineTab === 'overview') && boardTotal > 0 && boardDone < boardTotal && (
+              {routineTab === 'tasks' && boardTotal > 0 && boardDone < boardTotal && (
                 <span className="board-progress-count">
                   <span className="board-progress-done">{boardDone}</span>/{boardTotal}
                 </span>
               )}
-              {(routineTab === 'tasks' || routineTab === 'overview') && boardTotal > 0 && (
+              {routineTab === 'tasks' && boardTotal > 0 && (
                 <div className="board-progress-bar">
                   <div className="board-progress-fill" style={{ width: `${boardDone / boardTotal * 100}%` }} />
                 </div>
               )}
-              <div className="view-tabs view-tabs-inline">
-                <button
-                  className={`view-tab${routineTab === 'overview' ? ' active' : ''}`}
-                  onClick={() => setRoutineTab('overview')}
-                >Overview</button>
+              {isAuth && <div className="view-tabs view-tabs-inline">
                 <button
                   className={`view-tab${routineTab === 'tasks' ? ' active' : ''}`}
                   onClick={() => setRoutineTab('tasks')}
                 >Tasks</button>
-                {isAuth && <>
-                  <button
-                    className={`view-tab${routineTab === 'goals' ? ' active' : ''}`}
-                    onClick={() => setRoutineTab('goals')}
-                  >Goals</button>
-                  <button
-                    className={`view-tab${routineTab === 'retro' ? ' active' : ''}`}
-                    onClick={() => setRoutineTab('retro')}
-                  >Retro</button>
-                </>}
-              </div>
+                <button
+                  className={`view-tab${routineTab === 'goals' ? ' active' : ''}`}
+                  onClick={() => setRoutineTab('goals')}
+                >Goals</button>
+                <button
+                  className={`view-tab${routineTab === 'retro' ? ' active' : ''}`}
+                  onClick={() => setRoutineTab('retro')}
+                >Retro</button>
+              </div>}
             </div>
 
-            {routineTab === 'overview' ? (
-              <OverviewView
-                isAuth={isAuth}
-                isOwner={isOwner}
-                chatButton={isOwner}
-                ready={boardReady}
-                templates={templates}
-                dailyData={dailyData}
-                events={calendarEvents}
-                todos={todos}
-                activeSlot={activeSlot}
-                activeSlotDate={activeSlotDate}
-                rotateHour={settings.rotateHour}
-                rotateMinute={settings.rotateMinute}
-                onToggleRoutine={handleToggleTemplate}
-                onToggleBonus={handleToggleAddition}
-                onToggleEvent={handleToggleEvent}
-                onToggleTodo={handleToggleTodo}
-                onOpenTasks={() => setRoutineTab('tasks')}
-                onOpenCalendar={date => {
-                  const [y, m] = date.split('-').map(Number)
-                  setCalendarMonth({ year: y, month: m })
-                  setSelectedCalendarDate(date)
-                  setView('calendar')
-                }}
-                onOpenMail={() => setView('mail')}
-                onOpenLife={v => setView(v)}
-                onMailUnread={setMailUnread}
-              />
-            ) : routineTab === 'tasks' ? (
+            {routineTab === 'tasks' ? (
               <>
                 {/* Day chips */}
                 <div className="board-chips-bar">

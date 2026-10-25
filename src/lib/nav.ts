@@ -1,15 +1,15 @@
 import type { IconName } from '../components/Icons'
 
-export type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'trader' | 'notes' | 'chats' | 'settings'
-export type RoutineTab = 'overview' | 'tasks' | 'goals' | 'retro'
+export type View = 'overview' | 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'trader' | 'notes' | 'chats' | 'settings'
+export type RoutineTab = 'tasks' | 'goals' | 'retro'
 
-// Desktop opens Today on the Overview; phones keep the checklist (Tasks) as the first screen.
+// Desktop opens on the Overview; phones keep the checklist (Today → Tasks) as the first screen.
 export const WIDE_QUERY = '(min-width: 900px)'
-export const defaultRoutineTab = (): RoutineTab => (window.matchMedia(WIDE_QUERY).matches ? 'overview' : 'tasks')
+export const defaultView = (): View => (window.matchMedia(WIDE_QUERY).matches ? 'overview' : 'routine')
 export type YearMonth = { year: number; month: number }
 
 export const VIEW_LABELS: Record<View, string> = {
-  routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', trader: 'Trader', notes: 'Notes', chats: 'Chats', settings: 'Settings',
+  overview: 'Overview', routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', trader: 'Trader', notes: 'Notes', chats: 'Chats', settings: 'Settings',
 }
 
 // Views backed only by server data; hidden from guests
@@ -19,14 +19,15 @@ export const AUTH_ONLY_VIEWS: View[] = ['mail', 'assets', 'health', 'trader', 'n
 export const OWNER_ONLY_VIEWS: View[] = ['assets', 'health', 'trader', 'notes', 'chats']
 
 export const VIEW_ICONS: Record<View, IconName> = {
-  routine: 'routine', calendar: 'calendar', mail: 'mail', news: 'news', assets: 'assets', health: 'health', trader: 'chart', notes: 'note', chats: 'assistant', settings: 'settings',
+  overview: 'overview', routine: 'routine', calendar: 'calendar', mail: 'mail', news: 'news', assets: 'assets', health: 'health', trader: 'chart', notes: 'note', chats: 'assistant', settings: 'settings',
 }
 
-export type GroupId = 'today' | 'calendar' | 'inbox' | 'life' | 'note' | 'settings'
+export type GroupId = 'overview' | 'today' | 'calendar' | 'inbox' | 'life' | 'note' | 'settings'
 export interface Group { id: GroupId; label: string; icon: IconName; views: View[] }
 
-// Ten views fold into six nav groups; groups with several views get sub-tabs.
+// Eleven views fold into seven nav groups; groups with several views get sub-tabs.
 export const GROUPS: Group[] = [
+  { id: 'overview', label: 'Overview', icon: 'overview', views: ['overview'] },
   { id: 'today', label: 'Today', icon: 'routine', views: ['routine'] },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', views: ['calendar'] },
   { id: 'inbox', label: 'Inbox', icon: 'mail', views: ['mail', 'news'] },
@@ -38,8 +39,8 @@ export const GROUPS: Group[] = [
 // API scopes (first path segment) whose requests the top progress bar shows on each tab.
 export function scopesFor(view: View, tab: RoutineTab): string[] {
   switch (view) {
+    case 'overview': return ['templates', 'daily', 'events', 'todos', 'mail', 'settings', 'health-data', 'assets', 'trader']
     case 'routine':
-      if (tab === 'overview') return ['templates', 'daily', 'events', 'todos', 'mail', 'settings', 'health-data', 'assets', 'trader']
       return tab === 'tasks' ? ['templates', 'daily', 'events', 'settings'] : ['goals']
     case 'calendar': return ['events', 'daily', 'todos']
     case 'mail': return ['mail']
@@ -61,10 +62,10 @@ export interface Route { view: View; tab: RoutineTab; month: YearMonth | null; m
 
 const VIEWS = Object.keys(VIEW_LABELS) as View[]
 
-// #/today[/overview|goals|retro] · #/calendar[/2026-10] · #/inbox/{mail,news} · #/life/{assets,health,trader} · #/note/{notes,chats} · #/settings (legacy #/assistant[/<conversation id>] opens Chats)
+// #/overview · #/today[/goals|retro] · #/calendar[/2026-10] · #/inbox/{mail,news} · #/life/{assets,health,trader} · #/note/{notes,chats} · #/settings (legacy #/assistant[/<conversation id>] opens Chats)
 export function hashOf(view: View, tab: RoutineTab, month: YearMonth): string {
   const g = groupOf(view)
-  if (view === 'routine') return tab === 'overview' ? '#/today/overview' : tab === 'goals' ? '#/today/goals' : tab === 'retro' ? '#/today/retro' : '#/today'
+  if (view === 'routine') return tab === 'goals' ? '#/today/goals' : tab === 'retro' ? '#/today/retro' : '#/today'
   if (view === 'calendar') return `#/calendar/${month.year}-${String(month.month).padStart(2, '0')}`
   if (g.views.length > 1) return `#/${g.id}/${view}`
   return `#/${g.id}`
@@ -72,7 +73,7 @@ export function hashOf(view: View, tab: RoutineTab, month: YearMonth): string {
 
 // Reads the hash, falling back to the legacy ?tab=<view>&mail=<id> links that push notifications carry.
 export function parseLocation(loc: Pick<Location, 'hash' | 'search'> = location): Route {
-  const route: Route = { view: 'routine', tab: defaultRoutineTab(), month: null, mailId: null, chatId: null }
+  const route: Route = { view: defaultView(), tab: 'tasks', month: null, mailId: null, chatId: null }
   const q = new URLSearchParams(loc.search)
   const legacy = q.get('tab')
   if (VIEWS.includes(legacy as View)) route.view = legacy as View
@@ -85,9 +86,11 @@ export function parseLocation(loc: Pick<Location, 'hash' | 'search'> = location)
   if (g) {
     const sub = g.views.find(v => v === b)
     route.view = sub ?? g.views[0]
-    if (g.id === 'today' && b) route.tab = b === 'overview' ? 'overview' : b === 'goals' ? 'goals' : b === 'retro' ? 'retro' : 'tasks'
-    // A bare #/today is the Tasks checklist (the Overview has its own hash), so the default only applies to no hash at all.
-    else if (g.id === 'today') route.tab = 'tasks'
+    if (g.id === 'today') {
+      route.tab = b === 'goals' ? 'goals' : b === 'retro' ? 'retro' : 'tasks'
+      // The Overview used to be a Today tab (#/today/overview); old links still land on it.
+      if (b === 'overview') route.view = 'overview'
+    }
     const m = g.id === 'calendar' ? /^(\d{4})-(\d{2})$/.exec(b ?? '') : null
     if (m && +m[2] >= 1 && +m[2] <= 12) route.month = { year: +m[1], month: +m[2] }
     // #/note/chats/<conversation id>
