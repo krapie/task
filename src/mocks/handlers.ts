@@ -5,7 +5,9 @@ import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import type { DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
 import * as db from './db'
 
-const q = () => new URLSearchParams(location.search)
+// Read once at load: the app rewrites the URL to its #/ route after the first render, which drops the query.
+const initialQuery = new URLSearchParams(location.search)
+const q = () => initialQuery
 const empty = () => q().get('scenario') === 'empty'
 const latency = () => Number(q().get('latency')) || 120
 
@@ -219,7 +221,9 @@ export const handlers: HttpHandler[] = [
     const url = new URL(request.url)
     const category = url.searchParams.get('category')
     const flagged = url.searchParams.get('flagged') === 'true'
-    return ok(list(threads().filter((t) => (!category || t.category === category) && (!flagged || t.flagged))))
+    const unread = url.searchParams.get('unread') === 'true'
+    const limit = Number(url.searchParams.get('limit')) || undefined
+    return ok(list(threads().filter((t) => (!category || t.category === category) && (!flagged || t.flagged) && (!unread || t.unread_count > 0))).slice(0, limit))
   }),
   http.post('/api/mail/threads/move', async ({ request }) => {
     const { thread_id, category } = (await request.json()) as { thread_id: string; category: 'general' | 'others' }
@@ -241,7 +245,7 @@ export const handlers: HttpHandler[] = [
     return ok({ ok: true })
   }),
   http.get('/api/mail/unread-counts', async () => {
-    const unread = (c: string) => db.mailItems.filter((m) => !m.read && (m.category ?? 'general') === c).length
+    const unread = (c: string) => (empty() ? [] : db.mailItems).filter((m) => !m.read && (m.category ?? 'general') === c).length
     return ok({ general: unread('general'), others: unread('others') })
   }),
   http.get('/api/mail/items/:id', async ({ params }) => ok(db.mailItems.find((m) => m.id === params.id))),

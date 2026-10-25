@@ -16,6 +16,7 @@ node server/index.js
 ## Features
 
 - **Routine board** — one list per day: Daily tasks, then Bonus, Tasks and today's Events as small labeled groups that only appear when they have items; a single add bar under the list switches between Daily / Bonus / Task. The list is left-aligned and at most 600px wide (full width on phones). It is sized for desktop windows from about 1000 × 680 up to 1280 × 710: the list scrolls inside while the add bar stays visible. Goals and Retro have their own tabs in the Tasks | Goals | Retro toggle. 6 day slots (Mon–Fri + Weekend) with recurring daily tasks that auto-reset at a configurable hour; drag to reorder; hide a routine for just the active day (it reappears at the next reset, is excluded from progress and the daily reminder, and can be restored from the collapsible "Hidden today" list)
+- **Overview** — first tab of Today (`Overview | Tasks | Goals | Retro`; guests get Overview and Tasks), `#/today/overview`. Desktop (≥900px) opens on it, phones keep Tasks as the first screen. One screen in three columns, no page scroll, long lists scroll inside their panel: **Today** (what is left across routines, bonus, today's events and todos due or late, finished ones below; ticks write exactly like the Tasks board), **Upcoming events** (the next 8 calendar events from tomorrow on, within 60 days, recurring ones expanded; a click opens that day in Calendar), **Inbox** (unread count and the latest three, signed in), **Goals** (this half-year per category, signed in) and **News** (latest headlines, public). Today and Upcoming events are derived from the state the app already holds (`lib/overview.ts`); the Overview's own requests are `GET /api/goals`, the mail unread calls and `GET /api/news`, refreshed every 5 minutes. A stock panel is planned. Assets, Health and Chats are not shown (they need the passkey step-up). Narrow screens stack the panels and scroll
 - **Bonus tasks** — one-off task additions per day slot, separate from the recurring routine
 - **Tasks** — global todo list with optional due dates shown alongside the routine board
 - **Multi-day add** — add a daily task to multiple day slots at once from the quick-add input
@@ -42,7 +43,7 @@ Eight views fold into six nav groups (left rail on desktop, bottom bar on phones
 
 | Group | Views | Route |
 |-------|-------|-------|
-| Today | Routine (Tasks / Goals) | `#/today`, `#/today/goals` |
+| Today | Routine (Overview / Tasks / Goals / Retro) | `#/today/overview`, `#/today` (Tasks), `#/today/goals`, `#/today/retro` |
 | Calendar | Calendar | `#/calendar`, `#/calendar/2026-10` |
 | Inbox | Mail, News | `#/inbox/mail`, `#/inbox/news` |
 | Life | Assets, Health (owner only, passkey step-up) | `#/life/assets`, `#/life/health` |

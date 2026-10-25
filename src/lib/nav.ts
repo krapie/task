@@ -1,7 +1,11 @@
 import type { IconName } from '../components/Icons'
 
 export type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'notes' | 'chats' | 'settings'
-export type RoutineTab = 'tasks' | 'goals' | 'retro'
+export type RoutineTab = 'overview' | 'tasks' | 'goals' | 'retro'
+
+// Desktop opens Today on the Overview; phones keep the checklist (Tasks) as the first screen.
+export const WIDE_QUERY = '(min-width: 900px)'
+export const defaultRoutineTab = (): RoutineTab => (window.matchMedia(WIDE_QUERY).matches ? 'overview' : 'tasks')
 export type YearMonth = { year: number; month: number }
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -34,7 +38,9 @@ export const GROUPS: Group[] = [
 // API scopes (first path segment) whose requests the top progress bar shows on each tab.
 export function scopesFor(view: View, tab: RoutineTab): string[] {
   switch (view) {
-    case 'routine': return tab === 'tasks' ? ['templates', 'daily', 'events', 'settings'] : ['goals']
+    case 'routine':
+      if (tab === 'overview') return ['templates', 'daily', 'events', 'todos', 'goals', 'mail', 'news', 'settings']
+      return tab === 'tasks' ? ['templates', 'daily', 'events', 'settings'] : ['goals']
     case 'calendar': return ['events', 'daily', 'todos']
     case 'mail': return ['mail']
     case 'news': return ['news']
@@ -55,10 +61,10 @@ export interface Route { view: View; tab: RoutineTab; month: YearMonth | null; m
 
 const VIEWS = Object.keys(VIEW_LABELS) as View[]
 
-// #/today[/goals] · #/calendar[/2026-10] · #/inbox/{mail,news} · #/life/{assets,health} · #/note/{notes,chats} · #/settings (legacy #/assistant[/<conversation id>] opens Chats)
+// #/today[/overview|goals|retro] · #/calendar[/2026-10] · #/inbox/{mail,news} · #/life/{assets,health} · #/note/{notes,chats} · #/settings (legacy #/assistant[/<conversation id>] opens Chats)
 export function hashOf(view: View, tab: RoutineTab, month: YearMonth): string {
   const g = groupOf(view)
-  if (view === 'routine') return tab === 'goals' ? '#/today/goals' : tab === 'retro' ? '#/today/retro' : '#/today'
+  if (view === 'routine') return tab === 'overview' ? '#/today/overview' : tab === 'goals' ? '#/today/goals' : tab === 'retro' ? '#/today/retro' : '#/today'
   if (view === 'calendar') return `#/calendar/${month.year}-${String(month.month).padStart(2, '0')}`
   if (g.views.length > 1) return `#/${g.id}/${view}`
   return `#/${g.id}`
@@ -66,7 +72,7 @@ export function hashOf(view: View, tab: RoutineTab, month: YearMonth): string {
 
 // Reads the hash, falling back to the legacy ?tab=<view>&mail=<id> links that push notifications carry.
 export function parseLocation(loc: Pick<Location, 'hash' | 'search'> = location): Route {
-  const route: Route = { view: 'routine', tab: 'tasks', month: null, mailId: null, chatId: null }
+  const route: Route = { view: 'routine', tab: defaultRoutineTab(), month: null, mailId: null, chatId: null }
   const q = new URLSearchParams(loc.search)
   const legacy = q.get('tab')
   if (VIEWS.includes(legacy as View)) route.view = legacy as View
@@ -79,7 +85,9 @@ export function parseLocation(loc: Pick<Location, 'hash' | 'search'> = location)
   if (g) {
     const sub = g.views.find(v => v === b)
     route.view = sub ?? g.views[0]
-    if (g.id === 'today') route.tab = b === 'goals' ? 'goals' : b === 'retro' ? 'retro' : 'tasks'
+    if (g.id === 'today' && b) route.tab = b === 'overview' ? 'overview' : b === 'goals' ? 'goals' : b === 'retro' ? 'retro' : 'tasks'
+    // A bare #/today is the Tasks checklist (the Overview has its own hash), so the default only applies to no hash at all.
+    else if (g.id === 'today') route.tab = 'tasks'
     const m = g.id === 'calendar' ? /^(\d{4})-(\d{2})$/.exec(b ?? '') : null
     if (m && +m[2] >= 1 && +m[2] <= 12) route.month = { year: +m[1], month: +m[2] }
     // #/note/chats/<conversation id>
