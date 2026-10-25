@@ -283,6 +283,44 @@ app.get('/api/health-data/summary', stepUpAuth, async (req, res) => {
   }
 })
 
+// ── Trader (summary from ops) ─────────────────────────────────────────
+// The Trader views are fetched from ops GET /internal/trader-summary with its own token
+// (TRADER_SUMMARY_TOKEN): the same numbers as the admin Trader tab, reduced to a summary with no run
+// or order ids. Passkey step-up only, like Health and Assets (docs/apps/trader.md, "Task app").
+const TRADER_SUMMARY_URL = (process.env.TRADER_SUMMARY_URL || '').replace(/\/$/, '')
+const TRADER_SUMMARY_TOKEN = process.env.TRADER_SUMMARY_TOKEN || ''
+let traderCache = null
+let traderCacheAt = 0
+let traderInflight = null
+
+// One fetch at a time: the Overview asks on every unlock and the Trader tab may ask together with it.
+function fetchTraderSummary() {
+  traderInflight ??= fetch(`${TRADER_SUMMARY_URL}/internal/trader-summary?env=auto`, {
+    headers: { Authorization: `Bearer ${TRADER_SUMMARY_TOKEN}` },
+    signal: AbortSignal.timeout(10_000),
+  })
+    .then(async r => {
+      if (!r.ok) throw new Error(`ops answered ${r.status}`)
+      traderCache = await r.json()
+      traderCacheAt = Date.now()
+      return traderCache
+    })
+    .finally(() => { traderInflight = null })
+  return traderInflight
+}
+
+app.get('/api/trader/summary', stepUpAuth, async (req, res) => {
+  if (!TRADER_SUMMARY_URL || !TRADER_SUMMARY_TOKEN) return res.status(503).json({ error: 'Trader data not configured' })
+  await audit('trader_view', req)
+  if (traderCache && Date.now() - traderCacheAt < 60_000) return res.json(traderCache)
+  try {
+    res.json(await fetchTraderSummary())
+  } catch (err) {
+    console.error('trader summary:', err.message)
+    res.status(502).json({ error: 'Trader data unavailable' })
+  }
+})
+
 // ── Assets (finance) proxy ──────────────────────────────────────────────
 // Everything below requires BOTH a normal session (auth) and a live
 // passkey-issued asset token (assetAuth) — the actual amounts live in the

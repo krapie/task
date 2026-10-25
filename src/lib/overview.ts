@@ -1,4 +1,4 @@
-import type { Addition, CalendarEvent, GoalPeriod, Slot, Template, TodoItem } from '../types'
+import type { Addition, CalendarEvent, Slot, Template, TodoItem } from '../types'
 import { addDays, diffDays, expandForDate, expandForView } from './recurrence'
 import { formatDate } from './slots'
 
@@ -110,22 +110,30 @@ export function upcomingEvents(events: CalendarEvent[], today: string, limit = 8
 
 export const undatedTodos = (todos: TodoItem[]) => todos.filter(t => !t.completed && !t.due_date).length
 
-export interface GoalsProgress {
-  label: string
-  categories: { id: string; name: string; done: number; total: number }[]
-  next: string[]
+// Open and finished items per kind, for the Today ring and its legend.
+export function todayCounts(items: TodayItem[]): Record<TodayKind, { done: number; total: number }> {
+  const out: Record<TodayKind, { done: number; total: number }> = {
+    event: { done: 0, total: 0 }, routine: { done: 0, total: 0 }, bonus: { done: 0, total: 0 }, todo: { done: 0, total: 0 },
+  }
+  for (const i of items) {
+    out[i.kind].total++
+    if (i.done) out[i.kind].done++
+  }
+  return out
 }
 
-// This half-year's goals: per category the done / counted items (crossed-out ones don't count), and the first open items.
-export function goalsProgress(periods: GoalPeriod[], now = new Date()): GoalsProgress | null {
-  const year = now.getFullYear()
-  const half = now.getMonth() < 6 ? 1 : 2
-  const period = periods.find(p => p.kind === 'half' && p.year === year && p.half === half)
-  if (!period) return null
-  const categories = period.categories.map(c => {
-    const counted = c.items.filter(i => !i.crossed_out)
-    return { id: c.id, name: c.name, done: counted.filter(i => i.completed).length, total: counted.length }
+// Events per day over the next `days` days from tomorrow (a multi-day event counts on every day it runs).
+export function eventDensity(events: CalendarEvent[], today: string, days = 14): { date: string; n: number }[] {
+  const start = addDays(today, 1)
+  const expanded = expandForView(events, start, addDays(today, days))
+  return Array.from({ length: days }, (_, i) => {
+    const date = addDays(start, i)
+    return { date, n: expanded.filter(e => e.start_date <= date && e.end_date >= date).length }
   })
-  const next = period.categories.flatMap(c => c.items.filter(i => !i.completed && !i.crossed_out).map(i => i.text)).slice(0, 3)
-  return { label: `H${half} ${year}`, categories, next }
+}
+
+// "Tomorrow", "in 3 days"
+export function relativeDay(date: string, today: string): string {
+  const d = diffDays(today, date)
+  return d === 1 ? 'Tomorrow' : `in ${d} days`
 }

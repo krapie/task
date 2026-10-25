@@ -1,6 +1,6 @@
 // MSW handlers for the staging build: task-api (/api/*) and auth's token endpoint, from db.ts.
 // Anything under /api without a handler returns 501 "not mocked" so a gap is visible in the UI.
-// Not mocked yet: assets (finance), health, notes (the passkey step-up tabs); the assistant only lists no conversations, enough to show its empty state.
+// Not mocked yet: the finance import details and notes (the passkey step-up tabs); the assistant only lists no conversations, enough to show its empty state.
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import type { DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
 import * as db from './db'
@@ -254,6 +254,11 @@ export const handlers: HttpHandler[] = [
   http.post('/api/mail/items/:id/read', async () => ok({ ok: true })),
   http.get('/api/mail/sync', async () => ok({ running: false, finished_at: new Date().toISOString(), synced: 0, error: null })),
   http.post('/api/mail/sync', async () => ok({ running: false, finished_at: new Date().toISOString(), synced: 0, error: null })),
+
+  // The private data behind the passkey step-up: the same mocked token opens all of it.
+  http.get('/api/assets/summary', async () => ok(db.assetSummary)),
+  http.get('/api/health-data/summary', async () => ok(empty() ? null : db.healthSummary)),
+  http.get('/api/trader/summary', async () => ok(empty() ? { ...db.traderSummary, etfs: [], portfolio: { ...db.traderSummary.portfolio, history: [] }, buys: { ...db.traderSummary.buys, n: 0, rows: [] } } : db.traderSummary)),
 
   http.get('/api/push/vapid-key', async () => ok({ key: '' })),
   http.get('/api/push/subscriptions', async () => ok({ subscriptions: [] })),

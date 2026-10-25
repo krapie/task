@@ -1,6 +1,6 @@
 import type { IconName } from '../components/Icons'
 
-export type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'notes' | 'chats' | 'settings'
+export type View = 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'trader' | 'notes' | 'chats' | 'settings'
 export type RoutineTab = 'overview' | 'tasks' | 'goals' | 'retro'
 
 // Desktop opens Today on the Overview; phones keep the checklist (Tasks) as the first screen.
@@ -9,28 +9,28 @@ export const defaultRoutineTab = (): RoutineTab => (window.matchMedia(WIDE_QUERY
 export type YearMonth = { year: number; month: number }
 
 export const VIEW_LABELS: Record<View, string> = {
-  routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', notes: 'Notes', chats: 'Chats', settings: 'Settings',
+  routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', trader: 'Trader', notes: 'Notes', chats: 'Chats', settings: 'Settings',
 }
 
 // Views backed only by server data; hidden from guests
-export const AUTH_ONLY_VIEWS: View[] = ['mail', 'assets', 'health', 'notes', 'chats']
+export const AUTH_ONLY_VIEWS: View[] = ['mail', 'assets', 'health', 'trader', 'notes', 'chats']
 // Personal-data views: only shown to this account. Hiding the tab is
 // cosmetic; the server enforces it (STEP_UP_USERS + passkey step-up).
-export const OWNER_ONLY_VIEWS: View[] = ['assets', 'health', 'notes', 'chats']
+export const OWNER_ONLY_VIEWS: View[] = ['assets', 'health', 'trader', 'notes', 'chats']
 
 export const VIEW_ICONS: Record<View, IconName> = {
-  routine: 'routine', calendar: 'calendar', mail: 'mail', news: 'news', assets: 'assets', health: 'health', notes: 'note', chats: 'assistant', settings: 'settings',
+  routine: 'routine', calendar: 'calendar', mail: 'mail', news: 'news', assets: 'assets', health: 'health', trader: 'chart', notes: 'note', chats: 'assistant', settings: 'settings',
 }
 
 export type GroupId = 'today' | 'calendar' | 'inbox' | 'life' | 'note' | 'settings'
 export interface Group { id: GroupId; label: string; icon: IconName; views: View[] }
 
-// Nine views fold into six nav groups; groups with several views get sub-tabs.
+// Ten views fold into six nav groups; groups with several views get sub-tabs.
 export const GROUPS: Group[] = [
   { id: 'today', label: 'Today', icon: 'routine', views: ['routine'] },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', views: ['calendar'] },
   { id: 'inbox', label: 'Inbox', icon: 'mail', views: ['mail', 'news'] },
-  { id: 'life', label: 'Life', icon: 'health', views: ['assets', 'health'] },
+  { id: 'life', label: 'Life', icon: 'health', views: ['assets', 'health', 'trader'] },
   { id: 'note', label: 'Note', icon: 'note', views: ['notes', 'chats'] },
   { id: 'settings', label: 'Settings', icon: 'settings', views: ['settings'] },
 ]
@@ -39,7 +39,7 @@ export const GROUPS: Group[] = [
 export function scopesFor(view: View, tab: RoutineTab): string[] {
   switch (view) {
     case 'routine':
-      if (tab === 'overview') return ['templates', 'daily', 'events', 'todos', 'goals', 'mail', 'news', 'settings']
+      if (tab === 'overview') return ['templates', 'daily', 'events', 'todos', 'mail', 'settings', 'health-data', 'assets', 'trader']
       return tab === 'tasks' ? ['templates', 'daily', 'events', 'settings'] : ['goals']
     case 'calendar': return ['events', 'daily', 'todos']
     case 'mail': return ['mail']
@@ -61,7 +61,7 @@ export interface Route { view: View; tab: RoutineTab; month: YearMonth | null; m
 
 const VIEWS = Object.keys(VIEW_LABELS) as View[]
 
-// #/today[/overview|goals|retro] · #/calendar[/2026-10] · #/inbox/{mail,news} · #/life/{assets,health} · #/note/{notes,chats} · #/settings (legacy #/assistant[/<conversation id>] opens Chats)
+// #/today[/overview|goals|retro] · #/calendar[/2026-10] · #/inbox/{mail,news} · #/life/{assets,health,trader} · #/note/{notes,chats} · #/settings (legacy #/assistant[/<conversation id>] opens Chats)
 export function hashOf(view: View, tab: RoutineTab, month: YearMonth): string {
   const g = groupOf(view)
   if (view === 'routine') return tab === 'overview' ? '#/today/overview' : tab === 'goals' ? '#/today/goals' : tab === 'retro' ? '#/today/retro' : '#/today'

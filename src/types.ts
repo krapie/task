@@ -273,3 +273,27 @@ export type AssistantEvent =
 // ── Notes (searched and read by the assistant) ──
 export interface NoteSummary { key: string; title: string; created_at: string; updated_at: string; chars: number; snippet: string }
 export interface Note { key: string; title: string; body: string; created_at: string; updated_at: string }
+
+// ── Trader (summary from ops, passkey step-up; docs/apps/trader.md "Task app") ──
+export interface TraderEtf {
+  code: string; name: string
+  // target, gain_pct and share are fractions (0.65 is 65 %)
+  target: number
+  qty: number; avg: number; price: number; value: number; gain: number; gain_pct: number; share: number
+  series: [string, number][]
+}
+export interface TraderBuy {
+  period: string; date: string; state: string; tier: string | null
+  // ret and bench are fractions
+  bought: number; value_now: number; ret: number; bench: number
+}
+export interface TraderSummary {
+  env: 'paper' | 'real'
+  generated_at: string
+  trader: { holdings_value: number; invested: number; gain: number; gain_pct: number; daytrade_net: number; cash: number; total_value: number; as_of: string | null; source: 'broker' | 'fills' }
+  portfolio: { value: number; cost: number; gain: number; gain_pct: number; as_of: string | null; history: [string, number, number][] }
+  etfs: TraderEtf[]
+  buys: { rows: TraderBuy[]; n: number; bought: number; value_now: number; ret: number; enough: boolean; min_buys: number }
+  checks: { id: string; status: 'ok' | 'info' | 'warn' | 'bad' }[]
+  verdict: { level: 'clear' | 'attention' | 'bad'; bad: number; warn: number }
+}

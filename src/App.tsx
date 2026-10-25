@@ -13,6 +13,7 @@ import { GoalView } from './components/GoalView'
 import { RetroView } from './components/RetroView'
 import AssetsView from './components/AssetsView'
 import HealthView from './components/HealthView'
+import TraderView from './components/TraderView'
 import AssistantView from './components/AssistantView'
 import NotesView from './components/NotesView'
 import { startNew as startNewChat } from './lib/assistantStore'
@@ -1171,6 +1172,7 @@ export default function App() {
             {routineTab === 'overview' ? (
               <OverviewView
                 isAuth={isAuth}
+                isOwner={isOwner}
                 chatButton={isOwner}
                 ready={boardReady}
                 templates={templates}
@@ -1192,9 +1194,8 @@ export default function App() {
                   setSelectedCalendarDate(date)
                   setView('calendar')
                 }}
-                onOpenGoals={() => setRoutineTab('goals')}
                 onOpenMail={() => setView('mail')}
-                onOpenNews={() => setView('news')}
+                onOpenLife={v => setView(v)}
                 onMailUnread={setMailUnread}
               />
             ) : routineTab === 'tasks' ? (
@@ -1286,6 +1287,8 @@ export default function App() {
           <AssetsView isAuth={isAuth} />
         ) : view === 'health' ? (
           <HealthView isAuth={isAuth} />
+        ) : view === 'trader' ? (
+          <TraderView isAuth={isAuth} />
         ) : view === 'notes' ? (
           <NotesView isAuth={isAuth} onAskAbout={askAboutNote} />
         ) : view === 'chats' ? (

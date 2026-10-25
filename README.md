@@ -16,7 +16,8 @@ node server/index.js
 ## Features
 
 - **Routine board** — one list per day: Daily tasks, then Bonus, Tasks and today's Events as small labeled groups that only appear when they have items; a single add bar under the list switches between Daily / Bonus / Task. The list is left-aligned and at most 600px wide (full width on phones). It is sized for desktop windows from about 1000 × 680 up to 1280 × 710: the list scrolls inside while the add bar stays visible. Goals and Retro have their own tabs in the Tasks | Goals | Retro toggle. 6 day slots (Mon–Fri + Weekend) with recurring daily tasks that auto-reset at a configurable hour; drag to reorder; hide a routine for just the active day (it reappears at the next reset, is excluded from progress and the daily reminder, and can be restored from the collapsible "Hidden today" list)
-- **Overview** — first tab of Today (`Overview | Tasks | Goals | Retro`; guests get Overview and Tasks), `#/today/overview`. Desktop (≥900px) opens on it, phones keep Tasks as the first screen. One screen in three columns, no page scroll, long lists scroll inside their panel: **Today** (what is left across routines, bonus, today's events and todos due or late, finished ones below; ticks write exactly like the Tasks board), **Upcoming events** (the next 8 calendar events from tomorrow on, within 60 days, recurring ones expanded; a click opens that day in Calendar), **Inbox** (unread count and the latest three, signed in), **Goals** (this half-year per category, signed in) and **News** (latest headlines, public). Today and Upcoming events are derived from the state the app already holds (`lib/overview.ts`); the Overview's own requests are `GET /api/goals`, the mail unread calls and `GET /api/news`, refreshed every 5 minutes. A stock panel is planned. Assets, Health and Chats are not shown (they need the passkey step-up). Narrow screens stack the panels and scroll
+- **Overview** — first tab of Today (`Overview | Tasks | Goals | Retro`; guests get Overview and Tasks), `#/today/overview`. Desktop (≥900px) opens on it, phones keep Tasks as the first screen. Two bands on one screen, no page scroll, long lists scroll inside their panel. **Upper:** **Today** (a ring of what is done, the day's schedule, routines, bonus and todos due or late as groups; ticks write exactly like the Tasks board), **Upcoming events** (a 14-day density strip and the next 8 events with date tiles, recurring ones expanded; a click opens that day in Calendar) and **Inbox** (unread count, the latest six; signed in). **Lower, owner only and locked behind the passkey step-up:** **Health** (steps, the three activity rings, last night's sleep stages, resting HR, HRV), **Assets** (net worth, income against spending this month, allocation, investments) and **Trader** (value, gain, a value chart, the ETF mix, the latest weekly buy); one *Show with passkey* opens all three, Hide masks them, Lock / backgrounding / the hour's end drop the fetched values, and the band requests nothing while locked. Today and Upcoming events are derived from the state the app already holds (`lib/overview.ts`); the Overview's own requests are the mail unread calls (5-minute refresh) and, once unlocked, `GET /api/health-data/summary`, `/api/assets/summary` and `/api/trader/summary`. Narrow screens stack the panels and scroll
+- **Trader** — owner-only tab under Life (`#/life/trader`), passkey step-up like Assets and Health: total value, gain, cash, day-trade net, the portfolio value chart (Banksalad value against cost), the ETFs with their share against target and a trend, and the weekly buys against the S&P 500 ETF. Read-only: `GET /api/trader/summary` (`stepUpAuth`, audit event `trader_view`, 60 s cache) fetches a summary from ops (`GET /internal/trader-summary`, its own token `TRADER_SUMMARY_TOKEN`; `docs/apps/trader.md`, "Task app")
 - **Bonus tasks** — one-off task additions per day slot, separate from the recurring routine
 - **Tasks** — global todo list with optional due dates shown alongside the routine board
 - **Multi-day add** — add a daily task to multiple day slots at once from the quick-add input
@@ -39,14 +40,14 @@ node server/index.js
 
 ## Navigation
 
-Eight views fold into six nav groups (left rail on desktop, bottom bar on phones); groups with several views show underline sub-tabs. The theme toggle sits at the bottom of the rail (on phones it is in Settings).
+Ten views fold into six nav groups (left rail on desktop, bottom bar on phones); groups with several views show underline sub-tabs. The theme toggle sits at the bottom of the rail (on phones it is in Settings).
 
 | Group | Views | Route |
 |-------|-------|-------|
 | Today | Routine (Overview / Tasks / Goals / Retro) | `#/today/overview`, `#/today` (Tasks), `#/today/goals`, `#/today/retro` |
 | Calendar | Calendar | `#/calendar`, `#/calendar/2026-10` |
 | Inbox | Mail, News | `#/inbox/mail`, `#/inbox/news` |
-| Life | Assets, Health (owner only, passkey step-up) | `#/life/assets`, `#/life/health` |
+| Life | Assets, Health, Trader (owner only, passkey step-up) | `#/life/assets`, `#/life/health`, `#/life/trader` |
 | Assistant | Assistant (owner only, passkey step-up) | `#/assistant`, `#/assistant/<conversation id>` |
 | Settings | Settings | `#/settings` |
 

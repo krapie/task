@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice } from '../types'
+import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice, TraderSummary } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -126,7 +126,7 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
 // check (no refresh past that). useStepUp also clears it on backgrounding
 // (visibilitychange). Every lock also clears the passkey check on auth, so the
 // next unlock needs a fresh passkey and gets a full hour.
-export type StepUpView = 'assets' | 'health' | 'assistant'
+export type StepUpView = 'assets' | 'health' | 'trader' | 'overview' | 'assistant'
 const STEP_UP_PENDING = 'task-step-up-pending'
 
 // Where the passkey prompt sends the browser back: this very page, hash route included, so the
@@ -409,6 +409,14 @@ export const api = {
       return pending
     },
     manageURL: `${AUTH_URL}/account`,
+  },
+  trader: {
+    // A body without the expected shape is an outage, not an empty account.
+    getSummary: async () => {
+      const t = await assetReq<TraderSummary>('GET', '/trader/summary')
+      if (!t?.trader || !t.portfolio || !Array.isArray(t.etfs) || !t.buys || !Array.isArray(t.buys.rows)) throw new Error('Trader data unavailable')
+      return t
+    },
   },
   assets: {
     hasToken: hasAssetToken,
