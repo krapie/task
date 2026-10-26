@@ -4065,7 +4065,15 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 }
 @media (max-width: 899px) {
   .ov-scroll { overflow: visible; flex: none; }
+  /* The stacked page is long: a phone lists five events and four mails; the panel title opens the whole tab. */
+  .ov-events .ov-list > li:nth-child(n + 6), .ov-inbox .ov-list > li:nth-child(n + 5) { display: none; }
   .ov-secure-grid > .ov-panel:last-child { border-bottom: none; }
+  /* The private band on a phone: the unlock row on one line, locked panels as short rows. */
+  .ov-secure-head { flex-wrap: wrap; row-gap: 4px; }
+  .ov-secure-head .assets-topbar { flex: 1 1 100%; justify-content: space-between; }
+  .ov-secure-head .assets-topbar button, .ov-secure-head .assets-status-chip { white-space: nowrap; }
+  .ov-locked { min-height: 0; flex-direction: row; align-items: center; gap: var(--kp-space-3); padding: var(--kp-space-1) 0; }
+  .ov-locked p { max-width: none; }
   .tr-row { grid-template-columns: minmax(0, 2fr) minmax(64px, 1fr) minmax(56px, 1fr); }
   .tr-row > :nth-child(4), .tr-row > :nth-child(5) { display: none; }
   .tr-row-buys { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(60px, 1fr)); }

@@ -499,7 +499,7 @@ export default function App() {
     setTemplates(storage.getTemplates())
     loadedDatesRef.current = new Set()
     setDailyData({})
-    if (AUTH_ONLY_VIEWS.includes(view)) setView('routine')
+    if (AUTH_ONLY_VIEWS.includes(view)) setView('overview')
     setRoutineTab('tasks')
   }
 

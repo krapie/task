@@ -3,9 +3,8 @@ import type { IconName } from '../components/Icons'
 export type View = 'overview' | 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'trader' | 'notes' | 'chats' | 'settings'
 export type RoutineTab = 'tasks' | 'goals' | 'retro'
 
-// Desktop opens on the Overview; phones keep the checklist (Today → Tasks) as the first screen.
-export const WIDE_QUERY = '(min-width: 900px)'
-export const defaultView = (): View => (window.matchMedia(WIDE_QUERY).matches ? 'overview' : 'routine')
+// The Overview is the main page on every screen size: it is where the app opens and where the π mark leads.
+export const defaultView = (): View => 'overview'
 export type YearMonth = { year: number; month: number }
 
 export const VIEW_LABELS: Record<View, string> = {
