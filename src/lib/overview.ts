@@ -78,34 +78,34 @@ export function todayItems(
   return [...items.filter(i => !i.done), ...items.filter(i => i.done)]
 }
 
-export interface UpcomingItem {
+export interface UpcomingEvent {
   id: string
-  kind: 'event' | 'task'
   date: string
   title: string
-  // Mono text under the title: an event's time (and "until MM-DD" for a multi-day one); a task says "task".
+  // Mono text on the right: the time, and "until MM-DD" for a multi-day event.
   meta?: string
 }
 
-// The next events and tasks (todos with a due date) from tomorrow on, nearest first; today's are in the Today list.
-// A multi-day event that already started shows on tomorrow, the first day it is still running. On one day the
-// events come before the tasks.
-export function upcomingItems(events: CalendarEvent[], todos: TodoItem[], today: string, limit = 8, horizonDays = 60): UpcomingItem[] {
+const dateLabel = (date: string) => {
+  const [y, m, d] = date.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+// The next events from tomorrow on (today's are in the Today list), nearest first. A multi-day event
+// that already started shows on tomorrow, the first day it is still running.
+export function upcomingEvents(events: CalendarEvent[], today: string, limit = 8, horizonDays = 60): (UpcomingEvent & { label: string })[] {
   const start = addDays(today, 1)
-  const end = addDays(today, horizonDays)
-  const evs = expandForView(events, start, end).map<UpcomingItem>(e => {
-    const date = e.start_date > start ? e.start_date : start
-    return {
-      id: `${e.id}:${date}`, kind: 'event', date, title: e.title,
-      meta: [e.time, e.end_date > e.start_date ? `until ${e.end_date.slice(5)}` : null].filter(Boolean).join(' · ') || undefined,
-    }
-  })
-  const tasks = todos
-    .filter(t => !t.completed && t.due_date && t.due_date >= start && t.due_date <= end)
-    .map<UpcomingItem>(t => ({ id: `task:${t.id}`, kind: 'task', date: t.due_date as string, title: t.text, meta: 'task' }))
-  return [...evs, ...tasks]
-    .sort((a, b) => a.date.localeCompare(b.date) || (a.kind === b.kind ? (a.meta ?? '').localeCompare(b.meta ?? '') : a.kind === 'event' ? -1 : 1))
+  return expandForView(events, start, addDays(today, horizonDays))
+    .map<UpcomingEvent>(e => {
+      const date = e.start_date > start ? e.start_date : start
+      return {
+        id: `${e.id}:${date}`, date, title: e.title,
+        meta: [e.time, e.end_date > e.start_date ? `until ${e.end_date.slice(5)}` : null].filter(Boolean).join(' · ') || undefined,
+      }
+    })
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.meta ?? '').localeCompare(b.meta ?? ''))
     .slice(0, limit)
+    .map(e => ({ ...e, label: dateLabel(e.date) }))
 }
 
 export const undatedTodos = (todos: TodoItem[]) => todos.filter(t => !t.completed && !t.due_date).length
@@ -122,16 +122,13 @@ export function todayCounts(items: TodayItem[]): Record<TodayKind, { done: numbe
   return out
 }
 
-// Events and tasks due per day over the next `days` days from tomorrow (a multi-day event counts on every day it runs).
-export function eventDensity(events: CalendarEvent[], todos: TodoItem[], today: string, days = 14): { date: string; n: number }[] {
+// Events per day over the next `days` days from tomorrow (a multi-day event counts on every day it runs).
+export function eventDensity(events: CalendarEvent[], today: string, days = 14): { date: string; n: number }[] {
   const start = addDays(today, 1)
   const expanded = expandForView(events, start, addDays(today, days))
   return Array.from({ length: days }, (_, i) => {
     const date = addDays(start, i)
-    return {
-      date,
-      n: expanded.filter(e => e.start_date <= date && e.end_date >= date).length + todos.filter(t => !t.completed && t.due_date === date).length,
-    }
+    return { date, n: expanded.filter(e => e.start_date <= date && e.end_date >= date).length }
   })
 }
 

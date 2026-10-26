@@ -42,8 +42,6 @@ export const events: CalendarEvent[] = [
 export const todos: TodoItem[] = [
   { id: 'td1', text: 'Book flights (mock)', completed: false, due_date: day(3), created_at: iso(60 * 20) },
   { id: 'td2', text: 'Reply to landlord (mock)', completed: false, due_date: day(-1), created_at: iso(60 * 48) },
-  { id: 'td6', text: 'Renew the gym membership (mock)', completed: false, due_date: day(2), created_at: iso(60 * 30) },
-  { id: 'td7', text: 'File the quarterly tax form (mock)', completed: false, due_date: day(9), created_at: iso(60 * 40) },
   { id: 'td4', text: 'Send the invoice (mock)', completed: false, due_date: day(), created_at: iso(60 * 5) },
   { id: 'td5', text: 'Sort the photo backlog (mock)', completed: false, due_date: null, created_at: iso(60 * 70) },
   { id: 'td3', text: 'Buy a keyboard (mock)', completed: true, due_date: null, created_at: iso(60 * 90) },

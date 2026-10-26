@@ -3952,7 +3952,6 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .ov-tile b { font-size: 16px; font-weight: 600; color: var(--kp-fg); letter-spacing: -0.02em; }
 .ov-tile-same { visibility: hidden; }
 .ov-event-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
-.ov-task-mark { display: inline-block; width: 10px; height: 10px; margin-right: 7px; border: 1.5px solid var(--kp-fg-3); border-radius: 2px; vertical-align: -1px; }
 .ov-event-title { font-size: var(--kp-text-sm); color: var(--kp-fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Inbox */
