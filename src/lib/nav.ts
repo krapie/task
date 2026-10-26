@@ -27,7 +27,7 @@ export interface Group { id: GroupId; label: string; icon: IconName; views: View
 // Eleven views fold into seven nav groups; groups with several views get sub-tabs.
 export const GROUPS: Group[] = [
   { id: 'overview', label: 'Overview', icon: 'overview', views: ['overview'] },
-  { id: 'today', label: 'Today', icon: 'routine', views: ['routine'] },
+  { id: 'today', label: 'Routine', icon: 'routine', views: ['routine'] },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', views: ['calendar'] },
   { id: 'inbox', label: 'Inbox', icon: 'mail', views: ['mail', 'news'] },
   { id: 'life', label: 'Life', icon: 'health', views: ['assets', 'health', 'trader'] },
@@ -48,6 +48,9 @@ export function scopesFor(view: View, tab: RoutineTab): string[] {
     default: return []
   }
 }
+
+// The groups with their own slot on the phone's bottom bar; the others go into its "More" sheet.
+export const BAR_GROUPS: GroupId[] = ['overview', 'today', 'calendar', 'inbox']
 
 export const groupOf = (v: View): Group => GROUPS.find(g => g.views.includes(v)) ?? GROUPS[0]
 

@@ -40,12 +40,12 @@ node server/index.js
 
 ## Navigation
 
-Eleven views fold into seven nav groups (left rail on desktop, bottom bar on phones); groups with several views show underline sub-tabs. The theme toggle sits at the bottom of the rail (on phones it is in Settings).
+Eleven views fold into seven nav groups (left rail on desktop, bottom bar on phones); groups with several views show underline sub-tabs. The phone's bottom bar has four slots for the everyday groups (Overview, Routine, Calendar, Inbox) and a fifth, **More**, that opens a sheet with the rest (Life, Note, Settings); inside one of them the slot shows that group's name. For an account that sees only one leftover group (a guest: Settings) it stays a plain tab. The group was called Today before; its routes (`#/today…`) and the `g t` key are unchanged. The theme toggle sits at the bottom of the rail (on phones it is in Settings).
 
 | Group | Views | Route |
 |-------|-------|-------|
 | Overview | Overview | `#/overview` |
-| Today | Routine (Tasks / Goals / Retro) | `#/today` (Tasks), `#/today/goals`, `#/today/retro` |
+| Routine | Tasks, Goals, Retro | `#/today` (Tasks), `#/today/goals`, `#/today/retro` |
 | Calendar | Calendar | `#/calendar`, `#/calendar/2026-10` |
 | Inbox | Mail, News | `#/inbox/mail`, `#/inbox/news` |
 | Life | Assets, Health, Trader (owner only, passkey step-up) | `#/life/assets`, `#/life/health`, `#/life/trader` |
@@ -54,7 +54,7 @@ Eleven views fold into seven nav groups (left rail on desktop, bottom bar on pho
 
 Every navigation is a history entry, so Back/Forward and reload keep your place. A group with one reachable view (News for guests) is named after it. The selected day tab is not in the URL: it follows the active slot. Legacy links with `?tab=<view>&mail=<id>` (push notifications) still work and are rewritten to the hash form (`src/lib/nav.ts`).
 
-Keyboard (desktop, not while typing): `g` then `o` / `t` / `c` / `i` / `l` / `a` / `s` jumps to Overview / Today / Calendar / Inbox / Life / Assistant / Settings, `n` focuses the new-task input, `/` focuses mail search, `[` `]` change month in Calendar, `?` lists them. In the mail list `j` / `k` move the cursor, `Enter` opens, `e` marks read, `s` stars.
+Keyboard (desktop, not while typing): `g` then `o` / `t` / `c` / `i` / `l` / `a` / `s` jumps to Overview / Routine / Calendar / Inbox / Life / Assistant / Settings, `n` focuses the new-task input, `/` focuses mail search, `[` `]` change month in Calendar, `?` lists them. In the mail list `j` / `k` move the cursor, `Enter` opens, `e` marks read, `s` stars.
 
 ## UI building blocks
 

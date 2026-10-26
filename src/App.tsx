@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react'
 import { DayTabs } from './components/DayTabs'
+import { MoreSheet } from './components/MoreSheet'
 import { OverviewView } from './components/OverviewView'
 import { RoutineBoard } from './components/RoutineBoard'
 import { SettingsPanel, downloadExport } from './components/SettingsPanel'
@@ -21,7 +22,7 @@ import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
 import { DialogHost, Loading, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
 import { fetchSettled, trackMutation } from './lib/mutationGate'
-import { AUTH_ONLY_VIEWS, GROUPS, defaultView, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
+import { AUTH_ONLY_VIEWS, BAR_GROUPS, GROUPS, defaultView, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
 import { expandForView, expandForDate, calendarViewRange } from './lib/recurrence'
 import { api, AUTH_LOST_EVENT, hasAuthHint } from './lib/api'
@@ -96,6 +97,17 @@ export default function App() {
   const initialRoute = useRef(parseLocation()).current
   const [routineTab, setRoutineTab] = useState<RoutineTab>(initialRoute.tab)
   const [view, setView] = useState<View>(initialRoute.view)
+  // Phone bottom bar: the groups that do not fit it live in the "More" sheet.
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreBtn = useRef<HTMLButtonElement>(null)
+  useEffect(() => { setMoreOpen(false) }, [view])
+  // The sheet is a phone thing: a window widened past the phone breakpoint drops it.
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 600px)')
+    const onChange = () => { if (!mq.matches) setMoreOpen(false) }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
   // Deep-link: ?mail=<id> opens a specific email (set by push notification URL)
   const [initialMailId] = useState<string | null>(initialRoute.mailId)
   // #/assistant/<id>: the conversation a finished report's push notification points at.
@@ -1042,7 +1054,7 @@ export default function App() {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return
-      if (document.querySelector('.modal-overlay')) return
+      if (document.querySelector('.modal-overlay, .more-sheet')) return
       const k = e.key
       if (gAt && Date.now() - gAt < 1000) {
         gAt = 0
@@ -1060,7 +1072,7 @@ export default function App() {
       } else if ((k === '[' || k === ']') && keys.current.view === 'calendar') {
         keys.current.shiftMonth(k === '[' ? -1 : 1)
       } else if (k === '?') {
-        notify('g then t/c/i/l/a/s: go to Today/Calendar/Inbox/Life/Assistant/Settings · n: new task · /: search mail · j/k/Enter/e/s: move, open, read, star in the inbox · [ ]: previous/next month', 'info', 10000)
+        notify('g then o/t/c/i/l/a/s: go to Overview/Routine/Calendar/Inbox/Life/Assistant/Settings · n: new task · /: search mail · j/k/Enter/e/s: move, open, read, star in the inbox · [ ]: previous/next month', 'info', 10000)
       }
     }
     document.addEventListener('keydown', onKey)
@@ -1354,16 +1366,41 @@ export default function App() {
       <ToastHost />
       <DialogHost />
 
-      {/* Bottom tab bar — mobile only */}
-      <nav className="app-bottom-nav" aria-label="Views">
-        {visibleGroups.map(g => (
-          <button key={g.id} className={`bottom-nav-btn${currentGroup?.id === g.id ? ' bottom-nav-active' : ''}`} onClick={() => goGroup(g)} aria-current={currentGroup?.id === g.id ? 'page' : undefined}>
+      {/* Bottom tab bar — mobile only: four everyday groups, the rest behind "More" (a lone leftover stays a tab) */}
+      {(() => {
+        const primary = visibleGroups.filter(g => BAR_GROUPS.includes(g.id))
+        const rest = visibleGroups.filter(g => !BAR_GROUPS.includes(g.id))
+        const tab = (g: (typeof visibleGroups)[number]) => (
+          <button key={g.id} className={`bottom-nav-btn${currentGroup?.id === g.id ? ' bottom-nav-active' : ''}`} onClick={() => { setMoreOpen(false); goGroup(g) }} aria-current={currentGroup?.id === g.id ? 'page' : undefined}>
             <Icon name={g.icon} />
             {groupBadge(g.id) > 0 && <span className="bottom-nav-badge">{groupBadge(g.id) > 99 ? '99+' : groupBadge(g.id)}</span>}
             <span>{g.label}</span>
           </button>
-        ))}
-      </nav>
+        )
+        const inRest = rest.find(g => g.id === currentGroup?.id)
+        return (
+          <>
+            {moreOpen && rest.length > 1 && (
+              <MoreSheet
+                items={rest.map(g => ({ id: g.id, label: g.label, icon: g.icon, sub: g.visible.length > 1 ? g.visible.map(v => VIEW_LABELS[v]).join(' · ') : '' }))}
+                activeId={currentGroup?.id}
+                onPick={id => { const g = rest.find(x => x.id === id); setMoreOpen(false); if (g) goGroup(g) }}
+                onClose={() => { setMoreOpen(false); moreBtn.current?.focus() }}
+              />
+            )}
+            <nav className="app-bottom-nav" aria-label="Views">
+              {primary.map(tab)}
+              {rest.length === 1 && tab(rest[0])}
+              {rest.length > 1 && (
+                <button ref={moreBtn} className={`bottom-nav-btn${inRest || moreOpen ? ' bottom-nav-active' : ''}`} onClick={() => setMoreOpen(o => !o)} aria-expanded={moreOpen} aria-haspopup="dialog">
+                  <Icon name={inRest ? inRest.icon : 'ellipsis'} />
+                  <span>{inRest ? inRest.label : 'More'}</span>
+                </button>
+              )}
+            </nav>
+          </>
+        )
+      })()}
     </div>
   )
 }
