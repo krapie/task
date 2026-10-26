@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api'
 import { timeAgo } from '../lib/format'
 import {
-  eventDensity, relativeDay, todayCounts, todayItems, todayString, undatedTodos, upcomingEvents,
+  eventDensity, relativeDay, todayCounts, todayItems, todayString, undatedTodos, upcomingItems,
   type DayData, type TodayItem, type TodayKind,
 } from '../lib/overview'
 import { useRemote } from '../lib/useRemote'
@@ -79,8 +79,9 @@ export function OverviewView(p: Props) {
   )
   const counts = useMemo(() => todayCounts(items), [items])
   const left = items.filter(i => !i.done).length
-  const upcoming = useMemo(() => upcomingEvents(p.events, today), [p.events, today])
-  const density = useMemo(() => eventDensity(p.events, today), [p.events, today])
+  const dueTodos = p.isAuth ? p.todos : []
+  const upcoming = useMemo(() => upcomingItems(p.events, dueTodos, today), [p.events, p.todos, p.isAuth, today]) // eslint-disable-line react-hooks/exhaustive-deps
+  const density = useMemo(() => eventDensity(p.events, dueTodos, today), [p.events, p.todos, p.isAuth, today]) // eslint-disable-line react-hooks/exhaustive-deps
   const densityMax = Math.max(...density.map(d => d.n), 1)
   const undated = p.isAuth ? undatedTodos(p.todos) : 0
 
@@ -155,15 +156,15 @@ export function OverviewView(p: Props) {
         <Panel title="Upcoming events" onOpen={() => p.onOpenCalendar(today)} className="ov-events">
           {!p.ready ? <Loading rows={4} /> : (
             <>
-              <div className="ov-density" aria-label="Events in the next 14 days">
+              <div className="ov-density" aria-label="Events and tasks in the next 14 days">
                 {density.map(d => (
-                  <span key={d.date} className="ov-density-col" title={`${d.date}: ${d.n} event${d.n === 1 ? '' : 's'}`}>
+                  <span key={d.date} className="ov-density-col" title={`${d.date}: ${d.n} item${d.n === 1 ? '' : 's'}`}>
                     <span className="ov-density-bar" style={{ height: `${d.n ? 20 + (d.n / densityMax) * 80 : 8}%`, opacity: d.n ? 1 : 0.35 }} />
                   </span>
                 ))}
                 <span className="ov-density-note">next 14 days</span>
               </div>
-              {upcoming.length === 0 ? <p className="ov-quiet">No events in the next 60 days.</p> : (
+              {upcoming.length === 0 ? <p className="ov-quiet">Nothing scheduled or due in the next 60 days.</p> : (
                 <ul className="ov-list ov-scroll">
                   {upcoming.map((e, i) => (
                     <li key={e.id}>
@@ -172,7 +173,7 @@ export function OverviewView(p: Props) {
                           <i>{WEEKDAY(e.date)}</i><b>{Number(e.date.slice(8))}</b>
                         </span>
                         <span className="ov-event-body">
-                          <span className="ov-event-title">{e.title}</span>
+                          <span className="ov-event-title">{e.kind === 'task' && <i className="ov-task-mark" aria-hidden="true" />}{e.title}</span>
                           <span className="ov-meta">{[e.meta, relativeDay(e.date, today)].filter(Boolean).join(' · ')}</span>
                         </span>
                       </button>
