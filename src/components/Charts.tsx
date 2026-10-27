@@ -2,12 +2,28 @@ import type { ReactNode } from 'react'
 
 // Monochrome chart primitives for the Overview and the Trader tab: ink on neutral, flat fills, no gradients.
 
-// A trend line that stretches to its box. `fill` shades the area under it at low opacity.
+// The y range of a chart: the data's own range, widened around its middle to at least `minSpan` of the
+// value (4% = ±2%), so a move of a fraction of a percent stays a small wiggle instead of filling the box.
+export function spanDomain(values: number[], minSpan = 0.04): [number, number] {
+  let lo = Math.min(...values)
+  let hi = Math.max(...values)
+  const mid = (lo + hi) / 2
+  const need = Math.abs(mid) * minSpan
+  if (hi - lo < need) {
+    lo = mid - need / 2
+    hi = mid + need / 2
+  }
+  return [lo, hi]
+}
+
+// A trend line that stretches to its box. `fill` shades the area under it at low opacity. Meant for money-like series:
+// without min/max the scale is at least ±2% wide (spanDomain), so a near-constant series draws as a gentle line.
 export function Spark({ points, fill, className = '', label, min: lo, max: hi }: { points: number[]; fill?: boolean; className?: string; label?: string; min?: number; max?: number }) {
   if (points.length < 2) return <div className={`spark spark-empty ${className}`} aria-hidden="true" />
-  // lo / hi share one scale between several lines.
-  const min = lo ?? Math.min(...points)
-  const max = hi ?? Math.max(...points)
+  // lo / hi share one scale between several lines; without them the scale is the data's, at least ±2% wide.
+  const [dlo, dhi] = spanDomain(points)
+  const min = lo ?? dlo
+  const max = hi ?? dhi
   const span = max - min || 1
   const W = 100
   const H = 30

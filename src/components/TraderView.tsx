@@ -4,7 +4,7 @@ import { useStepUp } from '../lib/useStepUp'
 import { pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
 import type { TraderSummary } from '../types'
 import StepUpBar from './StepUpBar'
-import { Spark } from './Charts'
+import { Spark, spanDomain } from './Charts'
 import { Empty } from './Ui'
 
 const MASK = '••••••'
@@ -50,8 +50,9 @@ export default function TraderView({ isAuth }: { isAuth: boolean }) {
 
   const t = data?.trader
   const hist = data?.portfolio.history ?? []
-  const lo = hist.length ? Math.min(...hist.map(h => Math.min(h[1], h[2]))) : 0
-  const hi = hist.length ? Math.max(...hist.map(h => Math.max(h[1], h[2]))) : 0
+  // One scale for value and cost, at least ±2% wide so a small move does not look like a crash.
+  const [lo, hi] = hist.length ? spanDomain(hist.flatMap(h => [h[1], h[2]])) : [0, 0]
+  const change = hist.length > 1 && hist[0][1] ? hist[hist.length - 1][1] / hist[0][1] - 1 : null
 
   return (
     <div className="assets-view tr-view">
@@ -96,10 +97,12 @@ export default function TraderView({ isAuth }: { isAuth: boolean }) {
             <div className="tr-chart">
               <Spark points={hist.map(h => h[2])} min={lo} max={hi} className="tr-chart-cost" />
               <Spark points={hist.map(h => h[1])} min={lo} max={hi} fill label="Portfolio value over time" />
+              <span className="tr-axis tr-axis-hi">{wonShort(hi)}</span>
+              <span className="tr-axis tr-axis-lo">{wonShort(lo)}</span>
             </div>
             <div className="tr-chart-axis">
               <span>{shortDate(hist[0][0])}</span>
-              <span>solid: value · dashed: cost ({data ? wonShort(data.portfolio.cost) : ''})</span>
+              <span>solid: value{change != null ? ` (${signedPct(change)} since ${shortDate(hist[0][0])})` : ''} · dashed: cost ({data ? wonShort(data.portfolio.cost) : ''}) · min ±2% scale</span>
               <span>{shortDate(hist[hist.length - 1][0])}</span>
             </div>
           </>

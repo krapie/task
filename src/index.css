@@ -4027,6 +4027,9 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .tr-chart .spark { position: absolute; inset: 0; }
 .tr-chart .tr-chart-cost { color: var(--kp-fg-3); opacity: 0.8; }
 .tr-chart .tr-chart-cost polyline { stroke-dasharray: 4 3; }
+.tr-axis { position: absolute; left: 0; padding: 0 3px 0 0; background: var(--kp-bg); font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); line-height: 1; color: var(--kp-fg-3); pointer-events: none; }
+.tr-axis-hi { top: 0; }
+.tr-axis-lo { bottom: 0; }
 .tr-chart-axis span { white-space: nowrap; }
 .tr-chart-axis span:nth-child(2) { white-space: normal; text-align: center; }
 .tr-chart-axis { display: flex; justify-content: space-between; gap: var(--kp-space-3); font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); color: var(--kp-fg-3); }

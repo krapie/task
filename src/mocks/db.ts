@@ -122,16 +122,17 @@ export const healthSummary: HealthSummary = {
   ],
 }
 
-const etf = (code: string, name: string, target: number, qty: number, avg: number, price: number, from: number): TraderSummary['etfs'][number] => {
+const etf = (code: string, name: string, target: number, qty: number, avg: number, price: number, from: number, amp = 0.02): TraderSummary['etfs'][number] => {
   const value = qty * price
   return {
     code, name, target, qty, avg, price, value, gain: value - qty * avg, gain_pct: (price - avg) / avg, share: 0,
-    series: wave(40, from, price).map((v, i) => [day(-40 + i), v] as [string, number]),
+    series: wave(40, from, price, amp).map((v, i) => [day(-40 + i), v] as [string, number]),
   }
 }
 const etfs = [
   etf('379800', 'KODEX 미국S&P500', 0.65, 16, 23035, 23180, 21800),
-  etf('379810', 'KODEX 미국나스닥100', 0.2, 7, 25880, 26095, 24400),
+  // 26250 -> 26095 is a -0.6% drift: the chart must show a small slope, not a crash (spanDomain, ±2% minimum)
+  etf('379810', 'KODEX 미국나스닥100', 0.2, 7, 25880, 26095, 26250, 0.001),
   etf('390390', 'KODEX 미국반도체MV', 0.08, 12, 12100, 12350, 11300),
   etf('441640', 'KODEX 미국AI전력핵심인프라', 0.07, 9, 12040, 12130, 11500),
 ]
