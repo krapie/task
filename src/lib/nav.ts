@@ -8,7 +8,7 @@ export const defaultView = (): View => 'overview'
 export type YearMonth = { year: number; month: number }
 
 export const VIEW_LABELS: Record<View, string> = {
-  overview: 'Overview', routine: 'Routine', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', trader: 'Trader', notes: 'Notes', chats: 'Chats', settings: 'Settings',
+  overview: 'Overview', routine: 'Tasks', calendar: 'Calendar', mail: 'Mail', news: 'News', assets: 'Assets', health: 'Health', trader: 'Trader', notes: 'Notes', chats: 'Chats', settings: 'Settings',
 }
 
 // Views backed only by server data; hidden from guests
@@ -27,7 +27,7 @@ export interface Group { id: GroupId; label: string; icon: IconName; views: View
 // Eleven views fold into seven nav groups; groups with several views get sub-tabs.
 export const GROUPS: Group[] = [
   { id: 'overview', label: 'Overview', icon: 'overview', views: ['overview'] },
-  { id: 'today', label: 'Routine', icon: 'routine', views: ['routine'] },
+  { id: 'today', label: 'Tasks', icon: 'routine', views: ['routine'] },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', views: ['calendar'] },
   { id: 'inbox', label: 'Inbox', icon: 'mail', views: ['mail', 'news'] },
   { id: 'life', label: 'Life', icon: 'health', views: ['assets', 'health', 'trader'] },

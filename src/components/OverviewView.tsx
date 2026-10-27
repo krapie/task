@@ -57,6 +57,12 @@ const GROUPS: { kind: TodayKind; label: string }[] = [
   { kind: 'todo', label: 'Todos' },
 ]
 
+const EMPTY: Record<TodayKind, string> = {
+  event: '', routine: '',
+  bonus: 'No bonus tasks today.',
+  todo: 'No todos.',
+}
+
 const WEEKDAY = (date: string) => {
   const [y, m, d] = date.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short' })
@@ -78,7 +84,8 @@ export function OverviewView(p: Props) {
     [p.activeSlot, p.activeSlotDate, p.templates, p.dailyData, p.events, p.todos, p.isAuth, today, ticked],
   )
   const counts = useMemo(() => todayCounts(items), [items])
-  const left = items.filter(i => !i.done).length
+  const today_ = items.filter(i => !i.later)
+  const left = today_.filter(i => !i.done).length
   const upcoming = useMemo(() => upcomingEvents(p.events, today), [p.events, today])
   const density = useMemo(() => eventDensity(p.events, today), [p.events, today])
   const densityMax = Math.max(...density.map(d => d.n), 1)
@@ -111,36 +118,38 @@ export function OverviewView(p: Props) {
     </li>
   )
 
-  const doneAll = items.length > 0 && left === 0
+  const doneAll = today_.length > 0 && left === 0
 
   return (
     <div className={`ov${p.chatButton ? ' ov-chat-clear' : ''}${p.isOwner ? ' ov-has-secure' : ''}`}>
       <div className={`ov-band ov-top${p.isAuth ? '' : ' ov-top-guest'}`}>
-        <Panel title="Today" count={p.ready ? (left ? `${left} left` : items.length ? 'all done' : '') : ''} onOpen={p.onOpenTasks} className="ov-today">
-          {!p.ready ? <Loading rows={6} /> : items.length === 0 ? (
+        <Panel title="Today" count={p.ready ? (left ? `${left} left` : today_.length ? 'all done' : '') : ''} onOpen={p.onOpenTasks} className="ov-today">
+          {!p.ready ? <Loading rows={6} /> : today_.length === 0 && !p.isAuth ? (
             <Empty compact icon="routine" title="Nothing planned today" hint="Routines, bonus tasks, events and todos due today show up here." />
           ) : (
             <>
-              <div className="ov-glance">
-                <Ring value={items.length - left} max={items.length} size={60} stroke={5} label="Done today">
-                  <b className="ov-ring-n">{items.length - left}<span>/{items.length}</span></b>
+              {today_.length > 0 && <div className="ov-glance">
+                <Ring value={today_.length - left} max={Math.max(today_.length, 1)} size={60} stroke={5} label="Done today">
+                  <b className="ov-ring-n">{today_.length - left}<span>/{today_.length}</span></b>
                 </Ring>
                 <ul className="ov-legend">
                   {GROUPS.filter(g => counts[g.kind].total > 0).map(g => (
                     <li key={g.kind}><span>{g.label}</span><b>{counts[g.kind].done}/{counts[g.kind].total}</b></li>
                   ))}
                 </ul>
-              </div>
+              </div>}
               <div className="ov-scroll">
                 {doneAll && <p className="ov-quiet">Everything for today is done.</p>}
                 {GROUPS.map(g => {
                   const rows = items.filter(i => i.kind === g.kind)
-                  return rows.length ? (
+                  // Bonus and Todos always show below Routines, with a quiet line when empty.
+                  if (!rows.length && !(p.isAuth && (g.kind === 'bonus' || g.kind === 'todo'))) return null
+                  return (
                     <div key={g.kind} className="ov-group">
                       <div className="ov-sub">{g.label}</div>
-                      <ul className="ov-list">{rows.map(row)}</ul>
+                      {rows.length ? <ul className="ov-list">{rows.map(row)}</ul> : <p className="ov-quiet">{EMPTY[g.kind]}</p>}
                     </div>
-                  ) : null
+                  )
                 })}
               </div>
             </>

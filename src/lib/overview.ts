@@ -21,6 +21,8 @@ export interface TodayItem {
   // Mono text on the right: an event's time, or how late a todo is.
   meta?: string
   overdue?: boolean
+  // A suggestion below today's todos (due later or undated): listed, but not part of today's ring and counts.
+  later?: boolean
 }
 
 // "Today" follows the day rotation like the board does: before the rotate hour it is still yesterday.
@@ -53,7 +55,8 @@ export function slotDay(
   return { routines, additions: d.additions, events: dayEvents, completions: d.completions, eventCompletions: d.eventCompletions, done, total }
 }
 
-// The Today list: open items first (timed events, routines, bonus, todos due), finished ones after.
+// The Today list: open items first (timed events, routines, bonus, todos due), finished ones after, then a few
+// later or undated todos as suggestions.
 export function todayItems(
   slot: Slot,
   slotDate: string,
@@ -64,6 +67,7 @@ export function todayItems(
   today: string,
   // Overdue todos ticked on the Overview stay listed (as done) until it is left, so a mis-tap can be undone.
   keep: ReadonlySet<string> = new Set(),
+  laterLimit = 5,
 ): TodayItem[] {
   const s = slotDay(slot, slotDate, templates, day, events)
   const items: TodayItem[] = [
@@ -75,7 +79,12 @@ export function todayItems(
       .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
       .map<TodayItem>(t => ({ kind: 'todo', id: t.id, text: t.text, done: t.completed, ...dueMeta(t.due_date as string, today) })),
   ]
-  return [...items.filter(i => !i.done), ...items.filter(i => i.done)]
+  const later = todos
+    .filter(t => (!t.completed || keep.has(t.id)) && !(t.due_date && t.due_date <= today))
+    .sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
+    .slice(0, laterLimit)
+    .map<TodayItem>(t => ({ kind: 'todo', id: t.id, text: t.text, done: t.completed, meta: t.due_date ? t.due_date.slice(5) : 'no date', later: true }))
+  return [...items.filter(i => !i.done), ...items.filter(i => i.done), ...later]
 }
 
 export interface UpcomingEvent {
@@ -93,7 +102,7 @@ const dateLabel = (date: string) => {
 
 // The next events from tomorrow on (today's are in the Today list), nearest first. A multi-day event
 // that already started shows on tomorrow, the first day it is still running.
-export function upcomingEvents(events: CalendarEvent[], today: string, limit = 8, horizonDays = 60): (UpcomingEvent & { label: string })[] {
+export function upcomingEvents(events: CalendarEvent[], today: string, limit = 5, horizonDays = 60): (UpcomingEvent & { label: string })[] {
   const start = addDays(today, 1)
   return expandForView(events, start, addDays(today, horizonDays))
     .map<UpcomingEvent>(e => {
@@ -116,6 +125,7 @@ export function todayCounts(items: TodayItem[]): Record<TodayKind, { done: numbe
     event: { done: 0, total: 0 }, routine: { done: 0, total: 0 }, bonus: { done: 0, total: 0 }, todo: { done: 0, total: 0 },
   }
   for (const i of items) {
+    if (i.later) continue
     out[i.kind].total++
     if (i.done) out[i.kind].done++
   }

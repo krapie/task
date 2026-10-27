@@ -1072,7 +1072,7 @@ export default function App() {
       } else if ((k === '[' || k === ']') && keys.current.view === 'calendar') {
         keys.current.shiftMonth(k === '[' ? -1 : 1)
       } else if (k === '?') {
-        notify('g then o/t/c/i/l/a/s: go to Overview/Routine/Calendar/Inbox/Life/Assistant/Settings · n: new task · /: search mail · j/k/Enter/e/s: move, open, read, star in the inbox · [ ]: previous/next month', 'info', 10000)
+        notify('g then o/t/c/i/l/a/s: go to Overview/Tasks/Calendar/Inbox/Life/Assistant/Settings · n: new task · /: search mail · j/k/Enter/e/s: move, open, read, star in the inbox · [ ]: previous/next month', 'info', 10000)
       }
     }
     document.addEventListener('keydown', onKey)

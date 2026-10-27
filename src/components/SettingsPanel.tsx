@@ -225,7 +225,7 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
 
       <div className="settings-page-body">
 
-        {/* Left column: Account + Routine */}
+        {/* Left column: Account + Tasks */}
         <div className="sp-col">
 
           {/* Account — global, not tab-specific */}
@@ -253,9 +253,9 @@ export function SettingsPanel({ settings, username, theme, onToggleTheme, onSave
             </div>
           </div>
 
-          {/* Routine — all settings for the Routine tab */}
+          {/* Tasks — all settings for the Tasks tab */}
           <div className="sp-section">
-            <div className="section-label">Routine</div>
+            <div className="section-label">Tasks</div>
             <div className="sp-rows">
               <div className="sp-row">
                 <div className="sp-row-left">
