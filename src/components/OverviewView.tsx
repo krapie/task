@@ -57,12 +57,6 @@ const GROUPS: { kind: TodayKind; label: string }[] = [
   { kind: 'todo', label: 'Todos' },
 ]
 
-const EMPTY: Record<TodayKind, string> = {
-  event: '', routine: '',
-  bonus: 'No bonus tasks today.',
-  todo: 'No todos.',
-}
-
 const WEEKDAY = (date: string) => {
   const [y, m, d] = date.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short' })
@@ -124,7 +118,7 @@ export function OverviewView(p: Props) {
     <div className={`ov${p.chatButton ? ' ov-chat-clear' : ''}${p.isOwner ? ' ov-has-secure' : ''}`}>
       <div className={`ov-band ov-top${p.isAuth ? '' : ' ov-top-guest'}`}>
         <Panel title="Today" count={p.ready ? (left ? `${left} left` : today_.length ? 'all done' : '') : ''} onOpen={p.onOpenTasks} className="ov-today">
-          {!p.ready ? <Loading rows={6} /> : today_.length === 0 && !p.isAuth ? (
+          {!p.ready ? <Loading rows={6} /> : items.length === 0 ? (
             <Empty compact icon="routine" title="Nothing planned today" hint="Routines, bonus tasks, events and todos due today show up here." />
           ) : (
             <>
@@ -142,14 +136,12 @@ export function OverviewView(p: Props) {
                 {doneAll && <p className="ov-quiet">Everything for today is done.</p>}
                 {GROUPS.map(g => {
                   const rows = items.filter(i => i.kind === g.kind)
-                  // Bonus and Todos always show below Routines, with a quiet line when empty.
-                  if (!rows.length && !(p.isAuth && (g.kind === 'bonus' || g.kind === 'todo'))) return null
-                  return (
+                  return rows.length ? (
                     <div key={g.kind} className="ov-group">
                       <div className="ov-sub">{g.label}</div>
-                      {rows.length ? <ul className="ov-list">{rows.map(row)}</ul> : <p className="ov-quiet">{EMPTY[g.kind]}</p>}
+                      <ul className="ov-list">{rows.map(row)}</ul>
                     </div>
-                  )
+                  ) : null
                 })}
               </div>
             </>
