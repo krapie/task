@@ -290,7 +290,7 @@ export interface TraderBuy {
 export interface TraderSummary {
   env: 'paper' | 'real'
   generated_at: string
-  trader: { holdings_value: number; invested: number; gain: number; gain_pct: number; daytrade_net: number; cash: number; total_value: number; as_of: string | null; source: 'broker' | 'fills' }
+  trader: { holdings_value: number; invested: number; gain: number; gain_pct: number; daytrade_net: number; cash: number; total_value: number; as_of: string | null; source: 'broker' | 'fills'; history?: [string, number][] }
   portfolio: { value: number; cost: number; gain: number; gain_pct: number; as_of: string | null; history: [string, number, number][] }
   etfs: TraderEtf[]
   buys: { rows: TraderBuy[]; n: number; bought: number; value_now: number; ret: number; enough: boolean; min_buys: number }

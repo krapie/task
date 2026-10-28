@@ -3988,13 +3988,14 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .ov-big { display: block; font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; color: var(--kp-fg); }
 .ov-sub-inline { display: block; margin-top: 3px; font-size: var(--kp-text-xs); color: var(--kp-fg-3); }
 .ov-block { padding-bottom: var(--kp-space-3); flex-shrink: 0; }
+.ov-health .ov-block { margin-top: auto; } /* spare height splits into two even gaps with the facts' own auto margin */
 .ov-rings { display: flex; gap: var(--kp-space-3); }
 .ov-ring-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: var(--kp-text-2xs); color: var(--kp-fg-3); }
 .ov-ring-pct { font-family: var(--kp-font-mono); font-size: 11px; font-weight: 500; color: var(--kp-fg); }
 .ov-facts { list-style: none; margin: auto 0 0; padding: var(--kp-space-3) 0 0; border-top: 1px solid var(--kp-border); display: flex; flex-wrap: wrap; gap: 4px var(--kp-space-5); flex-shrink: 0; }
 .ov-facts li { display: flex; flex-direction: column; gap: 1px; font-size: var(--kp-text-2xs); color: var(--kp-fg-3); }
 .ov-facts b { font-family: var(--kp-font-mono); font-size: var(--kp-text-xs); font-weight: 500; color: var(--kp-fg); }
-.ov-spark { flex: 1 1 56px; min-height: 48px; margin-bottom: var(--kp-space-3); color: var(--kp-fg); }
+.ov-spark { flex: 1 1 56px; min-height: 48px; max-height: 120px; margin-bottom: var(--kp-space-3); color: var(--kp-fg); }
 .ov-spark .spark { width: 100%; height: 100%; }
 
 /* Chart primitives (Charts.tsx) */
@@ -4059,12 +4060,21 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .ov-top-guest { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ov-top > .ov-panel { border-bottom: none; border-left: 1px solid var(--kp-border); }
   .ov-top > .ov-panel:first-child { border-left: none; }
-  .ov-has-secure .ov-top { flex: 0.95 1 0; min-height: 440px; }
-  .ov-secure { flex: 1.05 1 0; min-height: 0; }
+  /* The private band is as tall as its content; the day band takes what is left (a fixed ratio left panels half
+     empty in a tall window) and gives way first in a short one, down to a floor that keeps Today readable. */
+  .ov-has-secure .ov-top { flex: 1 1 auto; min-height: 440px; }
+  .ov-secure { flex: 0 0 auto; }
   .ov-secure-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ov-secure-grid > .ov-panel { border-bottom: none; border-left: 1px solid var(--kp-border); }
   .ov-secure-grid > .ov-panel:first-child { border-left: none; }
   .ov-chat-clear .ov-secure-grid > .ov-panel:last-child { padding-bottom: 60px; }
+}
+/* A tall window (1227px high and up): airier rows, so the lists fill their panels instead of ending halfway. */
+@media (min-width: 900px) and (min-height: 1000px) {
+  .ov-row { padding: 14px 0; }
+  .ov-event, .ov-mailrow { padding: 13px 0; }
+  .ov-density { height: 56px; }
+  .ov-group + .ov-group { margin-top: var(--kp-space-4); }
 }
 @media (max-width: 899px) {
   .ov-scroll { overflow: visible; flex: none; }

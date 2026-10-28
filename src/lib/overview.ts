@@ -102,7 +102,7 @@ const dateLabel = (date: string) => {
 
 // The next events from tomorrow on (today's are in the Today list), nearest first. A multi-day event
 // that already started shows on tomorrow, the first day it is still running.
-export function upcomingEvents(events: CalendarEvent[], today: string, limit = 5, horizonDays = 60): (UpcomingEvent & { label: string })[] {
+export function upcomingEvents(events: CalendarEvent[], today: string, limit = 10, horizonDays = 60): (UpcomingEvent & { label: string })[] {
   const start = addDays(today, 1)
   return expandForView(events, start, addDays(today, horizonDays))
     .map<UpcomingEvent>(e => {

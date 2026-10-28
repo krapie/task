@@ -86,7 +86,7 @@ export function OverviewView(p: Props) {
   const undated = p.isAuth ? undatedTodos(p.todos) : 0
 
   const mail = useRemote<{ counts: MailUnreadCounts; latest: MailThread[] }>(p.isAuth, async () => {
-    const [c, latest] = await Promise.all([api.mail.unreadCounts(), api.mail.getThreads({ unread: true, category: 'general', limit: 6 })])
+    const [c, latest] = await Promise.all([api.mail.unreadCounts(), api.mail.getThreads({ unread: true, category: 'general', limit: 10 })])
     return { counts: c, latest }
   })
   const generalUnread = mail.data?.counts.general

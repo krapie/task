@@ -90,6 +90,9 @@ export const mailItems: MailItem[] = [
   { id: 'mi5', account_id: 'ma1', message_id: '<5@example.test>', thread_id: 'th5', subject: 'Standup notes from this morning (mock)', from_address: 'lee@example.test', from_name: 'Minji Lee', received_at: iso(200), read: false, flagged: false, snippet: 'Notes attached.', body: 'Notes attached.' },
   { id: 'mi6', account_id: 'ma1', message_id: '<6@example.test>', thread_id: 'th6', subject: 'Your package is out for delivery (mock)', from_address: 'ship@example.test', from_name: 'Parcel Service', received_at: iso(60 * 5), read: false, flagged: false, snippet: 'Arriving today.', body: 'Arriving today.' },
   { id: 'mi7', account_id: 'ma1', message_id: '<7@example.test>', thread_id: 'th7', subject: 'Re: Dinner on Friday? (mock)', from_address: 'friend2@example.test', from_name: 'Jun Park', received_at: iso(60 * 9), read: false, flagged: false, snippet: 'Works for me.', body: 'Works for me.' },
+  { id: 'mi8', account_id: 'ma1', message_id: '<8@example.test>', thread_id: 'th8', subject: 'Your statement is ready (mock)', from_address: 'bank@example.test', from_name: 'Mock Bank', received_at: iso(60 * 11), read: false, flagged: false, snippet: 'View it online.', body: 'View it online.' },
+  { id: 'mi9', account_id: 'ma1', message_id: '<9@example.test>', thread_id: 'th9', subject: 'Meeting moved to 3pm (mock)', from_address: 'lee2@example.test', from_name: 'Sora Kim', received_at: iso(60 * 14), read: false, flagged: false, snippet: 'See you then.', body: 'See you then.' },
+  { id: 'mi10', account_id: 'ma1', message_id: '<10@example.test>', thread_id: 'th10', subject: 'Receipt from the bookshop (mock)', from_address: 'books@example.test', from_name: 'Bookshop', received_at: iso(60 * 16), read: false, flagged: false, snippet: 'Thank you.', body: 'Thank you.' },
   { id: 'mi2', account_id: 'ma1', message_id: '<2@example.test>', thread_id: 'th2', subject: 'Weekend plans (mock)', from_address: 'friend@example.test', from_name: 'A Friend', received_at: iso(60 * 20), read: true, flagged: true, snippet: 'Are we still on for Saturday?', body: 'Are we still on for Saturday?' },
   { id: 'mi3', account_id: 'ma1', message_id: '<3@example.test>', thread_id: 'th3', subject: '(광고) 20% off everything this weekend (mock)', from_address: 'sale@shop.example.test', from_name: 'Mock Shop', received_at: iso(30), read: false, flagged: false, category: 'others', snippet: 'Limited time offer, unsubscribe any time.', body: 'Limited time offer, unsubscribe any time.' },
   { id: 'mi4', account_id: 'ma1', message_id: '<4@example.test>', thread_id: 'th4', subject: 'Newsletter: this week in mock (mock)', from_address: 'news@letters.example.test', from_name: 'Mock Letters', received_at: iso(60 * 5), read: false, flagged: false, category: 'others', snippet: 'Five links worth your time.', body: 'Five links worth your time.' },
@@ -141,7 +144,8 @@ etfs.forEach((e) => { e.share = e.value / etfTotal })
 
 export const traderSummary: TraderSummary = {
   env: 'paper', generated_at: iso(1),
-  trader: { holdings_value: etfTotal, invested: etfs.reduce((t, e) => t + e.qty * e.avg, 0), gain: etfs.reduce((t, e) => t + e.gain, 0), gain_pct: 0.0101, daytrade_net: -12_400, cash: 9_450_280, total_value: 9_450_280 + etfTotal, as_of: iso(60 * 5), source: 'broker' },
+  trader: { holdings_value: etfTotal, invested: etfs.reduce((t, e) => t + e.qty * e.avg, 0), gain: etfs.reduce((t, e) => t + e.gain, 0), gain_pct: 0.0101, daytrade_net: -12_400, cash: 9_450_280, total_value: 9_450_280 + etfTotal, as_of: iso(60 * 5), source: 'broker',
+    history: wave(8, 9_990_000, 10_017_000, 0.0015).map((v, i) => [day(-7 + i), Math.round(v)] as [string, number]) },
   portfolio: {
     value: 78_000_000, cost: 70_000_000, gain: 8_000_000, gain_pct: 0.114, as_of: day(-1),
     history: wave(60, 60_000_000, 78_000_000, 0.015).map((v, i) => [day(-60 + i), v, Math.round(52_000_000 + (18_000_000 * i) / 59)] as [string, number, number]),

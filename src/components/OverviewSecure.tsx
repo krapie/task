@@ -186,7 +186,7 @@ function TraderPanel({ unlocked, masked, s, onOpen }: PanelProps<TraderSummary>)
       </Panel>
     )
   }
-  const series = t.portfolio.history.map(h => h[1])
+  const series = (t.trader.history ?? []).map(h => h[1])
   const etfs = [...t.etfs].sort((a, b) => b.share - a.share)
   const parts = etfs.map(e => ({ label: e.name.replace(/^KODEX\s*/, ''), value: e.share }))
   const last = t.buys.rows[0]
@@ -198,7 +198,7 @@ function TraderPanel({ unlocked, masked, s, onOpen }: PanelProps<TraderSummary>)
           <span className="ov-sub-inline">{signedWon(t.trader.gain)} ({signedPct(t.trader.gain_pct)}) on the ETFs</span>
         </div>
       </div>
-      {series.length > 1 && <div className="ov-spark"><Spark points={series} fill label="Portfolio value" /></div>}
+      {series.length > 1 && <div className="ov-spark"><Spark points={series} fill label="Account value" /></div>}
       {parts.length > 0 && (
         <div className="ov-block">
           <div className="ov-sub">ETF mix</div>
