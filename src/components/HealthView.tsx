@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import StepUpBar from './StepUpBar'
+import { NightBars } from './Charts'
 import { Empty, Meter } from './Ui'
+import { clockKst } from '../lib/format'
 import type { HealthSummary } from '../types'
 
 const MASK = '••••'
@@ -99,6 +101,9 @@ export default function HealthView({ isAuth }: HealthViewProps) {
   const show = (text: string) => (hide ? MASK : text)
   const day = summary?.day
   const week = summary?.week
+  const nights = summary?.sleepNights ?? []
+  const bed = clockKst(summary?.lastNight?.bedtime)
+  const wake = clockKst(summary?.lastNight?.wakeTime)
 
   if (!unlocked) {
     return (
@@ -123,16 +128,27 @@ export default function HealthView({ isAuth }: HealthViewProps) {
 
       {error && <p className="assets-error">{error}</p>}
 
+      {!hide && summary?.lastNight && (
+        <div className="assets-section">
+          <div className="section-label">Last night · {hoursText(summary.lastNight.asleepH)}</div>
+          {bed && wake && <p className="sleep-times">{bed} → {wake}</p>}
+          <SleepStages night={summary.lastNight} />
+        </div>
+      )}
+
+      {!hide && nights.length > 0 && (
+        <div className="assets-section">
+          <div className="section-label">Last 14 nights{week?.sleepAvgH != null ? ` · 7-day avg ${hoursText(week.sleepAvgH)}` : ''}</div>
+          <NightBars nights={nights} avg={week?.sleepAvgH} axis label="Hours asleep per night" />
+        </div>
+      )}
+
       <div className="assets-section">
         <div className="section-label">7-day average</div>
         <div className="assets-stat-grid">
           <div className="assets-stat assets-stat-primary">
             <span className="assets-stat-label">Sleep</span>
             <span className="assets-stat-value">{show(hoursText(week?.sleepAvgH))}</span>
-          </div>
-          <div className="assets-stat">
-            <span className="assets-stat-label">Steps</span>
-            <span className="assets-stat-value">{show(num(week?.stepsAvg))}</span>
           </div>
           <div className="assets-stat">
             <span className="assets-stat-label">Resting HR</span>
@@ -146,25 +162,18 @@ export default function HealthView({ isAuth }: HealthViewProps) {
             <span className="assets-stat-label">VO2max</span>
             <span className="assets-stat-value">{show(num(summary?.vo2max?.value))}</span>
           </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">Steps</span>
+            <span className="assets-stat-value">{show(num(week?.stepsAvg))}</span>
+          </div>
         </div>
       </div>
-
-      {!hide && summary?.lastNight && (
-        <div className="assets-section">
-          <div className="section-label">Last night · {hoursText(summary.lastNight.asleepH)}</div>
-          <SleepStages night={summary.lastNight} />
-        </div>
-      )}
 
       <div className="assets-section">
         <div className="section-label">
           Activity · {show(kst(summary?.asOf, { month: 'long', day: 'numeric', weekday: 'short' }))}
         </div>
         <div className="assets-stat-grid">
-          <div className="assets-stat">
-            <span className="assets-stat-label">Steps</span>
-            <span className="assets-stat-value">{show(num(day?.steps))}</span>
-          </div>
           <div className="assets-stat">
             <span className="assets-stat-label">Active energy</span>
             <span className="assets-stat-value">{show(ofGoal(day?.activeKcal, day?.activeGoal, ' kcal'))}</span>
@@ -179,6 +188,10 @@ export default function HealthView({ isAuth }: HealthViewProps) {
             <span className="assets-stat-label">Stand</span>
             <span className="assets-stat-value">{show(ofGoal(day?.standHours, day?.standGoal, ' h'))}</span>
             {!hide && <Meter value={day?.standHours} max={day?.standGoal} label="Stand" />}
+          </div>
+          <div className="assets-stat">
+            <span className="assets-stat-label">Steps</span>
+            <span className="assets-stat-value">{show(num(day?.steps))}</span>
           </div>
         </div>
       </div>

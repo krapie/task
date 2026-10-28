@@ -24,6 +24,14 @@ export function hoursText(h: number | null | undefined): string {
   return `${Math.floor(total / 60)}h ${total % 60}m`
 }
 
+// A bedtime or wake time as HH:MM in Seoul. The summary carries timestamps; a bare "23:40" passes through.
+export function clockKst(v: string | null | undefined): string | null {
+  if (!v) return null
+  if (/^\d{2}:\d{2}$/.test(v)) return v
+  const d = new Date(v)
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
 export function timeAgo(iso: string): string {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
   if (m < 60) return `${Math.max(m, 0)}m ago`

@@ -228,6 +228,8 @@ export interface HealthSummary {
     night: string; asleepH: number | null; deepH: number | null; coreH: number | null
     remH: number | null; awakeH: number | null; bedtime: string | null; wakeTime: string | null
   } | null
+  // The last 14 nights up to asOf, oldest first; a night without a record is absent. Optional: older ingests lack it.
+  sleepNights?: { night: string; asleepH: number | null; deepH: number | null; coreH: number | null; remH: number | null; awakeH: number | null }[]
   runs: { at: string; km: number | null; durationMin: number | null; paceMinKm: number | null; avgHr: number | null }[]
 }
 

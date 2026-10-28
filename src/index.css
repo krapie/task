@@ -3540,6 +3540,18 @@ a { color: var(--kp-fg); text-decoration: none; }
 .meter-fill { height: 100%; background: var(--kp-fg); border-radius: 99px; transition: width var(--kp-dur-base) var(--kp-ease); }
 .assets-stat .meter { margin-top: var(--kp-space-2); }
 .assets-category-list li { flex-wrap: wrap; }
+.sleep-times { margin: 0; font-family: var(--kp-font-mono); font-size: var(--kp-text-sm); color: var(--kp-fg-2); }
+.nightbars { display: flex; flex-direction: column; gap: 4px; min-height: 0; height: 100%; }
+.nightbars-bars { position: relative; flex: 1 1 auto; min-height: 44px; display: flex; align-items: stretch; gap: 3px; border-bottom: 1px solid var(--kp-border); }
+.nightbars-col { flex: 1; display: flex; align-items: flex-end; }
+.nightbars-bar { display: block; width: 100%; border-radius: 2px 2px 0 0; background: var(--kp-fg-3); }
+.nightbars-last { background: var(--kp-fg); }
+.nightbars-gap { height: 2px; background: var(--kp-border); }
+.nightbars-avg { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--kp-fg-2); pointer-events: none; }
+.nightbars-axis { display: flex; justify-content: space-between; font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); color: var(--kp-fg-3); }
+.assets-section .nightbars { height: 120px; }
+.ov-nights { flex: 1 1 auto; min-height: 76px; max-height: 150px; display: flex; flex-direction: column; }
+.ov-nights .nightbars { flex: 1 1 auto; }
 .sleep-bar { display: flex; gap: 2px; height: 10px; border-radius: 3px; overflow: hidden; }
 .sleep-bar span { min-width: 2px; }
 .sleep-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; font-family: var(--kp-font-mono); font-size: 12px; color: var(--kp-fg-2); }
@@ -3986,6 +3998,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .ov-masked { margin: 0; flex: 1; display: flex; align-items: center; font-family: var(--kp-font-mono); font-size: 22px; letter-spacing: 0.1em; color: var(--kp-fg-4); }
 .ov-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--kp-space-3); padding-bottom: var(--kp-space-3); flex-shrink: 0; }
 .ov-big { display: block; font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; color: var(--kp-fg); }
+.ov-nowrap { white-space: nowrap; }
 .ov-sub-inline { display: block; margin-top: 3px; font-size: var(--kp-text-xs); color: var(--kp-fg-3); }
 .ov-block { padding-bottom: var(--kp-space-3); flex-shrink: 0; }
 .ov-health .ov-block { margin-top: auto; } /* spare height splits into two even gaps with the facts' own auto margin */

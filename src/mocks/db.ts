@@ -119,6 +119,9 @@ export const healthSummary: HealthSummary = {
   week: { stepsAvg: 7960, sleepAvgH: 7.1, restingHr: 58, hrvMs: 46 },
   vo2max: { value: 44.2, at: day(-9) },
   lastNight: { night: day(-1), asleepH: 7.2, deepH: 1.1, coreH: 3.9, remH: 1.6, awakeH: 0.6, bedtime: '23:40', wakeTime: '07:05' },
+  sleepNights: [7.4, 8.6, 7.1, 7.0, 6.9, 8.0, 8.7, 8.4, 4.3, 6.8, 7.6, 7.6, 7.2].map((h, i) => ({
+    night: day(-13 + i), asleepH: h, deepH: +(h * 0.13).toFixed(2), coreH: +(h * 0.6).toFixed(2), remH: +(h * 0.22).toFixed(2), awakeH: +(h * 0.05).toFixed(2),
+  })),
   runs: [
     { at: iso(60 * 30), km: 5.2, durationMin: 31, paceMinKm: 5.96, avgHr: 152 },
     { at: iso(60 * 100), km: 8.0, durationMin: 49, paceMinKm: 6.1, avgHr: 148 },

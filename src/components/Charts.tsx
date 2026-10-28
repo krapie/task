@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { hoursText, shortDate } from '../lib/format'
 
 // Monochrome chart primitives for the Overview and the Trader tab: ink on neutral, flat fills, no gradients.
 
@@ -34,6 +35,34 @@ export function Spark({ points, fill, className = '', label, min: lo, max: hi }:
       {fill && <polygon points={`0,${H} ${line} ${W},${H}`} fill="currentColor" opacity="0.08" />}
       <polyline points={line} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
+  )
+}
+
+// Hours slept per night over the last `days` nights, one bar per calendar day ending on the newest night, so a
+// night without a record shows as a gap. Bars start at zero; the dashed line is the average. The newest bar is ink.
+export function NightBars({ nights, avg, days = 14, axis, label }: { nights: { night: string; asleepH: number | null }[]; avg?: number | null; days?: number; axis?: boolean; label?: string }) {
+  if (!nights.length) return null
+  const end = nights[nights.length - 1].night.slice(0, 10)
+  const byDate = new Map(nights.map(n => [n.night.slice(0, 10), n.asleepH]))
+  const slots = Array.from({ length: days }, (_, i) => {
+    const d = new Date(`${end}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() - (days - 1 - i))
+    const key = d.toISOString().slice(0, 10)
+    return { key, v: byDate.get(key) ?? null }
+  })
+  const top = Math.max(9, ...slots.map(s => s.v ?? 0))
+  return (
+    <div className="nightbars">
+      <div className="nightbars-bars" role="img" aria-label={label}>
+        {slots.map((s, i) => (
+          <span key={s.key} className="nightbars-col" title={`${shortDate(s.key)}: ${hoursText(s.v)}`}>
+            <span className={`nightbars-bar${i === slots.length - 1 ? ' nightbars-last' : ''}${s.v == null ? ' nightbars-gap' : ''}`} style={s.v == null ? undefined : { height: `${(s.v / top) * 100}%` }} />
+          </span>
+        ))}
+        {avg != null && <i className="nightbars-avg" style={{ bottom: `${(avg / top) * 100}%` }} aria-hidden="true" />}
+      </div>
+      {axis && <div className="nightbars-axis"><span>{shortDate(slots[0].key)}</span><span>{shortDate(slots[slots.length - 1].key)}</span></div>}
+    </div>
   )
 }
 

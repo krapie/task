@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
-import { hoursText, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
+import { clockKst, hoursText, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
 import { useStepUp } from '../lib/useStepUp'
 import type { AssetSummary, HealthSummary, TraderSummary } from '../types'
-import { Ring, SplitBar, PairBars, Spark } from './Charts'
+import { NightBars, Ring, SplitBar, PairBars, Spark } from './Charts'
 import { Icon } from './Icons'
 import { Panel } from './OverviewPanel'
 import StepUpBar from './StepUpBar'
@@ -92,6 +92,9 @@ function HealthPanel({ unlocked, masked, s, onOpen }: PanelProps<HealthSummary |
   }
   const d = h.day
   const night = h.lastNight
+  const nights = h.sleepNights ?? []
+  const bed = clockKst(night?.bedtime)
+  const wake = clockKst(night?.wakeTime)
   const rings = [
     { label: 'Move', value: d?.activeKcal, goal: d?.activeGoal },
     { label: 'Exercise', value: d?.exerciseMin, goal: d?.exerciseGoal },
@@ -101,8 +104,8 @@ function HealthPanel({ unlocked, masked, s, onOpen }: PanelProps<HealthSummary |
     <Panel title="Health" count={h.asOf ? shortDate(h.asOf.slice(0, 10)) : ''} onOpen={onOpen} className="ov-health">
       <div className="ov-hero">
         <div>
-          <b className="ov-big">{num(d?.steps)}</b>
-          <span className="ov-sub-inline">steps{h.week?.stepsAvg != null ? ` · avg ${num(h.week.stepsAvg)}` : ''}</span>
+          <b className="ov-big">{hoursText(night?.asleepH)}</b>
+          <span className="ov-sub-inline">asleep last night{bed && wake && <> · <span className="ov-nowrap">{bed} → {wake}</span></>}</span>
         </div>
         <div className="ov-rings">
           {rings.map(r => (
@@ -117,17 +120,24 @@ function HealthPanel({ unlocked, masked, s, onOpen }: PanelProps<HealthSummary |
       </div>
       {night && (
         <div className="ov-block">
-          <div className="ov-sub">Last night · {hoursText(night.asleepH)}</div>
+          <div className="ov-sub">Sleep stages</div>
           <SplitBar parts={[
             { label: 'Deep', value: night.deepH ?? 0 }, { label: 'Core', value: night.coreH ?? 0 },
             { label: 'REM', value: night.remH ?? 0 }, { label: 'Awake', value: night.awakeH ?? 0 },
           ]} />
         </div>
       )}
+      {nights.length > 0 && (
+        <div className="ov-block ov-nights">
+          <div className="ov-sub">Last 14 nights{h.week?.sleepAvgH != null ? ` · 7-day avg ${hoursText(h.week.sleepAvgH)}` : ''}</div>
+          <NightBars nights={nights} avg={h.week?.sleepAvgH} label="Hours asleep per night" />
+        </div>
+      )}
       <ul className="ov-facts">
         <li><span>Resting HR</span><b>{num(h.week?.restingHr, ' bpm')}</b></li>
         <li><span>HRV</span><b>{num(h.week?.hrvMs, ' ms')}</b></li>
         {h.vo2max && <li><span>VO₂ max</span><b>{h.vo2max.value}</b></li>}
+        <li><span>Steps</span><b>{num(d?.steps)}</b></li>
       </ul>
     </Panel>
   )
