@@ -6,14 +6,14 @@ import {
   type DayData, type TodayItem, type TodayKind,
 } from '../lib/overview'
 import { useRemote } from '../lib/useRemote'
-import type { CalendarEvent, MailThread, MailUnreadCounts, Slot, Template, TodoItem } from '../types'
+import type { CalendarEvent, MailThread, MailUnreadCounts, NewsItem, Slot, Template, TodoItem } from '../types'
 import { Ring } from './Charts'
 import { Panel } from './OverviewPanel'
 import OverviewSecure, { type SecureView } from './OverviewSecure'
 import { Empty, Loading } from './Ui'
 
 // Today on one desktop screen, in two bands. Upper: what is left today, the next calendar events and the
-// inbox. Lower (owner only, behind the passkey step-up): health, assets and the trader (OverviewSecure).
+// inbox (News takes its place while there is no unread mail). Lower (owner only, behind the passkey step-up): health, assets and the trader (OverviewSecure).
 // Today and the events come from App's own state, so a tick here is the same write as a tick on the Tasks
 // board; mail is the Overview's own request.
 
@@ -38,6 +38,7 @@ interface Props {
   onOpenTasks: () => void
   onOpenCalendar: (date: string) => void
   onOpenMail: () => void
+  onOpenNews: () => void
   onOpenLife: (view: SecureView) => void
   onMailUnread: (n: number) => void
 }
@@ -91,6 +92,11 @@ export function OverviewView(p: Props) {
   })
   const generalUnread = mail.data?.counts.general
   useEffect(() => { if (generalUnread != null) p.onMailUnread(generalUnread) }, [generalUnread]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // An empty inbox leaves its panel free: show the latest News stories there instead.
+  const inboxEmpty = generalUnread === 0
+  const news = useRemote<NewsItem[]>(p.isAuth && inboxEmpty, async () =>
+    (await api.news.getItems()).filter(n => !n.title.startsWith('Show GN')).slice(0, 10))
 
   const toggle = (i: TodayItem) => {
     if (i.kind === 'event') p.onToggleEvent(i.id)
@@ -185,7 +191,37 @@ export function OverviewView(p: Props) {
           )}
         </Panel>
 
-        {p.isAuth && (
+        {p.isAuth && inboxEmpty && (
+          <Panel title="News" onOpen={p.onOpenNews} className="ov-inbox">
+            {news.failed && !news.data ? <p className="ov-quiet">News is unavailable right now.</p>
+              : !news.data ? <Loading rows={4} />
+              : (
+                <>
+                  {news.data.length === 0 ? <p className="ov-quiet">No unread mail, and no stories right now.</p> : (
+                    <>
+                    <p className="ov-quiet ov-unread-none">
+                      No unread mail{mail.data && mail.data.counts.others > 0 ? ` (${mail.data.counts.others} in Others)` : ''}. Latest stories:
+                    </p>
+                    <ul className="ov-list ov-scroll">
+                      {news.data.map(n => (
+                        <li key={n.link}>
+                          <a className="ov-mailrow ov-newsrow" href={n.link} target="_blank" rel="noopener noreferrer">
+                            <span className="ov-mailbody">
+                              <span className="ov-newstitle">{n.title}</span>
+                              <span className="ov-meta">{[n.author, n.published && timeAgo(n.published)].filter(Boolean).join(' · ')}</span>
+                            </span>
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                    </>
+                  )}
+                </>
+              )}
+          </Panel>
+        )}
+
+        {p.isAuth && !inboxEmpty && (
           <Panel title="Inbox" onOpen={p.onOpenMail} className="ov-inbox">
             {mail.failed && !mail.data ? <p className="ov-quiet">Mail is unavailable right now.</p>
               : !mail.data ? <Loading rows={4} />

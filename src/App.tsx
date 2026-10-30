@@ -1179,6 +1179,7 @@ export default function App() {
                 setView('calendar')
               }}
               onOpenMail={() => setView('mail')}
+              onOpenNews={() => setView('news')}
               onOpenLife={v => setView(v)}
               onMailUnread={setMailUnread}
             />

@@ -9,6 +9,8 @@ import * as db from './db'
 const initialQuery = new URLSearchParams(location.search)
 const q = () => initialQuery
 const empty = () => q().get('scenario') === 'empty'
+// ?scenario=inboxzero: everything else as usual, but no unread mail (the Overview shows News in the Inbox slot)
+const inboxZero = () => q().get('scenario') === 'inboxzero'
 const latency = () => Number(q().get('latency')) || 120
 
 const ok = async <T>(body: T, status = 200) => {
@@ -223,7 +225,7 @@ export const handlers: HttpHandler[] = [
     const flagged = url.searchParams.get('flagged') === 'true'
     const unread = url.searchParams.get('unread') === 'true'
     const limit = Number(url.searchParams.get('limit')) || undefined
-    return ok(list(threads().filter((t) => (!category || t.category === category) && (!flagged || t.flagged) && (!unread || t.unread_count > 0))).slice(0, limit))
+    return ok(list(threads().filter((t) => (!category || t.category === category) && (!flagged || t.flagged) && (!unread || (t.unread_count > 0 && !inboxZero())))).slice(0, limit))
   }),
   http.post('/api/mail/threads/move', async ({ request }) => {
     const { thread_id, category } = (await request.json()) as { thread_id: string; category: 'general' | 'others' }
@@ -245,7 +247,7 @@ export const handlers: HttpHandler[] = [
     return ok({ ok: true })
   }),
   http.get('/api/mail/unread-counts', async () => {
-    const unread = (c: string) => (empty() ? [] : db.mailItems).filter((m) => !m.read && (m.category ?? 'general') === c).length
+    const unread = (c: string) => (empty() || inboxZero() ? [] : db.mailItems).filter((m) => !m.read && (m.category ?? 'general') === c).length
     return ok({ general: unread('general'), others: unread('others') })
   }),
   http.get('/api/mail/items/:id', async ({ params }) => ok(db.mailItems.find((m) => m.id === params.id))),
