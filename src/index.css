@@ -3997,6 +3997,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 
 /* Private band */
 .ov-secure { border-top: 1px solid var(--kp-border); }
+.splitter-h { display: none; }
 .ov-secure-head { display: flex; align-items: center; justify-content: space-between; gap: var(--kp-space-3); padding: 6px 22px; border-bottom: 1px solid var(--kp-border); flex-shrink: 0; }
 .ov-secure-title { display: inline-flex; align-items: center; gap: 6px; font-size: var(--kp-text-2xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--kp-fg-3); }
 .ov-secure-head .assets-topbar { flex: 1; justify-content: flex-end; gap: var(--kp-space-4); }
@@ -4085,8 +4086,15 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .ov-top > .ov-panel:first-child { border-left: none; }
   /* The private band is as tall as its content; the day band takes what is left (a fixed ratio left panels half
      empty in a tall window) and gives way first in a short one, down to a floor that keeps Today readable. */
-  .ov-has-secure .ov-top { flex: 1 1 auto; min-height: 440px; }
-  .ov-secure { flex: 0 0 auto; }
+  .ov-has-secure .ov-top { flex: 1 1 auto; min-height: var(--ov-top-min, 440px); }
+  .ov-secure { flex: 0 0 auto; position: relative; }
+  /* The owner dragged the line: the private band keeps that height and its panels scroll inside. */
+  .ov-secure-fixed { flex: 0 0 var(--ov-secure-h); min-height: 0; }
+  .ov-secure-fixed .ov-secure-grid { grid-template-rows: minmax(0, 1fr); }
+  .splitter-h { display: block; position: absolute; z-index: 2; left: 0; right: 0; top: -4px; height: 9px; cursor: ns-resize; touch-action: none; }
+  .splitter-h::after { content: ''; position: absolute; left: 0; right: 0; top: 3px; height: 3px; background: transparent; }
+  .splitter-h:hover::after, .splitter-h:focus-visible::after, .splitter-dragging::after { background: var(--kp-border-strong); }
+  .splitter-h:focus-visible { outline: none; }
   .ov-secure-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ov-secure-grid > .ov-panel { border-bottom: none; border-left: 1px solid var(--kp-border); }
   .ov-secure-grid > .ov-panel:first-child { border-left: none; }

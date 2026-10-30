@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../lib/api'
 import { timeAgo } from '../lib/format'
 import {
@@ -10,6 +10,7 @@ import type { CalendarEvent, MailThread, MailUnreadCounts, NewsItem, Slot, Templ
 import { Ring } from './Charts'
 import { Panel } from './OverviewPanel'
 import OverviewSecure, { type SecureView } from './OverviewSecure'
+import { Splitter } from './Splitter'
 import { Empty, Loading } from './Ui'
 
 // Today on one desktop screen, in two bands. Upper: what is left today, the next calendar events and the
@@ -57,6 +58,26 @@ const GROUPS: { kind: TodayKind; label: string }[] = [
   { kind: 'bonus', label: 'Bonus' },
   { kind: 'todo', label: 'Todos' },
 ]
+
+// The owner can drag the line between the day band and the private band (desktop only; a phone stacks the
+// panels). The private band's height is remembered per browser; no value = its content height, as before.
+// The limits keep the private band's header and a locked row, and the day band's Today ring and a few rows.
+const SECURE_KEY = 'kp-ov-secure-h'
+const SECURE_MIN = 150
+const TOP_MIN = 260
+function readSecureH(): number | null {
+  try {
+    const v = Number(localStorage.getItem(SECURE_KEY))
+    if (Number.isFinite(v) && v > 0) return v
+  } catch { /* nothing remembered */ }
+  return null
+}
+function writeSecureH(v: number | null) {
+  try {
+    if (v == null) localStorage.removeItem(SECURE_KEY)
+    else localStorage.setItem(SECURE_KEY, String(v))
+  } catch { /* the height is not remembered */ }
+}
 
 const WEEKDAY = (date: string) => {
   const [y, m, d] = date.split('-').map(Number)
@@ -120,8 +141,37 @@ export function OverviewView(p: Props) {
 
   const doneAll = today_.length > 0 && left === 0
 
+  // Height of the private band: the stored value, kept inside the limits for the window as it is now.
+  const ovRef = useRef<HTMLDivElement>(null)
+  const [boxH, setBoxH] = useState(0)
+  const [secureH, setSecureH] = useState<number | null>(readSecureH)
+  useLayoutEffect(() => {
+    const el = ovRef.current
+    if (!el) return
+    const measure = () => setBoxH(el.clientHeight)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const secureMax = Math.max(SECURE_MIN, boxH - TOP_MIN)
+  const secureNow = secureH == null ? null : Math.round(Math.min(Math.max(secureH, SECURE_MIN), secureMax))
+  const splitter = (
+    <Splitter
+      label="Resize the private band"
+      current={() => ovRef.current?.querySelector<HTMLElement>('.ov-secure')?.offsetHeight ?? SECURE_MIN}
+      min={SECURE_MIN}
+      max={secureMax}
+      onChange={(px, final) => { setSecureH(px); if (final) writeSecureH(px) }}
+    />
+  )
+
   return (
-    <div className={`ov${p.chatButton ? ' ov-chat-clear' : ''}${p.isOwner ? ' ov-has-secure' : ''}`}>
+    <div
+      ref={ovRef}
+      className={`ov${p.chatButton ? ' ov-chat-clear' : ''}${p.isOwner ? ' ov-has-secure' : ''}`}
+      style={p.isOwner && secureNow != null ? { '--ov-secure-h': `${secureNow}px`, '--ov-top-min': `${TOP_MIN}px` } as CSSProperties : undefined}
+    >
       <div className={`ov-band ov-top${p.isAuth ? '' : ' ov-top-guest'}`}>
         <Panel title="Today" count={p.ready ? (left ? `${left} left` : today_.length ? 'all done' : '') : ''} onOpen={p.onOpenTasks} className="ov-today">
           {!p.ready ? <Loading rows={6} /> : items.length === 0 ? (
@@ -255,7 +305,7 @@ export function OverviewView(p: Props) {
         )}
       </div>
 
-      {p.isOwner && <OverviewSecure isAuth={p.isAuth} onOpen={p.onOpenLife} />}
+      {p.isOwner && <OverviewSecure isAuth={p.isAuth} onOpen={p.onOpenLife} fixed={secureNow != null} splitter={splitter} />}
     </div>
   )
 }

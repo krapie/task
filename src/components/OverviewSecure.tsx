@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '../lib/api'
 import { clockKst, hoursText, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
 import { useStepUp } from '../lib/useStepUp'
@@ -18,7 +18,9 @@ const empty = <T,>(): Slice<T> => ({ data: null, failed: false, loaded: false })
 // The lower band of the Overview: health, assets and the trader. All private, so it is locked behind the
 // passkey step-up like the Assets, Health and Trader tabs (one unlock, one shared token): while locked it
 // holds placeholders and requests nothing; on Lock, backgrounding or expiry the fetched values are dropped.
-export default function OverviewSecure({ isAuth, onOpen }: { isAuth: boolean; onOpen: (v: SecureView) => void }) {
+// `fixed`: the band has the height the owner dragged it to (its panels scroll inside); `splitter` is the drag
+// handle on its top edge.
+export default function OverviewSecure({ isAuth, onOpen, fixed, splitter }: { isAuth: boolean; onOpen: (v: SecureView) => void; fixed?: boolean; splitter?: ReactNode }) {
   const [masked, setMasked] = useState(false)
   const [health, setHealth] = useState<Slice<HealthSummary | null>>(empty())
   const [assets, setAssets] = useState<Slice<AssetSummary>>(empty())
@@ -54,7 +56,8 @@ export default function OverviewSecure({ isAuth, onOpen }: { isAuth: boolean; on
   useEffect(() => { if (unlocked) load() }, [unlocked, load])
 
   return (
-    <div className="ov-band ov-secure">
+    <div className={`ov-band ov-secure${fixed ? ' ov-secure-fixed' : ''}`}>
+      {splitter}
       <div className="ov-secure-head">
         <span className="ov-secure-title"><Icon name="lock" size={14} /> Private</span>
         <StepUpBar unlocked={unlocked} busy={busy} remaining={remaining} masked={masked} onToggleMask={() => setMasked(m => !m)} onUnlock={unlock} onLock={lock} />
