@@ -6,6 +6,7 @@ import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { getOrCreateRetro } from './retro.js'
+import { startMetricsServer, telemetry } from './telemetry.js'
 
 const PORT = process.env.PORT || 3000
 // Sign-in is on auth.kevinprk.com. The web app sends access tokens from
@@ -205,6 +206,7 @@ async function initDb() {
 }
 
 const app = express()
+app.use(telemetry)
 app.use(express.json({ limit: '400kb' }))
 
 async function audit(event, req) {
@@ -1726,6 +1728,7 @@ app.post('/internal/push', async (req, res) => {
 })
 
 initDb().then(() => {
+  startMetricsServer()
   app.listen(PORT, () => console.log(`task-api :${PORT}`))
 }).catch(err => {
   console.error('DB init failed:', err)

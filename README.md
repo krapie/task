@@ -37,6 +37,7 @@ node server/index.js
 - **Retro** — yearly retrospective as a third tab (`Tasks | Goals | Retro`, signed in): Keep / Problem / Try / Action items per year, each entry editable with a checkbox, a comment and a crossed-out state (dropped). Sections are fixed; the layout is 2×2 up to 1500px wide, 4 columns above, 1 column on phones; years are added with the `+` tab. Stored as a goal period with `kind = 'retro'` (`server/retro.js`, `POST /api/goals/periods` with `kind: 'retro'`; entries use the regular goal category/item endpoints)
 - **Import / Export** — JSON export of all templates and board settings
 - **Dark mode** — manual toggle; PWA install supported with status bar following theme
+- **Telemetry** — `server/telemetry.js` serves `http_server_request_duration_seconds{service,route,code}` on `:9467/metrics` (own port, not routed by the gateway; `route` is the Express pattern) and starts a span per request; `server/tracing.js` (loaded with `node --import`) exports spans to the trace gateway when `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set, with pg and outgoing-HTTP spans, and removes query strings and SQL text before export. `/api/health` is skipped. Admin → Performance → Services shows the graphs and the traces behind a point (`docs/operations/observability.md`, "Traces"). Tests: `node --test test/telemetry.test.js`
 
 ## Navigation
 

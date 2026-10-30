@@ -9,4 +9,4 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY server/ ./server/
 EXPOSE 3000
-CMD ["node", "server/index.js"]
+CMD ["node", "--import", "./server/tracing.js", "server/index.js"]
