@@ -2,13 +2,14 @@
 // (the instrumentations patch http and pg, so they must be registered before those modules are used).
 //
 // Spans go over OTLP/HTTP to the trace gateway (env OTEL_EXPORTER_OTLP_TRACES_ENDPOINT; unset = off), whose tail
-// sampling decides what Tempo keeps. Outgoing http calls (operator, finance, mail-bridge) carry the W3C trace
+// sampling decides what Tempo keeps. Outgoing http calls (operator, finance, mail-bridge, ops) carry the W3C trace
 // context, so one request is one trace across services. The server span and the RED histogram are in
 // telemetry.js. Spans never keep a query string, SQL text or parameters: Sanitize removes them before export.
 
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http'
 import { HttpInstrumentation } from '@opentelemetry/instrumentation-http'
 import { PgInstrumentation } from '@opentelemetry/instrumentation-pg'
+import { UndiciInstrumentation } from '@opentelemetry/instrumentation-undici'
 import { registerInstrumentations } from '@opentelemetry/instrumentation'
 import { resourceFromAttributes } from '@opentelemetry/resources'
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node'
@@ -24,6 +25,14 @@ export function sanitize(span) {
   }
   delete a['url.query']
   for (const k of SQL_KEYS) delete a[k]
+  // A database error text can quote the row it failed on (a duplicate key names the value): keep the type, not the text.
+  for (const ev of span.events ?? []) {
+    if (ev.name === 'exception' && ev.attributes) {
+      delete ev.attributes['exception.message']
+      delete ev.attributes['exception.stacktrace']
+    }
+  }
+  if (span.status?.message) delete span.status.message
   return span
 }
 
@@ -58,6 +67,8 @@ if (endpoint) {
       // Only calls the app makes: the server span is made by telemetry.js (route pattern, no raw path).
       new HttpInstrumentation({ ignoreIncomingRequestHook: () => true, requireParentforOutgoingSpans: true }),
       new PgInstrumentation({ requireParentSpan: true }),
+      // Global fetch: jose's JWKS download. node-fetch goes through http above.
+      new UndiciInstrumentation({ requireParentforSpans: true }),
     ],
   })
   // A pod stop flushes the last spans; with a handler installed the process must exit by itself.

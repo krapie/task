@@ -34,3 +34,16 @@ test('sanitize strips query strings and SQL text', () => {
   assert.equal(s.attributes['db.statement'], undefined)
   assert.equal(s.attributes['db.system'], 'postgresql')
 })
+
+test('sanitize drops database error text from events and status', () => {
+  const span = {
+    attributes: {},
+    status: { code: 2, message: 'duplicate key value violates unique constraint: Key (email)=(a@b.c) already exists' },
+    events: [{ name: 'exception', attributes: { 'exception.type': 'error', 'exception.message': 'Key (email)=(a@b.c)', 'exception.stacktrace': 'Error: Key (email)=(a@b.c)\n at x' } }],
+  }
+  sanitize(span)
+  assert.equal(span.status.code, 2)
+  assert.equal(span.status.message, undefined)
+  assert.equal(span.events[0].attributes['exception.type'], 'error')
+  assert.ok(!JSON.stringify(span).includes('a@b.c'))
+})

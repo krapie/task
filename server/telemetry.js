@@ -48,6 +48,21 @@ export function telemetry(req, res, next) {
   context.with(trace.setSpan(parent, span), next)
 }
 
+// Runs fn inside an active span (a no-op without tracing). The span records only the attributes given and whether fn
+// threw, never the error text.
+export function withSpan(name, fn, attributes = {}) {
+  return tracer.startActiveSpan(name, { attributes }, async (span) => {
+    try {
+      return await fn(span)
+    } catch (err) {
+      span.setStatus({ code: SpanStatusCode.ERROR })
+      throw err
+    } finally {
+      span.end()
+    }
+  })
+}
+
 export function startMetricsServer() {
   http
     .createServer(async (req, res) => {

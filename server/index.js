@@ -6,7 +6,7 @@ import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { getOrCreateRetro } from './retro.js'
-import { startMetricsServer, telemetry } from './telemetry.js'
+import { startMetricsServer, telemetry, withSpan } from './telemetry.js'
 
 const PORT = process.env.PORT || 3000
 // Sign-in is on auth.kevinprk.com. The web app sends access tokens from
@@ -14,7 +14,9 @@ const PORT = process.env.PORT || 3000
 // here against the auth JWKS.
 const AUTH_ISSUER = (process.env.AUTH_ISSUER || 'https://auth.kevinprk.com').replace(/\/$/, '')
 const AUTH_AUDIENCE = process.env.AUTH_AUDIENCE || 'task'
-const JWKS = createRemoteJWKSet(new URL(`${AUTH_ISSUER}/keys`), { cacheMaxAge: 60 * 60_000 })
+// The keys are downloaded at start and refreshed in the background (keepJwksWarm), well inside the cache age, so no
+// request waits for the download through Cloudflare (a cold start once made every first request take about 2 s).
+const JWKS = createRemoteJWKSet(new URL(`${AUTH_ISSUER}/keys`), { cacheMaxAge: 2 * 60 * 60_000 })
 const MAIL_BRIDGE_URL = process.env.MAIL_BRIDGE_URL || 'http://localhost:3001'
 const FINANCE_URL = process.env.FINANCE_URL || 'http://finance-svc:3002'
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY || ''
@@ -218,17 +220,28 @@ async function audit(event, req) {
 async function verifyToken(req) {
   const header = req.headers.authorization
   if (!header?.startsWith('Bearer ')) return null
-  try {
-    const { payload } = await jwtVerify(header.slice(7), JWKS, {
-      issuer: AUTH_ISSUER,
-      audience: AUTH_AUDIENCE,
-      algorithms: ['RS256'],
-      clockTolerance: 30,
-    })
-    return payload
-  } catch {
-    return null
-  }
+  return withSpan('auth.verify', async (span) => {
+    try {
+      const { payload } = await jwtVerify(header.slice(7), JWKS, {
+        issuer: AUTH_ISSUER,
+        audience: AUTH_AUDIENCE,
+        algorithms: ['RS256'],
+        clockTolerance: 30,
+      })
+      return payload
+    } catch {
+      span.setAttribute('auth.result', 'invalid')
+      return null
+    }
+  })
+}
+
+// Downloads the signing keys now (at most 5 s of waiting) and again every 30 minutes. A failed download keeps the
+// keys already cached; jose also fetches by itself when a token names an unknown key.
+async function keepJwksWarm() {
+  const reload = () => withSpan('auth.jwks.reload', () => JWKS.reload()).catch((e) => console.error('JWKS reload failed:', e.message))
+  await Promise.race([reload(), new Promise((r) => setTimeout(r, 5000))])
+  setInterval(reload, 30 * 60_000).unref()
 }
 
 async function auth(req, res, next) {
@@ -1727,7 +1740,8 @@ app.post('/internal/push', async (req, res) => {
   res.json({ sent })
 })
 
-initDb().then(() => {
+initDb().then(async () => {
+  await keepJwksWarm()
   startMetricsServer()
   app.listen(PORT, () => console.log(`task-api :${PORT}`))
 }).catch(err => {
