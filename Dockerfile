@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:25-alpine AS build
 WORKDIR /app
 RUN apk add --no-cache python3 make g++
 COPY package*.json ./
@@ -7,7 +7,7 @@ COPY . .
 RUN npm run build
 RUN npm prune --production
 
-FROM node:22-alpine
+FROM node:25-alpine
 WORKDIR /app
 COPY --from=build /app/node_modules node_modules/
 COPY --from=build /app/dist dist/
