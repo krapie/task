@@ -2,7 +2,7 @@
 // but its own. It opens a small panel with the open conversation: asking here
 // adds a turn to the same chat (streamed in both places), and the Assistant
 // tab picks up exactly where this left off. Same passkey lock as the tab.
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useStepUp } from '../lib/useStepUp'
 import { ask, assistantStore, isRemoteStreaming, startNew, stop } from '../lib/assistantStore'
 import { Icon } from './Icons'
@@ -25,12 +25,36 @@ function takeReopen(): boolean {
   }
 }
 
+// The panel sits at the bottom right, so dragging its left or top edge (or the corner) grows it.
+// The size is remembered per browser; the limits keep it inside the window.
+const SIZE_KEY = 'kp-as-fab-size'
+const SIZE_MIN = { w: 340, h: 320 }
+const SIZE_DEFAULT = { w: 440, h: 600 }
+const SIZE_STEP = 24
+type Size = { w: number; h: number }
+const fitSize = (s: Size): Size => ({
+  w: Math.round(Math.min(Math.max(s.w, SIZE_MIN.w), Math.max(SIZE_MIN.w, window.innerWidth - 48))),
+  h: Math.round(Math.min(Math.max(s.h, SIZE_MIN.h), Math.max(SIZE_MIN.h, window.innerHeight - 140))),
+})
+function readSize(): Size {
+  try {
+    const v = JSON.parse(localStorage.getItem(SIZE_KEY) ?? 'null')
+    if (v && Number.isFinite(v.w) && Number.isFinite(v.h)) return { w: v.w, h: v.h }
+  } catch { /* the default size */ }
+  return SIZE_DEFAULT
+}
+function writeSize(s: Size) {
+  try { localStorage.setItem(SIZE_KEY, JSON.stringify(s)) } catch { /* the size is not remembered */ }
+}
+
 export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean; onOpenTab: () => void }) {
   const s = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
   const { chat, live } = s
   const busy = live != null || isRemoteStreaming(s)
   const [open, setOpen] = useState(takeReopen)
   const [input, setInput] = useState('')
+  const [size, setSize] = useState<Size>(() => fitSize(readSize()))
+  const [dragging, setDragging] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const last = chat.turns[chat.turns.length - 1]
@@ -62,10 +86,66 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
   const submit = (e: FormEvent) => { e.preventDefault(); send(input) }
   const openTab = () => { setOpen(false); onOpenTab() }
 
+  // axis: which sides the handle moves; dragging left grows the width, dragging up grows the height.
+  const resizeTo = (next: Size) => { const v = fitSize(next); setSize(v); writeSize(v) }
+  const startDrag = (axis: { w?: boolean; h?: boolean }) => (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const el = e.currentTarget
+    const start = { x: e.clientX, y: e.clientY, ...size }
+    const at = (ev: PointerEvent): Size => ({ w: axis.w ? start.w + start.x - ev.clientX : start.w, h: axis.h ? start.h + start.y - ev.clientY : start.h })
+    el.setPointerCapture(e.pointerId)
+    setDragging(true)
+    let last = fitSize(start)
+    const move = (ev: PointerEvent) => { last = fitSize(at(ev)); setSize(last) }
+    const up = () => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      setDragging(false)
+      resizeTo(last)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+  }
+  const onResizerKey = (axis: { w?: boolean; h?: boolean }) => (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const grow = e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+    const shrink = e.key === 'ArrowRight' || e.key === 'ArrowDown'
+    if (grow || shrink) {
+      e.preventDefault()
+      const d = grow ? SIZE_STEP : -SIZE_STEP
+      resizeTo({ w: axis.w ? size.w + d : size.w, h: axis.h ? size.h + d : size.h })
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      resizeTo({ w: axis.w ? SIZE_DEFAULT.w : size.w, h: axis.h ? SIZE_DEFAULT.h : size.h })
+    }
+  }
+  const resetSize = (axis: { w?: boolean; h?: boolean }) => resizeTo({ w: axis.w ? SIZE_DEFAULT.w : size.w, h: axis.h ? SIZE_DEFAULT.h : size.h })
+  const handle = (cls: string, label: string, axis: { w?: boolean; h?: boolean }, orientation?: 'vertical' | 'horizontal') => (
+    <div
+      className={`as-fab-resizer ${cls}`}
+      role="separator"
+      aria-orientation={orientation}
+      aria-label={label}
+      tabIndex={0}
+      onPointerDown={startDrag(axis)}
+      onKeyDown={onResizerKey(axis)}
+      onDoubleClick={() => resetSize(axis)}
+    />
+  )
+
   return (
     <>
       {open && (
-        <section className="as-fab-panel" role="dialog" aria-label="Assistant">
+        <section
+          className={`as-fab-panel${dragging ? ' as-dragging' : ''}`}
+          role="dialog"
+          aria-label="Assistant"
+          style={{ '--as-fab-w': `${size.w}px`, '--as-fab-h': `${size.h}px` } as CSSProperties}
+        >
+          {handle('as-fab-resize-l', 'Resize the assistant panel width', { w: true }, 'vertical')}
+          {handle('as-fab-resize-t', 'Resize the assistant panel height', { h: true }, 'horizontal')}
+          {handle('as-fab-resize-tl', 'Resize the assistant panel', { w: true, h: true })}
           <div className="as-fab-head">
             <div className="as-fab-title">
               <span className="as-fab-name">Assistant</span>
