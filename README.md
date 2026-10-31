@@ -79,6 +79,11 @@ Keyboard (desktop, not while typing): `g` then `o` / `t` / `c` / `i` / `l` / `a`
 - Auth state is `checking | in | out | error` (`App.tsx`). Without the `kp_auth` hint cookie the app starts as a guest at once; with it, a "Signing in…" screen (`StatusScreen`) shows until `/api/token` answers, so guest data never flashes before the account loads. The token request times out after 8 s; an unreachable auth shows Retry (and retries on focus) instead of silently dropping to guest. A real 401 switches to guest through `AUTH_LOST_EVENT`, without a page reload.
 - Signed-in board cache: the last server state (settings, templates, todos, calendar events, the last 7 days of daily data) is written to `localStorage` key `task_cache` (`storage.cache` in `src/lib/storage.ts`), owned by the username and cleared on sign-out. On the next open it paints at once while the fresh data loads, so the board opens on today's day with its tasks instead of an empty Monday. With no cache the board shows a skeleton (`boardReady` in `App.tsx`) until templates and today's data arrive. The day (header, chips) starts from the stored rotate time, never from Monday.
 - Sign in / Sign out show "Opening sign-in…" / "Signing out…" right away while auth.kevinprk.com loads.
+
+## Server latency notes
+
+- The Postgres pool keeps idle connections for 30 min (TCP keepalive every 30 s) and has an `error` listener. The UI polls in bursts every ~5 min; with the default 10 s idle timeout every burst opened new connections (`pg.connect` 90-300 ms against 1-6 ms of query).
+- `GET /api/news` is stale-while-revalidate: the 5-min cache is served at once, an expired one refreshes in the background (5 s timeout, one fetch at a time, 60 s pause after a failure or an empty feed), and the first fetch runs at startup. The feed host takes about 1.1 s, which a request used to wait for.
 - `public/sw-v2.js` (cache `task-v3`): hashed `/assets/*` are cache-first; page loads are network-first with a 3 s fallback to the cached shell; API calls and cross-origin requests are never touched. nginx serves `sw*.js` with `no-cache`.
 
 ## Staging (mock data)

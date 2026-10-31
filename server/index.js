@@ -40,7 +40,17 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 }
 
-const pool = new pg.Pool({ connectionString: process.env.POSTGRES_URL })
+// The web UI polls in bursts every ~5 min; the default 10 s idle timeout closed every connection in between, so each
+// burst paid 90-300 ms of pg.connect (traces, 2026-10-31) against 1-6 ms of query. Keep idle connections for 30 min;
+// TCP keepalive probes every 30 s drop one that a NAT or a postgres restart killed silently.
+const pool = new pg.Pool({
+  connectionString: process.env.POSTGRES_URL,
+  idleTimeoutMillis: 30 * 60_000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 30_000,
+})
+// Without a listener a dropped idle connection (postgres restart) is an uncaught 'error' event and kills the process.
+pool.on('error', err => console.error('pg pool:', err.message))
 
 async function initDb() {
   await pool.query(`
@@ -1543,8 +1553,10 @@ app.post('/api/news/unflag', auth, async (req, res) => {
   res.json({ flagged: false })
 })
 
-// News — GeekNews Atom feed proxy with 5-min cache
-const GEEKNEWS_FEED = 'https://news.hada.io/rss/news'
+// News — GeekNews Atom feed proxy with 5-min cache. news.hada.io/rss/news answers 302 to this feedburner URL.
+const GEEKNEWS_FEED = 'https://feeds.feedburner.com/geeknews-feed'
+const NEWS_TTL_MS = 5 * 60 * 1000
+const NEWS_RETRY_MS = 60 * 1000
 let newsCache = null
 let newsCacheAt = 0
 
@@ -1575,23 +1587,42 @@ function parseAtom(xml) {
   return items
 }
 
+// Stale-while-revalidate: a cached feed is always served at once; an expired one is refreshed in the background, so
+// a request never waits for the feed host (about 1.1 s per fetch). The first fetch runs at startup.
+// A failed refresh keeps the old cache and waits NEWS_RETRY_MS before the next try, so an outage is not hammered.
+let newsRefresh = null
+let newsRetryAt = 0
+function refreshNews() {
+  newsRefresh ??= (async () => {
+    try {
+      const r = await fetch(GEEKNEWS_FEED, { headers: { 'User-Agent': GN_UA }, signal: AbortSignal.timeout(5000) })
+      if (!r.ok) throw new Error(`feed status ${r.status}`)
+      const items = parseAtom(await r.text())
+      if (items.length === 0) throw new Error('feed has no entries')
+      newsCache = items
+      newsCacheAt = Date.now()
+      return items
+    } catch (e) {
+      newsRetryAt = Date.now() + NEWS_RETRY_MS
+      throw e
+    }
+  })().finally(() => { newsRefresh = null })
+  return newsRefresh
+}
+
 app.get('/api/news', async (req, res) => {
-  const now = Date.now()
   // Fetch flagged state from DB regardless of cache
   const { rows: flaggedRows } = await pool.query('SELECT link FROM news_saved WHERE flagged = true').catch(() => ({ rows: [] }))
   const flaggedSet = new Set(flaggedRows.map(r => r.link))
+  const withFlags = items => items.map(item => ({ ...item, flagged: flaggedSet.has(item.link) }))
 
-  if (newsCache && now - newsCacheAt < 5 * 60 * 1000) {
-    return res.json(newsCache.map(item => ({ ...item, flagged: flaggedSet.has(item.link) })))
+  if (newsCache) {
+    const now = Date.now()
+    if (now - newsCacheAt >= NEWS_TTL_MS && now >= newsRetryAt) refreshNews().catch(e => console.error('news refresh:', e.message))
+    return res.json(withFlags(newsCache))
   }
   try {
-    const r = await fetch(GEEKNEWS_FEED, { headers: { 'User-Agent': GN_UA } })
-    if (!r.ok) return res.status(502).json({ error: 'feed unavailable' })
-    const xml = await r.text()
-    const items = parseAtom(xml)
-    newsCache = items
-    newsCacheAt = now
-    res.json(items.map(item => ({ ...item, flagged: flaggedSet.has(item.link) })))
+    res.json(withFlags(await refreshNews()))
   } catch {
     res.status(502).json({ error: 'feed unavailable' })
   }
@@ -1744,6 +1775,7 @@ initDb().then(async () => {
   await keepJwksWarm()
   startMetricsServer()
   app.listen(PORT, () => console.log(`task-api :${PORT}`))
+  refreshNews().catch(e => console.error('news warm-up:', e.message))
 }).catch(err => {
   console.error('DB init failed:', err)
   process.exit(1)
