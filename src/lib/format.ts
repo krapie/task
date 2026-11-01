@@ -39,6 +39,12 @@ export function timeAgo(iso: string): string {
   return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`
 }
 
+// "2026-10" → "Oct" ("Oct 2026" is not needed: callers show the year elsewhere)
+export function monthName(ym: string): string {
+  const [y, m] = ym.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short' })
+}
+
 // "2026-10-25" → "Oct 25"
 export function shortDate(d: string): string {
   const [y, m, day] = d.split('-').map(Number)

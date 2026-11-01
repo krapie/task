@@ -8,6 +8,13 @@ const day = (offset = 0) => {
 }
 const iso = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString()
 export { day }
+// "2026-10" for the month `back` months ago.
+const month = (back = 0) => {
+  const d = new Date()
+  d.setDate(1)
+  d.setMonth(d.getMonth() + back)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
 
 const tpl = (id: string, slot: Slot, text: string, position: number, group_id: string | null = null): Template => ({ id, slot, text, position, group_id, created_at: Date.now() - 86_400_000 * 30 })
 
@@ -111,6 +118,7 @@ export const assetSummary: AssetSummary = {
   ],
   investment: { principal: 70_000_000, value: 78_000_000, pnl: 8_000_000 },
   thisMonth: { income: 4_800_000, expense: 3_150_000, netSavings: 1_650_000 },
+  netWorthHistory: [[month(-6), 171_400_000], [month(-5), 174_900_000], [month(-4), 173_800_000], [month(-3), 177_300_000], [month(-2), 181_800_000], [month(-1), 181_795_000], [month(0), 184_320_000]],
 }
 
 export const healthSummary: HealthSummary = {

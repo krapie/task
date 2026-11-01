@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '../lib/api'
-import { clockKst, hoursText, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
+import { clockKst, hoursText, monthName, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
 import { useStepUp } from '../lib/useStepUp'
 import type { AssetSummary, HealthSummary, TraderSummary } from '../types'
-import { NightBars, Ring, SplitBar, PairBars, Spark } from './Charts'
+import { LineChart, NightBars, Ring, SplitBar, PairBars, Spark } from './Charts'
 import { Icon } from './Icons'
 import { Panel } from './OverviewPanel'
 import StepUpBar from './StepUpBar'
@@ -160,6 +160,9 @@ function AssetsPanel({ unlocked, masked, s, onOpen }: PanelProps<AssetSummary>) 
   const rest = cats.slice(4).reduce((t, c) => t + c.amount, 0)
   const parts = [...top.map(c => ({ label: c.category, value: c.amount })), ...(rest > 0 ? [{ label: 'Other', value: rest }] : [])]
   const m = a.thisMonth
+  const nw = (a.netWorthHistory ?? []).slice(-12)
+  const nwFrom = nw[0]
+  const nwDelta = nwFrom ? a.netWorth - nwFrom[1] : 0
   return (
     <Panel title="Assets" onOpen={onOpen} className="ov-assets">
       <div className="ov-hero">
@@ -168,6 +171,12 @@ function AssetsPanel({ unlocked, masked, s, onOpen }: PanelProps<AssetSummary>) 
           <span className="ov-sub-inline">net worth{a.totalDebt ? ` · debt ${wonShort(a.totalDebt)}` : ''}</span>
         </div>
       </div>
+      {nw.length > 1 && (
+        <div className="ov-block">
+          <div className="ov-sub">Net worth · {signedWon(nwDelta)} ({signedPct(nwDelta / nwFrom[1])}) since {monthName(nwFrom[0])}</div>
+          <LineChart points={nw} label="Net worth over time" />
+        </div>
+      )}
       <div className="ov-block">
         <div className="ov-sub">This month · net {signedWon(m.netSavings)}</div>
         <PairBars rows={[

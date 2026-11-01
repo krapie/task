@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react'
-import { hoursText, shortDate } from '../lib/format'
+import { useRef, useState, type ReactNode } from 'react'
+import { hoursText, monthName, shortDate, won } from '../lib/format'
 
 // Monochrome chart primitives for the Overview and the Trader tab: ink on neutral, flat fills, no gradients.
 
@@ -35,6 +35,46 @@ export function Spark({ points, fill, className = '', label, min: lo, max: hi }:
       {fill && <polygon points={`0,${H} ${line} ${W},${H}`} fill="currentColor" opacity="0.08" />}
       <polyline points={line} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
+  )
+}
+
+// One value per month as a line, a dot per month with the month number under it (9 10 11; "26.1" when the series
+// crosses a year). Months are evenly spaced by the calendar. Hover or touch reads the nearest one off.
+// `points` are [YYYY-MM, amount], oldest first.
+export function LineChart({ points, label }: { points: [string, number][]; label?: string }) {
+  const plot = useRef<HTMLDivElement>(null)
+  const [active, setActive] = useState<number | null>(null)
+  if (points.length < 2) return null
+  const ym = points.map(([m]) => { const [y, n] = m.split('-').map(Number); return { y, n, i: y * 12 + n } })
+  const multiYear = ym[0].y !== ym[ym.length - 1].y
+  const [lo, hi] = spanDomain(points.map(p => p[1]), 0.02)
+  const iSpan = ym[ym.length - 1].i - ym[0].i || 1
+  const vSpan = hi - lo || 1
+  const H = 30
+  const xs = ym.map(m => ((m.i - ym[0].i) / iSpan) * 100)
+  const ys = points.map(p => H - 2 - ((p[1] - lo) / vSpan) * (H - 4))
+  const near = (clientX: number) => {
+    const r = plot.current?.getBoundingClientRect()
+    if (!r?.width) return
+    const fx = ((clientX - r.left) / r.width) * 100
+    setActive(xs.reduce((best, x, i) => (Math.abs(x - fx) < Math.abs(xs[best] - fx) ? i : best), 0))
+  }
+  return (
+    <div className="linechart">
+      <div ref={plot} className="linechart-plot" onPointerMove={e => near(e.clientX)} onPointerDown={e => near(e.clientX)} onPointerLeave={() => setActive(null)} role="img" aria-label={label}>
+        <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" aria-hidden="true">
+          <polyline points={xs.map((x, i) => `${x.toFixed(2)},${ys[i].toFixed(2)}`).join(' ')} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+        {active != null && <i className="linechart-cursor" style={{ left: `${xs[active]}%` }} aria-hidden="true" />}
+        {points.map(([m], i) => <i key={m} className={`linechart-dot${i === active ? ' linechart-dot-on' : ''}`} style={{ left: `${xs[i]}%`, top: `${(ys[i] / H) * 100}%` }} aria-hidden="true" />)}
+      </div>
+      <div className="linechart-months" aria-hidden="true">
+        {ym.map((m, i) => <span key={points[i][0]} className={i === active ? 'linechart-month-on' : undefined} style={{ left: `${xs[i]}%` }}>{multiYear ? `${String(m.y).slice(2)}.${m.n}` : m.n}</span>)}
+      </div>
+      <div className="linechart-read">
+        {active != null ? <span><b>{won(points[active][1])}</b> · {monthName(points[active][0])}</span> : <span>Last value of each month</span>}
+      </div>
+    </div>
   )
 }
 
