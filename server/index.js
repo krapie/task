@@ -7,6 +7,7 @@ import { load as loadHtml } from 'cheerio'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { getOrCreateRetro } from './retro.js'
 import { startMetricsServer, telemetry, withSpan } from './telemetry.js'
+import { poolOptions, warmPool } from './pool.js'
 
 const PORT = process.env.PORT || 3000
 // Sign-in is on auth.kevinprk.com. The web app sends access tokens from
@@ -40,15 +41,10 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 }
 
-// The web UI polls in bursts every ~5 min; the default 10 s idle timeout closed every connection in between, so each
-// burst paid 90-300 ms of pg.connect (traces, 2026-10-31) against 1-6 ms of query. Keep idle connections for 30 min;
-// TCP keepalive probes every 30 s drop one that a NAT or a postgres restart killed silently.
-const pool = new pg.Pool({
-  connectionString: process.env.POSTGRES_URL,
-  idleTimeoutMillis: 30 * 60_000,
-  keepAlive: true,
-  keepAliveInitialDelayMillis: 30_000,
-})
+// The web UI polls in bursts; the default 10 s idle timeout closed every connection in between, so each burst paid
+// 90-300 ms of pg.connect (traces, 2026-10-31) against 1-6 ms of query. Idle connections are kept for ever and a few are
+// opened at start (pool.js); TCP keepalive drops one that a NAT or a postgres restart killed silently.
+const pool = new pg.Pool(poolOptions(process.env.POSTGRES_URL, { max: 8, application_name: 'task-api' }))
 // Without a listener a dropped idle connection (postgres restart) is an uncaught 'error' event and kills the process.
 pool.on('error', err => console.error('pg pool:', err.message))
 
@@ -292,7 +288,7 @@ const assetAuth = stepUpAuth
 // health_task, which can read nothing else (no raw samples, no GPS routes).
 // See ~/homeserver/docs/health-dashboard.md.
 const healthPool = process.env.HEALTH_POSTGRES_URL
-  ? new pg.Pool({ connectionString: process.env.HEALTH_POSTGRES_URL, max: 2, idleTimeoutMillis: 30_000 })
+  ? new pg.Pool(poolOptions(process.env.HEALTH_POSTGRES_URL, { max: 2, application_name: 'task-api-health' }))
   : null
 healthPool?.on('error', err => console.error('health pool:', err.message))
 
@@ -1773,6 +1769,8 @@ app.post('/internal/push', async (req, res) => {
 
 initDb().then(async () => {
   await keepJwksWarm()
+  // Open the connections of a first screen (8 reads at once) before the first request arrives.
+  await Promise.all([warmPool(pool, 6), healthPool ? warmPool(healthPool, 1) : 0])
   startMetricsServer()
   app.listen(PORT, () => console.log(`task-api :${PORT}`))
   refreshNews().catch(e => console.error('news warm-up:', e.message))
