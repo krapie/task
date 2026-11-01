@@ -8,6 +8,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { getOrCreateRetro } from './retro.js'
 import { startMetricsServer, telemetry, withSpan } from './telemetry.js'
 import { poolOptions, warmPool } from './pool.js'
+import { createSwr } from './swr.js'
 
 const PORT = process.env.PORT || 3000
 // Sign-in is on auth.kevinprk.com. The web app sends access tokens from
@@ -292,12 +293,21 @@ const healthPool = process.env.HEALTH_POSTGRES_URL
   : null
 healthPool?.on('error', err => console.error('health pool:', err.message))
 
+// The view is computed on every read (several CTEs over 900k samples, 2-5 s). Its data changes only when a new Apple Health
+// export is uploaded (about monthly) and the hourly CronJob loads it, so a read within an hour is served from memory and one
+// up to a day old is served while it reloads. A new export therefore shows within an hour, after one read that still has the
+// old numbers. (An ingest could tell task-api to drop the value, as a sync does for assets; not built.)
+const healthSwr = createSwr({ freshMs: 60 * 60_000, staleMs: 24 * 60 * 60_000 })
+const loadHealthSummary = async () => {
+  const { rows } = await healthPool.query('SELECT summary FROM hk_task_summary')
+  return rows[0]?.summary ?? null
+}
+
 app.get('/api/health-data/summary', stepUpAuth, async (req, res) => {
   if (!healthPool) return res.status(503).json({ error: 'Health data not configured' })
   await audit('health_tab_view', req)
   try {
-    const { rows } = await healthPool.query('SELECT summary FROM hk_task_summary')
-    res.json(rows[0]?.summary ?? null)
+    res.json(await healthSwr.get('summary', loadHealthSummary))
   } catch (err) {
     console.error('health summary:', err.message)
     res.status(502).json({ error: 'Health data unavailable' })
@@ -310,32 +320,23 @@ app.get('/api/health-data/summary', stepUpAuth, async (req, res) => {
 // or order ids. Passkey step-up only, like Health and Assets (docs/apps/trader.md, "Task app").
 const TRADER_SUMMARY_URL = (process.env.TRADER_SUMMARY_URL || '').replace(/\/$/, '')
 const TRADER_SUMMARY_TOKEN = process.env.TRADER_SUMMARY_TOKEN || ''
-let traderCache = null
-let traderCacheAt = 0
-let traderInflight = null
-
-// One fetch at a time: the Overview asks on every unlock and the Trader tab may ask together with it.
-function fetchTraderSummary() {
-  traderInflight ??= fetch(`${TRADER_SUMMARY_URL}/internal/trader-summary?env=auto`, {
+// One fetch at a time (the Overview asks on every unlock and the Trader tab may ask together with it); an answer up to a
+// minute old is used as it is, and one up to 15 minutes old is served at once while ops is asked again.
+const traderSwr = createSwr({ freshMs: 60_000, staleMs: 15 * 60_000 })
+async function fetchTraderSummary() {
+  const r = await fetch(`${TRADER_SUMMARY_URL}/internal/trader-summary?env=auto`, {
     headers: { Authorization: `Bearer ${TRADER_SUMMARY_TOKEN}` },
     signal: AbortSignal.timeout(10_000),
   })
-    .then(async r => {
-      if (!r.ok) throw new Error(`ops answered ${r.status}`)
-      traderCache = await r.json()
-      traderCacheAt = Date.now()
-      return traderCache
-    })
-    .finally(() => { traderInflight = null })
-  return traderInflight
+  if (!r.ok) throw new Error(`ops answered ${r.status}`)
+  return r.json()
 }
 
 app.get('/api/trader/summary', stepUpAuth, async (req, res) => {
   if (!TRADER_SUMMARY_URL || !TRADER_SUMMARY_TOKEN) return res.status(503).json({ error: 'Trader data not configured' })
   await audit('trader_view', req)
-  if (traderCache && Date.now() - traderCacheAt < 60_000) return res.json(traderCache)
   try {
-    res.json(await fetchTraderSummary())
+    res.json(await traderSwr.get('summary', fetchTraderSummary))
   } catch (err) {
     console.error('trader summary:', err.message)
     res.status(502).json({ error: 'Trader data unavailable' })
@@ -359,14 +360,34 @@ async function financeProxy(req, res, path, init = {}) {
   }
 }
 
+// The summary is decrypted and computed by finance on every call (0.24 s, and finance ran at 86 % of its CPU limit): a
+// read within a minute is served from memory, one up to 10 minutes old is served while it reloads, and a sync drops it.
+const assetsSwr = createSwr({ freshMs: 60_000, staleMs: 10 * 60_000 })
+async function loadAssetSummary() {
+  let r
+  try {
+    r = await fetch(`${FINANCE_URL}/internal/summary`, { headers: { 'x-internal-key': INTERNAL_API_KEY, 'Content-Type': 'application/json' } })
+  } catch (err) {
+    throw Object.assign(new Error('finance service unreachable'), { status: 502, body: { error: 'finance service unreachable', detail: err.message } })
+  }
+  const body = await r.json().catch(() => ({}))
+  if (!r.ok) throw Object.assign(new Error(`finance answered ${r.status}`), { status: r.status, body })
+  return body
+}
+
 app.get('/api/assets/summary', assetAuth, async (req, res) => {
   await audit('asset_tab_view', req)
-  await financeProxy(req, res, '/internal/summary')
+  try {
+    res.json(await assetsSwr.get('summary', loadAssetSummary))
+  } catch (err) {
+    res.status(err.status || 502).json(err.body || { error: 'finance service unreachable' })
+  }
 })
 app.get('/api/assets/status', assetAuth, (req, res) => financeProxy(req, res, '/internal/status'))
 app.post('/api/assets/sync', assetAuth, async (req, res) => {
   await audit('asset_sync', req)
   await financeProxy(req, res, '/internal/sync', { method: 'POST' })
+  assetsSwr.invalidate('summary')
 })
 app.get('/api/assets/password', assetAuth, (req, res) => financeProxy(req, res, '/internal/password'))
 app.post('/api/assets/password', assetAuth, async (req, res) => {
@@ -1774,6 +1795,9 @@ initDb().then(async () => {
   startMetricsServer()
   app.listen(PORT, () => console.log(`task-api :${PORT}`))
   refreshNews().catch(e => console.error('news warm-up:', e.message))
+  // Fill the summaries now, so the first screen after a deploy does not wait for the health view or finance.
+  if (healthPool) healthSwr.get('summary', loadHealthSummary).catch(e => console.error('health warm-up:', e.message))
+  assetsSwr.get('summary', loadAssetSummary).catch(e => console.error('assets warm-up:', e.message))
 }).catch(err => {
   console.error('DB init failed:', err)
   process.exit(1)
