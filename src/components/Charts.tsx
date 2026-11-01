@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { hoursText, monthName, shortDate, won } from '../lib/format'
+import { hoursText, shortDate } from '../lib/format'
 
 // Monochrome chart primitives for the Overview and the Trader tab: ink on neutral, flat fills, no gradients.
 
@@ -39,11 +39,13 @@ export function Spark({ points, fill, className = '', label, min: lo, max: hi }:
 }
 
 // One value per month as a line, a dot per month with the month number under it (9 10 11; "26.1" when the series
-// crosses a year). Months are evenly spaced by the calendar. Hover or touch reads the nearest one off.
+// crosses a year). Months are evenly spaced by the calendar. Hover or touch picks the nearest one and reports it
+// through `onActive` (null when the pointer leaves), so the caller shows the reading where it has room.
 // `points` are [YYYY-MM, amount], oldest first.
-export function LineChart({ points, label }: { points: [string, number][]; label?: string }) {
+export function LineChart({ points, label, onActive, className = '' }: { points: [string, number][]; label?: string; onActive?: (i: number | null) => void; className?: string }) {
   const plot = useRef<HTMLDivElement>(null)
-  const [active, setActive] = useState<number | null>(null)
+  const [active, set] = useState<number | null>(null)
+  const setActive = (i: number | null) => { set(i); onActive?.(i) }
   if (points.length < 2) return null
   const ym = points.map(([m]) => { const [y, n] = m.split('-').map(Number); return { y, n, i: y * 12 + n } })
   const multiYear = ym[0].y !== ym[ym.length - 1].y
@@ -60,8 +62,8 @@ export function LineChart({ points, label }: { points: [string, number][]; label
     setActive(xs.reduce((best, x, i) => (Math.abs(x - fx) < Math.abs(xs[best] - fx) ? i : best), 0))
   }
   return (
-    <div className="linechart">
-      <div ref={plot} className="linechart-plot" onPointerMove={e => near(e.clientX)} onPointerDown={e => near(e.clientX)} onPointerLeave={() => setActive(null)} role="img" aria-label={label}>
+    <div className={`linechart ${className}`}>
+      <div ref={plot} className="linechart-plot" onPointerMove={e => near(e.clientX)} onPointerDown={e => near(e.clientX)} onPointerLeave={() => setActive(null)} onPointerCancel={() => setActive(null)} onPointerUp={e => e.pointerType !== 'mouse' && setActive(null)} role="img" aria-label={label}>
         <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" aria-hidden="true">
           <polyline points={xs.map((x, i) => `${x.toFixed(2)},${ys[i].toFixed(2)}`).join(' ')} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
         </svg>
@@ -70,9 +72,6 @@ export function LineChart({ points, label }: { points: [string, number][]; label
       </div>
       <div className="linechart-months" aria-hidden="true">
         {ym.map((m, i) => <span key={points[i][0]} className={i === active ? 'linechart-month-on' : undefined} style={{ left: `${xs[i]}%` }}>{multiYear ? `${String(m.y).slice(2)}.${m.n}` : m.n}</span>)}
-      </div>
-      <div className="linechart-read">
-        {active != null ? <span><b>{won(points[active][1])}</b> · {monthName(points[active][0])}</span> : <span>Last value of each month</span>}
       </div>
     </div>
   )

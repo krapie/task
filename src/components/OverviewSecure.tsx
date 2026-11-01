@@ -146,6 +146,30 @@ function HealthPanel({ unlocked, masked, s, onOpen }: PanelProps<HealthSummary |
   )
 }
 
+// The net worth with its monthly trend beside it (the last 12 months), so the chart costs no height. The line under
+// the number is the change since the first month, or the month under the pointer while hovering the chart.
+function AssetsHero({ a }: { a: AssetSummary }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const nw = (a.netWorthHistory ?? []).slice(-12)
+  const from = nw[0]
+  const delta = from ? a.netWorth - from[1] : 0
+  const debt = a.totalDebt ? `debt ${wonShort(a.totalDebt)}` : ''
+  const at = hover != null ? nw[hover] : undefined // the data can shrink under a stale index
+  return (
+    <div className="ov-hero ov-hero-trend">
+      <div className="ov-hero-main">
+        <b className="ov-big">{won(a.netWorth)}</b>
+        <span className="ov-sub-inline">
+          {at ? <><b>{won(at[1])}</b> · {monthName(at[0])}</>
+            : from ? [`${signedWon(delta)} (${signedPct(delta / from[1])}) since ${monthName(from[0])}`, debt].filter(Boolean).join(' · ')
+            : ['net worth', debt].filter(Boolean).join(' · ')}
+        </span>
+      </div>
+      {nw.length > 1 && <LineChart points={nw} onActive={setHover} label="Net worth by month" />}
+    </div>
+  )
+}
+
 function AssetsPanel({ unlocked, masked, s, onOpen }: PanelProps<AssetSummary>) {
   const a = s.data
   if (!unlocked || !a || masked) {
@@ -160,23 +184,9 @@ function AssetsPanel({ unlocked, masked, s, onOpen }: PanelProps<AssetSummary>) 
   const rest = cats.slice(4).reduce((t, c) => t + c.amount, 0)
   const parts = [...top.map(c => ({ label: c.category, value: c.amount })), ...(rest > 0 ? [{ label: 'Other', value: rest }] : [])]
   const m = a.thisMonth
-  const nw = (a.netWorthHistory ?? []).slice(-12)
-  const nwFrom = nw[0]
-  const nwDelta = nwFrom ? a.netWorth - nwFrom[1] : 0
   return (
     <Panel title="Assets" onOpen={onOpen} className="ov-assets">
-      <div className="ov-hero">
-        <div>
-          <b className="ov-big">{won(a.netWorth)}</b>
-          <span className="ov-sub-inline">net worth{a.totalDebt ? ` · debt ${wonShort(a.totalDebt)}` : ''}</span>
-        </div>
-      </div>
-      {nw.length > 1 && (
-        <div className="ov-block">
-          <div className="ov-sub">Net worth · {signedWon(nwDelta)} ({signedPct(nwDelta / nwFrom[1])}) since {monthName(nwFrom[0])}</div>
-          <LineChart points={nw} label="Net worth over time" />
-        </div>
-      )}
+      <AssetsHero a={a} />
       <div className="ov-block">
         <div className="ov-sub">This month · net {signedWon(m.netSavings)}</div>
         <PairBars rows={[
