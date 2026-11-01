@@ -3816,9 +3816,9 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .md-code { font-family: var(--kp-font-mono); font-size: var(--kp-text-ui); background: var(--kp-bg-subtle); border: 1px solid var(--kp-border-faint); border-radius: var(--kp-radius-sm); padding: var(--kp-space-3); overflow-x: auto; margin: 0; }
 .md-code code { background: none; padding: 0; }
 .md-table-wrap { overflow-x: auto; }
-.md-table { border-collapse: collapse; font-size: var(--kp-text-sm); min-width: 50%; }
+.md-table { border-collapse: collapse; font-size: var(--kp-text-sm); width: 100%; }
 .md-table th { text-align: left; font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); font-weight: var(--kp-weight-regular); text-transform: uppercase; letter-spacing: 0.06em; color: var(--kp-fg-3); border-bottom: 1px solid var(--kp-border); }
-.md-table th, .md-table td { padding: 6px var(--kp-space-4) 6px 0; vertical-align: top; }
+.md-table th, .md-table td { padding: 6px var(--kp-space-4) 6px 0; vertical-align: top; word-break: keep-all; overflow-wrap: break-word; }
 .md-table td { border-bottom: 1px solid var(--kp-border-faint); font-variant-numeric: tabular-nums; }
 .tool-call { border: 1px solid var(--kp-border-faint); border-radius: var(--kp-radius-sm); }
 .tool-call summary { display: flex; align-items: center; gap: var(--kp-space-2); cursor: pointer; list-style: none; padding: 6px var(--kp-space-3); font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); color: var(--kp-fg-3); min-width: 0; }
