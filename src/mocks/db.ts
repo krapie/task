@@ -1,6 +1,6 @@
 // Synthetic, in-memory state for the staging build (docs/staging.md). Nothing here is real data.
 // Typed against the app's own types so a changed shape fails `tsc`. A page reload resets it.
-import type { Addition, AssetSummary, CalendarEvent, GoalPeriod, HealthSummary, MailAccount, MailItem, MailSenderRule, NewsItem, Settings, Slot, Template, TodoItem, TraderSummary } from '../types'
+import type { Addition, AssetSummary, CalendarEvent, FinanceStatus, GoalPeriod, HealthSummary, MailAccount, MailItem, MailSenderRule, NewsItem, Settings, Slot, Template, TodoItem, TraderSummary } from '../types'
 
 const day = (offset = 0) => {
   const d = new Date(Date.now() + offset * 86_400_000)
@@ -117,8 +117,13 @@ export const assetSummary: AssetSummary = {
     { category: 'Deposit', amount: 50_000_000 }, { category: 'Cash', amount: 12_000_000 }, { category: 'Pension', amount: 7_000_000 }, { category: 'Other', amount: 3_000_000 },
   ],
   investment: { principal: 70_000_000, value: 78_000_000, pnl: 8_000_000 },
-  thisMonth: { income: 4_800_000, expense: 3_150_000, netSavings: 1_650_000 },
+  thisMonth: { month: month(-1), income: 4_800_000, expense: 3_150_000, netSavings: 1_650_000 },
   netWorthHistory: [[month(-6), 171_400_000], [month(-5), 174_900_000], [month(-4), 173_800_000], [month(-3), 177_300_000], [month(-2), 181_800_000], [month(-1), 181_795_000], [month(0), 184_320_000]],
+}
+
+export const assetStatus: FinanceStatus = {
+  lastIngest: { source_file: 'banksalad-export.zip', ingested_at: iso(60 * 6), rows_total: 2275, rows_new: 193, rows_updated: 4 },
+  transactionCount: 2275, dateRange: [day(-365), day(-1)],
 }
 
 export const healthSummary: HealthSummary = {

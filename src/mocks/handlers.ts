@@ -259,6 +259,12 @@ export const handlers: HttpHandler[] = [
 
   // The private data behind the passkey step-up: the same mocked token opens all of it.
   http.get('/api/assets/summary', async () => ok(db.assetSummary)),
+  http.get('/api/assets/status', async () => ok(db.assetStatus)),
+  http.post('/api/assets/sync', async () => ok({ rowsTotal: 2275, rowsNew: 0, rowsUpdated: 0, sourceFile: 'banksalad-export.zip' })),
+  http.get('/api/assets/password', async () => ok({ isSet: true })),
+  http.post('/api/assets/password', async () => ok({ ok: true })),
+  http.get('/api/assets/notify-settings', async () => ok({ financeNotifyEnabled: 'true', financeNotifyDay: '22', financeNotifyHour: '9', financeNotifyMinute: '0' })),
+  http.post('/api/assets/notify-settings', async () => ok({ ok: true })),
   http.get('/api/health-data/summary', async () => ok(empty() ? null : db.healthSummary)),
   http.get('/api/trader/summary', async () => ok(empty() ? { ...db.traderSummary, etfs: [], portfolio: { ...db.traderSummary.portfolio, history: [] }, buys: { ...db.traderSummary.buys, n: 0, rows: [] } } : db.traderSummary)),
 

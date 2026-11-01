@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '../lib/api'
-import { clockKst, hoursText, monthName, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
+import { clockKst, hoursText, monthLabel, monthName, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
 import { useStepUp } from '../lib/useStepUp'
 import type { AssetSummary, HealthSummary, TraderSummary } from '../types'
 import { LineChart, NightBars, Ring, SplitBar, PairBars, Spark } from './Charts'
@@ -188,7 +188,7 @@ function AssetsPanel({ unlocked, masked, s, onOpen }: PanelProps<AssetSummary>) 
     <Panel title="Assets" onOpen={onOpen} className="ov-assets">
       <AssetsHero a={a} />
       <div className="ov-block">
-        <div className="ov-sub">This month · net {signedWon(m.netSavings)}</div>
+        <div className="ov-sub">{monthLabel(m.month)} · net {signedWon(m.netSavings)}</div>
         <PairBars rows={[
           { label: 'Income', value: m.income, display: wonShort(m.income) },
           { label: 'Spent', value: m.expense, display: wonShort(m.expense) },

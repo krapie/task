@@ -4010,9 +4010,11 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .ov-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: var(--kp-space-3); padding-bottom: var(--kp-space-3); flex-shrink: 0; }
 .ov-big { display: block; font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; color: var(--kp-fg); }
 .ov-nowrap { white-space: nowrap; }
-.ov-hero-trend { flex-wrap: wrap; align-items: flex-end; }
-.ov-hero-trend .linechart { flex: 1 1 130px; min-width: 130px; max-width: 240px; margin-left: auto; }
-.ov-hero-main { flex: 0 1 190px; min-width: 0; }
+.ov-hero-trend { flex-wrap: wrap; align-items: stretch; }
+.ov-assets .ov-hero-trend { flex: 1 0 auto; max-height: 220px; } /* spare panel height goes to the hero, so the chart grows with it */
+.ov-hero-trend .linechart { flex: 1 1 130px; min-width: 130px; margin-left: auto; display: flex; flex-direction: column; }
+.ov-hero-trend .linechart-plot { flex: 1; height: auto; min-height: 34px; max-height: 150px; }
+.ov-hero-main { flex: 0 1 190px; min-width: 0; align-self: flex-start; }
 .ov-hero-main .ov-sub-inline b { font-weight: 500; color: var(--kp-fg); }
 .ov-sub-inline { display: block; margin-top: 3px; font-size: var(--kp-text-xs); color: var(--kp-fg-3); }
 .ov-block { padding-bottom: var(--kp-space-3); flex-shrink: 0; }

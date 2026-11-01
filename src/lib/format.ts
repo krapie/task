@@ -45,6 +45,16 @@ export function monthName(ym: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short' })
 }
 
+// The label of the month the income and spending figures are for: "October", or "November so far" when it is the
+// running month (the newest export already holds some of it).
+export function monthLabel(ym: string | null | undefined): string {
+  if (!ym) return 'This month'
+  const [y, m] = ym.split('-').map(Number)
+  const now = new Date()
+  const name = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long' })
+  return y === now.getFullYear() && m === now.getMonth() + 1 ? `${name} so far` : name
+}
+
 // "2026-10-25" → "Oct 25"
 export function shortDate(d: string): string {
   const [y, m, day] = d.split('-').map(Number)

@@ -194,7 +194,8 @@ export interface AssetSummary {
   creditScore: number | null
   categoryBreakdown: { category: string; amount: number }[]
   investment: { principal: number; value: number; pnl: number }
-  thisMonth: { income: number; expense: number; netSavings: number }
+  // The month with the newest transactions (YYYY-MM; null when there are none), which is not always the calendar month.
+  thisMonth: { month: string | null; income: number; expense: number; netSavings: number }
   // [YYYY-MM, net worth]: one point per month, its last snapshot (the daily snapshots repeat within a month).
   netWorthHistory: [string, number][]
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
+import { monthLabel } from '../lib/format'
 import StepUpBar from './StepUpBar'
 import type { AssetSummary, FinanceStatus, FinanceNotifySettings } from '../types'
 import { promptDialog } from '../lib/notify'
@@ -145,7 +146,7 @@ export default function AssetsView({ isAuth }: AssetsViewProps) {
       </div>
 
       <div className="assets-section">
-        <div className="section-label">This month</div>
+        <div className="section-label">{monthLabel(summary?.thisMonth.month)}</div>
         <div className="assets-stat-grid">
           <div className="assets-stat">
             <span className="assets-stat-label">Income</span>
