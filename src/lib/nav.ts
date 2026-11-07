@@ -30,7 +30,7 @@ export const GROUPS: Group[] = [
   { id: 'today', label: 'Tasks', icon: 'routine', views: ['routine'] },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', views: ['calendar'] },
   { id: 'inbox', label: 'Inbox', icon: 'mail', views: ['mail', 'news'] },
-  { id: 'life', label: 'Life', icon: 'health', views: ['assets', 'health', 'trader'] },
+  { id: 'life', label: 'Life', icon: 'analyze', views: ['assets', 'health', 'trader'] },
   { id: 'note', label: 'Note', icon: 'note', views: ['notes', 'chats'] },
   { id: 'settings', label: 'Settings', icon: 'settings', views: ['settings'] },
 ]

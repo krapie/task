@@ -8,9 +8,9 @@ import { api, STEP_UP_EVENT, type StepUpView } from './api'
 //
 // Locks on: the Lock button, the tab going to the background (no amounts in
 // an app-switcher screenshot), and the end of the 1-hour passkey session. There
-// is no idle lock and no refresh. Locking also tells auth to forget the passkey
+// is no idle lock and no refresh. `beforeLock` lets a view save its unsaved work first (Notes autosave). Locking also tells auth to forget the passkey
 // check, so every unlock after a lock needs a fresh passkey and gets a full hour.
-export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void, returnTo?: () => string | undefined) {
+export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void, returnTo?: () => string | undefined, beforeLock?: () => void) {
   const [unlocked, setUnlocked] = useState(() => api.assets.hasToken())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -20,7 +20,13 @@ export function useStepUp(view: StepUpView, isAuth: boolean, onLock: () => void,
   const unlockedRef = useRef(unlocked)
   unlockedRef.current = unlocked
 
+  const beforeLockRef = useRef(beforeLock)
+  beforeLockRef.current = beforeLock
+
   const lock = useCallback(() => {
+    // Runs while the step-up token is still there: a view can start its last save with it (the request keeps
+    // the token it was sent with). It must start the request synchronously.
+    beforeLockRef.current?.()
     api.passkey.lock()
     api.assets.clearToken()
     setUnlocked(false)

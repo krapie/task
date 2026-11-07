@@ -8,6 +8,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { getOrCreateRetro } from './retro.js'
 import { startMetricsServer, telemetry, withSpan } from './telemetry.js'
 import { poolOptions, warmPool } from './pool.js'
+import { noteAccess, NOTE_EDIT_AUDIT_WINDOW_MINUTES } from './notes-access.js'
 
 const PORT = process.env.PORT || 3000
 // Sign-in is on auth.kevinprk.com. The web app sends access tokens from
@@ -186,6 +187,13 @@ async function initDb() {
     );
     ALTER TABLE notes ADD COLUMN IF NOT EXISTS title TEXT;
     ALTER TABLE notes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `)
+  // Hidden notes are only shown with the passkey. One statement batch = one transaction: the column is added with
+  // default true (every note that exists now is hidden), then the default for new notes becomes false. A later
+  // start finds the column and only repeats the harmless SET DEFAULT.
+  await pool.query(`
+    ALTER TABLE notes ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE notes ALTER COLUMN hidden SET DEFAULT false;
   `)
   await pool.query(`UPDATE notes SET created_at = updated_at WHERE created_at > updated_at`)
   await pool.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS fts tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(title, '') || ' ' || body)) STORED`)
@@ -1681,81 +1689,120 @@ app.patch('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
 app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' }))
 
-// The owner's notes (passkey step-up, like Chats): written in the Note tab, searched and read by the assistant
-// (notes_search / note_get), changed by the assistant only through a proposal the
-// owner applies here.
+// The owner's notes: written in the Note tab, searched and read by the assistant (notes_search / note_get),
+// changed by the assistant only through a proposal the owner applies here.
+// Two tiers (notes-access.js): the owner's plain session sees the notes that are not hidden; the passkey
+// step-up token also sees the hidden ones. A hidden note asked for without the passkey answers 404, like a
+// note that does not exist. Setting `hidden` needs the passkey.
 const NOTE_KEY = /^[a-z][a-z0-9_-]{0,59}$/
 const noteTitle = v => (typeof v === 'string' ? v.trim().slice(0, 80) : '')
 const noteBodyOk = v => typeof v === 'string' && v.trim() && v.length <= 100_000
 
-app.get('/api/notes', stepUpAuth, async (req, res) => {
+async function notesAuth(req, res, next) {
+  res.set('Cache-Control', 'no-store')
+  const access = noteAccess(await verifyToken(req), STEP_UP_USERS)
+  if (access.level === 'none') return res.status(401).json({ error: 'Unauthorized' })
+  if (access.level === 'forbidden') {
+    await audit('notes_denied', req)
+    return res.status(403).json({ error: 'Forbidden' })
+  }
+  req.user = { username: access.username, sub: access.sub }
+  req.notesUnlocked = access.level === 'all'
+  next()
+}
+
+// Autosave saves a note every pause in typing: keep one note_edit line per note per window.
+async function auditNoteEdit(key, req) {
+  const event = `note_edit:${key}`
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM audit_log WHERE event = $1 AND created_at > NOW() - make_interval(mins => $2) LIMIT 1`,
+    [event, NOTE_EDIT_AUDIT_WINDOW_MINUTES]
+  )
+  if (!rowCount) await audit(event, req)
+}
+
+app.get('/api/notes', notesAuth, async (req, res) => {
   const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 200) : ''
   if (!q) {
     const { rows } = await pool.query(
-      `SELECT key, coalesce(title, key) AS title, created_at, updated_at, length(body) AS chars, left(regexp_replace(body, '\\s+', ' ', 'g'), 140) AS snippet
-         FROM notes ORDER BY updated_at DESC LIMIT 500`
+      `SELECT key, coalesce(title, key) AS title, hidden, created_at, updated_at, length(body) AS chars, left(regexp_replace(body, '\\s+', ' ', 'g'), 140) AS snippet
+         FROM notes WHERE ($1 OR NOT hidden) ORDER BY updated_at DESC LIMIT 500`,
+      [req.notesUnlocked]
     )
     return res.json(rows)
   }
   // Full text ('simple' config, no stemming) OR substring: Korean has no word boundaries to match on.
   const like = `%${q.replace(/[\\%_]/g, m => `\\${m}`)}%`
   const { rows } = await pool.query(
-    `SELECT key, coalesce(title, key) AS title, created_at, updated_at, length(body) AS chars,
+    `SELECT key, coalesce(title, key) AS title, hidden, created_at, updated_at, length(body) AS chars,
             left(regexp_replace(CASE WHEN position(lower($2) in lower(body)) > 0 THEN substr(body, greatest(position(lower($2) in lower(body)) - 40, 1)) ELSE body END, '\\s+', ' ', 'g'), 140) AS snippet
        FROM notes
-      WHERE fts @@ plainto_tsquery('simple', $1) OR coalesce(title, '') ILIKE $3 OR body ILIKE $3
+      WHERE (fts @@ plainto_tsquery('simple', $1) OR coalesce(title, '') ILIKE $3 OR body ILIKE $3) AND ($4 OR NOT hidden)
       ORDER BY (coalesce(title, '') ILIKE $3) DESC, ts_rank(fts, plainto_tsquery('simple', $1)) DESC, updated_at DESC LIMIT 100`,
-    [q, q, like]
+    [q, q, like, req.notesUnlocked]
   )
   res.json(rows)
 })
-app.get('/api/notes/:key', stepUpAuth, async (req, res) => {
+app.get('/api/notes/:key', notesAuth, async (req, res) => {
   if (!NOTE_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
-  const { rows } = await pool.query('SELECT key, coalesce(title, key) AS title, body, created_at, updated_at FROM notes WHERE key = $1', [req.params.key])
+  const { rows } = await pool.query(
+    'SELECT key, coalesce(title, key) AS title, body, hidden, created_at, updated_at FROM notes WHERE key = $1 AND ($2 OR NOT hidden)',
+    [req.params.key, req.notesUnlocked]
+  )
   if (!rows[0]) return res.status(404).json({ error: 'not found' })
   res.json(rows[0])
 })
-app.post('/api/notes', stepUpAuth, async (req, res) => {
+app.post('/api/notes', notesAuth, async (req, res) => {
   const title = noteTitle(req.body?.title)
   if (!title || !noteBodyOk(req.body?.body)) return res.status(400).json({ error: 'title 1-80 chars, body 1-100000 chars' })
+  if (req.body?.hidden !== undefined && typeof req.body.hidden !== 'boolean') return res.status(400).json({ error: 'hidden must be true or false' })
+  const hidden = req.body?.hidden === true
+  if (hidden && !req.notesUnlocked) return res.status(401).json({ error: 'Passkey needed to hide a note' })
   const key = `n-${randomBytes(4).toString('hex')}`
   const { rows } = await pool.query(
-    'INSERT INTO notes (key, title, body) VALUES ($1, $2, $3) RETURNING key, title, updated_at',
-    [key, title, req.body.body]
+    'INSERT INTO notes (key, title, body, hidden) VALUES ($1, $2, $3, $4) RETURNING key, title, hidden, updated_at',
+    [key, title, req.body.body, hidden]
   )
   await audit(`note_create:${key}`, req)
   res.status(201).json(rows[0])
 })
-app.put('/api/notes/:key', stepUpAuth, async (req, res) => {
+app.put('/api/notes/:key', notesAuth, async (req, res) => {
   const { body, base_updated_at: base } = req.body || {}
   const title = req.body?.title === undefined ? null : noteTitle(req.body.title)
-  if (!NOTE_KEY.test(req.params.key) || !noteBodyOk(body) || title === '' || (base != null && Number.isNaN(Date.parse(base)))) {
-    return res.status(400).json({ error: 'key a-z0-9_-, title 1-80 chars, body 1-100000 chars' })
+  const hidden = req.body?.hidden ?? null
+  if (!NOTE_KEY.test(req.params.key) || !noteBodyOk(body) || title === '' || (base != null && Number.isNaN(Date.parse(base))) || (hidden !== null && typeof hidden !== 'boolean')) {
+    return res.status(400).json({ error: 'key a-z0-9_-, title 1-80 chars, body 1-100000 chars, hidden true or false' })
   }
+  // The passkey is needed to change `hidden`, not to repeat the value it already has.
   // base_updated_at: a proposal or an open editor is only applied to the version it was made from.
   const { rows } = await pool.query(
-    `UPDATE notes SET body = $2, title = coalesce($3, title), updated_at = NOW()
-      WHERE key = $1 AND ($4::timestamptz IS NULL OR date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', $4::timestamptz))
-      RETURNING key, title, updated_at`,
-    [req.params.key, body, title, base ?? null]
+    `UPDATE notes n SET body = $2, title = coalesce($3, n.title), hidden = coalesce($5::boolean, n.hidden), updated_at = NOW()
+       FROM (SELECT key, hidden AS was_hidden FROM notes WHERE key = $1) o
+      WHERE n.key = o.key AND ($6 OR NOT n.hidden) AND ($5::boolean IS NULL OR $5::boolean = n.hidden OR $6)
+        AND ($4::timestamptz IS NULL OR date_trunc('milliseconds', n.updated_at) = date_trunc('milliseconds', $4::timestamptz))
+      RETURNING n.key, n.title, n.hidden, n.updated_at, o.was_hidden`,
+    [req.params.key, body, title, base ?? null, hidden, req.notesUnlocked]
   )
   if (!rows[0]) {
-    const exists = await pool.query('SELECT 1 FROM notes WHERE key = $1', [req.params.key])
+    const exists = await pool.query('SELECT 1 FROM notes WHERE key = $1 AND ($2 OR NOT hidden)', [req.params.key, req.notesUnlocked])
     if (!exists.rowCount) return res.status(404).json({ error: 'not found' })
+    if (hidden !== null && !req.notesUnlocked) return res.status(401).json({ error: 'Passkey needed to hide or show a note' })
     return res.status(409).json({ error: 'The note changed since this version was made' })
   }
-  await audit(`note_edit:${req.params.key}`, req)
-  res.json(rows[0])
+  const { was_hidden: was, ...out } = rows[0]
+  if (out.hidden !== was) await audit(`${out.hidden ? 'note_hide' : 'note_unhide'}:${req.params.key}`, req)
+  await auditNoteEdit(req.params.key, req)
+  res.json(out)
 })
-app.delete('/api/notes/:key', stepUpAuth, async (req, res) => {
+app.delete('/api/notes/:key', notesAuth, async (req, res) => {
   if (!NOTE_KEY.test(req.params.key)) return res.status(400).json({ error: 'bad key' })
-  const { rowCount } = await pool.query('DELETE FROM notes WHERE key = $1', [req.params.key])
+  const { rowCount } = await pool.query('DELETE FROM notes WHERE key = $1 AND ($2 OR NOT hidden)', [req.params.key, req.notesUnlocked])
   if (!rowCount) return res.status(404).json({ error: 'not found' })
   await audit(`note_delete:${req.params.key}`, req)
   res.status(204).end()
 })
 
-// ops asks for a push when a scheduled report (weekly recap, market check) is
+// ops asks for a push when a scheduled report (market note) is
 // ready. In-cluster only (not routed by Envoy); bearer INTERNAL_PUSH_TOKEN.
 app.post('/internal/push', async (req, res) => {
   const got = Buffer.from(String(req.headers.authorization || '').replace(/^Bearer /, ''))

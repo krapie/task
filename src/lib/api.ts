@@ -108,6 +108,7 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
       const err = await retry.json().catch(() => ({ error: retry.statusText }))
       throw new Error((err as { error?: string }).error ?? retry.statusText)
     }
+    if (retry.status === 204) return undefined as T
     return retry.json() as Promise<T>
   }
 
@@ -115,6 +116,7 @@ async function reqInner<T>(method: string, path: string, body?: unknown): Promis
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error((err as { error?: string }).error ?? res.statusText)
   }
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
@@ -163,14 +165,16 @@ export function assetTokenRemainingMs(): number {
   return Math.max(0, _assetTokenExpiresAt - Date.now())
 }
 
-async function assetReq<T>(method: string, path: string, body?: unknown): Promise<T> {
-  if (!hasAssetToken()) {
+// `token`: send this step-up token instead of the current one (a save that was asked for before a lock still
+// has to go out with the token it was asked for with).
+async function assetReq<T>(method: string, path: string, body?: unknown, token?: string): Promise<T> {
+  if (!token && !hasAssetToken()) {
     clearAssetToken()
     throw new Error('ASSET_SESSION_EXPIRED')
   }
   const res = await fetch(`/api${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${_assetToken}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token ?? _assetToken}` },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (res.status === 401) {
@@ -189,6 +193,11 @@ async function assetReq<T>(method: string, path: string, body?: unknown): Promis
   if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
+
+// Notes: the plain session reaches the notes that are not hidden, the step-up token (while unlocked) all of
+// them. The server decides by the token, so unlocked requests carry it and locked ones the normal session.
+const noteReq = <T,>(method: string, path: string, body?: unknown, stepUpToken?: string | null): Promise<T> =>
+  stepUpToken ? assetReq<T>(method, path, body, stepUpToken) : hasAssetToken() ? assetReq<T>(method, path, body) : req<T>(method, path, body)
 
 // Assistant chat: SSE from the operator's personal profile via task-api. The
 // stream is read with the step-up token, like every other step-up request.
@@ -439,12 +448,15 @@ export const api = {
     update: (id: string, patch: { title?: string; folder?: AssistantFolder }) => assetReq<void>('PATCH', `/assistant/conversations/${id}`, patch),
   },
   notes: {
-    list: (q?: string) => assetReq<NoteSummary[]>('GET', q?.trim() ? `/notes?q=${encodeURIComponent(q.trim())}` : '/notes'),
-    get: (key: string) => assetReq<Note>('GET', `/notes/${key}`),
-    create: (title: string, body: string) => assetReq<{ key: string; title: string; updated_at: string }>('POST', '/notes', { title, body }),
-    save: (key: string, note: { title: string; body: string; base_updated_at?: string | null }) =>
-      assetReq<{ key: string; title: string; updated_at: string }>('PUT', `/notes/${key}`, note),
-    remove: (key: string) => assetReq<void>('DELETE', `/notes/${key}`),
+    list: (q?: string) => noteReq<NoteSummary[]>('GET', q?.trim() ? `/notes?q=${encodeURIComponent(q.trim())}` : '/notes'),
+    get: (key: string) => noteReq<Note>('GET', `/notes/${key}`),
+    create: (title: string, body: string, hidden = false, stepUpToken?: string | null) =>
+      noteReq<{ key: string; title: string; hidden: boolean; updated_at: string }>('POST', '/notes', hidden ? { title, body, hidden } : { title, body }, stepUpToken),
+    // The step-up token as it is now, to pass to create / save: they go out with it even if a lock clears it first.
+    auth: (): string | null => (hasAssetToken() ? _assetToken : null),
+    save: (key: string, note: { title: string; body: string; base_updated_at?: string | null; hidden?: boolean }, stepUpToken?: string | null) =>
+      noteReq<{ key: string; title: string; hidden: boolean; updated_at: string }>('PUT', `/notes/${key}`, note, stepUpToken),
+    remove: (key: string) => noteReq<void>('DELETE', `/notes/${key}`),
   },
   health: {
     getSummary: () => assetReq<HealthSummary | null>('GET', '/health-data/summary'),

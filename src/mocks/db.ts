@@ -1,6 +1,6 @@
 // Synthetic, in-memory state for the staging build (docs/staging.md). Nothing here is real data.
 // Typed against the app's own types so a changed shape fails `tsc`. A page reload resets it.
-import type { Addition, AssetSummary, CalendarEvent, FinanceStatus, GoalPeriod, HealthSummary, MailAccount, MailItem, MailSenderRule, NewsItem, Settings, Slot, Template, TodoItem, TraderSummary } from '../types'
+import type { Addition, AssetSummary, CalendarEvent, FinanceStatus, GoalPeriod, HealthSummary, MailAccount, MailItem, MailSenderRule, NewsItem, Note, Settings, Slot, Template, TodoItem, TraderSummary } from '../types'
 
 const day = (offset = 0) => {
   const d = new Date(Date.now() + offset * 86_400_000)
@@ -109,6 +109,13 @@ export const mailItems: MailItem[] = [
 // A smooth wobble, so the sparklines have a shape without random numbers.
 const wave = (n: number, from: number, to: number, amp = 0.02) =>
   Array.from({ length: n }, (_, i) => Math.round((from + ((to - from) * i) / (n - 1)) * (1 + amp * Math.sin(i * 0.9))))
+
+export const notes: Note[] = [
+  { key: 'n-mock0001', title: 'Weekend plan (mock)', body: '# Weekend plan\n\n- [ ] Groceries\n- [x] Laundry\n- [ ] Call the plumber', hidden: false, created_at: iso(60 * 30), updated_at: iso(60 * 3) },
+  { key: 'n-mock0002', title: 'Reading list (mock)', body: '# Reading list\n\nThings to read next.\n\n1. A book about trains\n2. A paper on queues', hidden: false, created_at: iso(60 * 90), updated_at: iso(60 * 40) },
+  { key: 'n-mock0003', title: 'Private: accounts (mock)', body: '# Private\n\nThis note is hidden and only shows with the passkey.', hidden: true, created_at: iso(60 * 200), updated_at: iso(60 * 20) },
+  { key: 'n-mock0004', title: 'Private: ideas (mock)', body: '# Ideas\n\nAnother hidden note.', hidden: true, created_at: iso(60 * 120), updated_at: iso(60 * 60) },
+]
 
 export const assetSummary: AssetSummary = {
   netWorth: 184_320_000, totalAssets: 212_000_000, totalDebt: 27_680_000, creditScore: 912,

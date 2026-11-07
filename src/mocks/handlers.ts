@@ -1,6 +1,6 @@
 // MSW handlers for the staging build: task-api (/api/*) and auth's token endpoint, from db.ts.
 // Anything under /api without a handler returns 501 "not mocked" so a gap is visible in the UI.
-// Not mocked yet: the finance import details and notes (the passkey step-up tabs); the assistant only lists no conversations, enough to show its empty state.
+// Not mocked yet: the finance import details (a passkey step-up tab); the assistant only lists no conversations, enough to show its empty state.
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import type { DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
 import * as db from './db'
@@ -22,6 +22,9 @@ const none = async () => {
   return new HttpResponse(null, { status: 204 })
 }
 const list = <T>(xs: T[]): T[] => (empty() ? [] : xs)
+// The step-up token is told apart from the plain one so the notes handlers can hide what the passkey hides.
+const STEP_UP_TOKEN = 'mock-stepup-token'
+const unlocked = (request: Request) => request.headers.get('Authorization') === `Bearer ${STEP_UP_TOKEN}`
 const uid = () => Math.random().toString(36).slice(2, 10)
 
 const slotOf = (date: string): Slot => (['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend'] as Slot[])[new Date(`${date}T12:00:00`).getDay()]
@@ -52,7 +55,7 @@ export const handlers: HttpHandler[] = [
       back.searchParams.set('stepup', 'back') // a different URL, so the browser really reloads
       return ok({ login_url: back.toString() }, 401)
     }
-    return ok({ access_token: 'mock-token', expires_in: 900, user: { username: 'kevinprk' } })
+    return ok({ access_token: u.searchParams.get('step_up') ? STEP_UP_TOKEN : 'mock-token', expires_in: 900, user: { username: 'kevinprk' } })
   }),
   http.post('https://auth.kevinprk.com/api/step-up/lock', none),
   http.get('/api/auth/me', async () => ok({ username: 'kevinprk' })),
@@ -267,6 +270,49 @@ export const handlers: HttpHandler[] = [
   http.post('/api/assets/notify-settings', async () => ok({ ok: true })),
   http.get('/api/health-data/summary', async () => ok(empty() ? null : db.healthSummary)),
   http.get('/api/trader/summary', async () => ok(empty() ? { ...db.traderSummary, etfs: [], portfolio: { ...db.traderSummary.portfolio, history: [] }, buys: { ...db.traderSummary.buys, n: 0, rows: [] }, daytrade: { days: [] } } : db.traderSummary)),
+
+  // Notes: like task-api, a plain session sees the notes that are not hidden, the step-up token all of them.
+  // ?scenario=noteconflict answers every save with 409; ?scenario=notefail with 500.
+  http.get('/api/notes', async ({ request }) => {
+    const term = new URL(request.url).searchParams.get('q')?.trim().toLowerCase() ?? ''
+    const rows = db.notes
+      .filter((n) => (unlocked(request) || !n.hidden) && (!term || `${n.title} ${n.body}`.toLowerCase().includes(term)))
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .map((n) => ({ key: n.key, title: n.title, hidden: n.hidden, created_at: n.created_at, updated_at: n.updated_at, chars: n.body.length, snippet: n.body.replace(/\s+/g, ' ').slice(0, 140) }))
+    return ok(list(rows))
+  }),
+  http.get('/api/notes/:key', async ({ params, request }) => {
+    const n = db.notes.find((x) => x.key === params.key && (unlocked(request) || !x.hidden))
+    return n ? ok(n) : ok({ error: 'not found' }, 404)
+  }),
+  http.post('/api/notes', async ({ request }) => {
+    const b = (await request.json()) as { title: string; body: string; hidden?: boolean }
+    if (b.hidden && !unlocked(request)) return ok({ error: 'Passkey needed to hide a note' }, 401)
+    const now = new Date().toISOString()
+    const n = { key: `n-${uid().slice(0, 8)}`, title: b.title, body: b.body, hidden: b.hidden === true, created_at: now, updated_at: now }
+    db.notes.push(n)
+    return ok({ key: n.key, title: n.title, hidden: n.hidden, updated_at: n.updated_at }, 201)
+  }),
+  http.put('/api/notes/:key', async ({ params, request }) => {
+    if (q().get('scenario') === 'noteconflict') return ok({ error: 'The note changed since this version was made' }, 409)
+    if (q().get('scenario') === 'notefail') return ok({ error: 'Internal error' }, 500)
+    const b = (await request.json()) as { title?: string; body: string; hidden?: boolean; base_updated_at?: string | null }
+    if (b.hidden !== undefined && !unlocked(request)) return ok({ error: 'Passkey needed to hide or show a note' }, 401)
+    const n = db.notes.find((x) => x.key === params.key && (unlocked(request) || !x.hidden))
+    if (!n) return ok({ error: 'not found' }, 404)
+    if (b.base_updated_at && Date.parse(b.base_updated_at) !== Date.parse(n.updated_at)) return ok({ error: 'The note changed since this version was made' }, 409)
+    n.body = b.body
+    if (b.title !== undefined) n.title = b.title
+    if (b.hidden !== undefined) n.hidden = b.hidden
+    n.updated_at = new Date().toISOString()
+    return ok({ key: n.key, title: n.title, hidden: n.hidden, updated_at: n.updated_at })
+  }),
+  http.delete('/api/notes/:key', async ({ params, request }) => {
+    const i = db.notes.findIndex((x) => x.key === params.key && (unlocked(request) || !x.hidden))
+    if (i < 0) return ok({ error: 'not found' }, 404)
+    db.notes.splice(i, 1)
+    return none()
+  }),
 
   http.get('/api/push/vapid-key', async () => ok({ key: '' })),
   http.get('/api/push/subscriptions', async () => ok({ subscriptions: [] })),

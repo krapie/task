@@ -276,8 +276,8 @@ export type AssistantEvent =
   | { type: 'error'; message: string }
 
 // ── Notes (searched and read by the assistant) ──
-export interface NoteSummary { key: string; title: string; created_at: string; updated_at: string; chars: number; snippet: string }
-export interface Note { key: string; title: string; body: string; created_at: string; updated_at: string }
+export interface NoteSummary { key: string; title: string; hidden: boolean; created_at: string; updated_at: string; chars: number; snippet: string }
+export interface Note { key: string; title: string; body: string; hidden: boolean; created_at: string; updated_at: string }
 
 // ── Trader (summary from ops, passkey step-up; docs/apps/trader.md "Task app") ──
 export interface TraderEtf {
