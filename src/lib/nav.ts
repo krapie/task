@@ -38,7 +38,7 @@ export const GROUPS: Group[] = [
 // API scopes (first path segment) whose requests the top progress bar shows on each tab.
 export function scopesFor(view: View, tab: RoutineTab): string[] {
   switch (view) {
-    case 'overview': return ['templates', 'daily', 'events', 'todos', 'mail', 'settings', 'health-data', 'assets', 'trader']
+    case 'overview': return ['templates', 'daily', 'events', 'todos', 'mail', 'news', 'settings', 'health-data', 'assets', 'trader']
     case 'routine':
       return tab === 'tasks' ? ['templates', 'daily', 'events', 'settings'] : ['goals']
     case 'calendar': return ['events', 'daily', 'todos']

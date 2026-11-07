@@ -288,8 +288,9 @@ export default function App() {
 
   const loadAllEvents = useCallback(async () => {
     if (isAuth) {
-      const events = await api.events.getAll().catch(() => [])
-      setCalendarEvents(events)
+      // A failed refresh keeps the list on screen instead of emptying the Overview and the calendar.
+      const events = await api.events.getAll().catch(() => null)
+      if (events) setCalendarEvents(events)
     } else {
       setCalendarEvents(storage.getEvents())
     }
