@@ -19,19 +19,22 @@ export function spanDomain(values: number[], minSpan = 0.04): [number, number] {
 
 // A trend line that stretches to its box. `fill` shades the area under it at low opacity. Meant for money-like series:
 // without min/max the scale is at least ±2% wide (spanDomain), so a near-constant series draws as a gentle line.
-export function Spark({ points, fill, className = '', label, min: lo, max: hi }: { points: number[]; fill?: boolean; className?: string; label?: string; min?: number; max?: number }) {
+export function Spark({ points, fill, className = '', label, min: lo, max: hi, base }: { points: number[]; fill?: boolean; className?: string; label?: string; min?: number; max?: number; base?: number }) {
   if (points.length < 2) return <div className={`spark spark-empty ${className}`} aria-hidden="true" />
   // lo / hi share one scale between several lines; without them the scale is the data's, at least ±2% wide.
-  const [dlo, dhi] = spanDomain(points)
+  // `base` is a reference value drawn as a dashed line (the starting value, zero); the default scale includes it.
+  const [dlo, dhi] = spanDomain(base == null ? points : [...points, base])
   const min = lo ?? dlo
   const max = hi ?? dhi
   const span = max - min || 1
   const W = 100
   const H = 30
-  const xy = points.map((v, i) => [(i / (points.length - 1)) * W, H - 2 - ((v - min) / span) * (H - 4)] as const)
+  const yOf = (v: number) => H - 2 - ((v - min) / span) * (H - 4)
+  const xy = points.map((v, i) => [(i / (points.length - 1)) * W, yOf(v)] as const)
   const line = xy.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ')
   return (
     <svg className={`spark ${className}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role={label ? 'img' : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      {base != null && base >= min && base <= max && <line x1="0" x2={W} y1={yOf(base)} y2={yOf(base)} stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" opacity="0.4" vectorEffect="non-scaling-stroke" />}
       {fill && <polygon points={`0,${H} ${line} ${W},${H}`} fill="currentColor" opacity="0.08" />}
       <polyline points={line} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
@@ -73,6 +76,41 @@ export function LineChart({ points, label, onActive, className = '' }: { points:
       <div className="linechart-months" aria-hidden="true">
         {ym.map((m, i) => <span key={points[i][0]} className={i === active ? 'linechart-month-on' : undefined} style={{ left: `${xs[i]}%` }}>{multiYear ? `${String(m.y).slice(2)}.${m.n}` : m.n}</span>)}
       </div>
+    </div>
+  )
+}
+
+// One bar per value around a zero line: a gain stands above it in ink, a loss hangs below it in a lighter ink, a zero
+// is a tick on the line. The bars share one scale (the largest absolute value), so heights compare. Hover or touch
+// reports the bar under the pointer through `onActive` (null when it leaves), so the caller shows the reading.
+export function SignedBars({ values, label, onActive, className = '' }: { values: number[]; label?: string; onActive?: (i: number | null) => void; className?: string }) {
+  const box = useRef<HTMLDivElement>(null)
+  const [active, set] = useState<number | null>(null)
+  if (!values.length) return null
+  const setActive = (i: number | null) => { set(i); onActive?.(i) }
+  const n = values.length
+  const H = 30
+  const mid = H / 2
+  const vals = values.map(v => (Number.isFinite(v) ? v : 0)) // a missing figure is a zero tick, not a hole
+  const on = active != null && active < n ? active : null // the data can shrink under a stale index
+  const top = Math.max(...vals.map(Math.abs)) || 1
+  const slot = 100 / n
+  const w = Math.min(slot * 0.66, 9) // few bars do not turn into slabs
+  const near = (clientX: number) => {
+    const r = box.current?.getBoundingClientRect()
+    if (!r?.width) return
+    setActive(Math.min(n - 1, Math.max(0, Math.floor(((clientX - r.left) / r.width) * n))))
+  }
+  return (
+    <div ref={box} className={`sbars ${className}`} onPointerMove={e => near(e.clientX)} onPointerDown={e => near(e.clientX)} onPointerLeave={() => setActive(null)} onPointerCancel={() => setActive(null)} onPointerUp={e => e.pointerType !== 'mouse' && setActive(null)} role="img" aria-label={label}>
+      <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" aria-hidden="true">
+        <line x1="0" x2="100" y1={mid} y2={mid} stroke="var(--kp-border-strong)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+        {vals.map((v, i) => {
+          const h = v === 0 ? 0.8 : Math.max((Math.abs(v) / top) * (mid - 1.5), 0.8)
+          const y = v < 0 ? mid : mid - h
+          return <rect key={i} x={i * slot + (slot - w) / 2} y={y} width={w} height={h} fill={v > 0 ? 'var(--kp-fg)' : v < 0 ? 'var(--kp-fg-3)' : 'var(--kp-fg-4)'} opacity={on == null || on === i ? 1 : 0.4} />
+        })}
+      </svg>
     </div>
   )
 }

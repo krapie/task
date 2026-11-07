@@ -4011,20 +4011,39 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .ov-big { display: block; font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; color: var(--kp-fg); }
 .ov-nowrap { white-space: nowrap; }
 .ov-hero-trend { flex-wrap: wrap; align-items: stretch; }
-.ov-assets .ov-hero-trend { flex: 1 0 auto; max-height: 220px; } /* spare panel height goes to the hero, so the chart grows with it */
-.ov-hero-trend .linechart { flex: 1 1 130px; min-width: 130px; margin-left: auto; display: flex; flex-direction: column; }
-.ov-hero-trend .linechart-plot { flex: 1; height: auto; min-height: 34px; max-height: 150px; }
+.ov-hero-trend .linechart, .ov-hero-trend .ov-hero-spark { flex: 1 1 130px; min-width: 130px; margin-left: auto; display: flex; flex-direction: column; }
+/* The chart is as tall as the number block beside it (contain: size takes its own height out of the hero's, so the
+   hero is as tall as the numbers); the rows below move up. The floor is for when the chart wraps under the numbers. */
+.ov-hero-trend .linechart, .ov-hero-trend .ov-hero-spark { contain: size; min-height: 44px; }
+.ov-hero-trend .linechart-plot { flex: 1; height: auto; min-height: 0; max-height: none; }
 .ov-hero-main { flex: 0 1 190px; min-width: 0; align-self: flex-start; }
+.ov-hero-spark { color: var(--kp-fg); }
+.ov-hero-spark-plot { flex: 1; min-height: 0; position: relative; }
+.ov-hero-spark-plot .spark { position: absolute; inset: 0; }
+.ov-hero-spark .ov-chart-cap { margin: 4px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ov-hero-spark .ov-chart-cap span:last-child { font-family: inherit; }
 .ov-hero-main .ov-sub-inline b { font-weight: 500; color: var(--kp-fg); }
 .ov-sub-inline { display: block; margin-top: 3px; font-size: var(--kp-text-xs); color: var(--kp-fg-3); }
 .ov-block { padding-bottom: var(--kp-space-3); flex-shrink: 0; }
-.ov-health .ov-block { margin-top: auto; } /* spare height splits into two even gaps with the facts' own auto margin */
+.ov-health .ov-block, .ov-assets .ov-block { margin-top: auto; } /* spare height splits into even gaps between the blocks and the facts (their own auto margin) */
 .ov-rings { display: flex; gap: var(--kp-space-3); }
 .ov-ring-item { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: var(--kp-text-2xs); color: var(--kp-fg-3); }
 .ov-ring-pct { font-family: var(--kp-font-mono); font-size: 11px; font-weight: 500; color: var(--kp-fg); }
 .ov-facts { list-style: none; margin: auto 0 0; padding: var(--kp-space-3) 0 0; border-top: 1px solid var(--kp-border); display: flex; flex-wrap: wrap; gap: 4px var(--kp-space-5); flex-shrink: 0; }
 .ov-facts li { display: flex; flex-direction: column; gap: 1px; font-size: var(--kp-text-2xs); color: var(--kp-fg-3); }
 .ov-facts b { font-family: var(--kp-font-mono); font-size: var(--kp-text-xs); font-weight: 500; color: var(--kp-fg); }
+/* the Trader facts (cash, ETF gain, last buy) on one line while the panel is wide enough; they wrap on a narrow one */
+.ov-facts-line { justify-content: space-between; gap: 4px var(--kp-space-3); }
+.ov-chart-cap { display: flex; justify-content: space-between; gap: var(--kp-space-3); margin-bottom: 4px; font-size: var(--kp-text-2xs); color: var(--kp-fg-3); letter-spacing: 0.02em; }
+.ov-chart-cap span:last-child { font-family: var(--kp-font-mono); white-space: nowrap; }
+/* Weekly buys and day trade side by side under the hero: a result, then its bars; one column when the panel is narrow */
+.ov-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: var(--kp-space-3) var(--kp-space-5); }
+.ov-result { display: flex; flex-direction: column; min-width: 0; }
+.ov-result .ov-sub { margin-bottom: 3px; }
+.ov-result .ov-sbars { margin-top: var(--kp-space-3); }
+.ov-result .ov-chart-cap { margin: 4px 0 0; }
+.ov-result .ov-chart-cap span:last-child { font-family: inherit; white-space: normal; }
+.ov-sbars { height: 40px; }
 .ov-spark { flex: 1 1 56px; min-height: 48px; max-height: 120px; margin-bottom: var(--kp-space-3); color: var(--kp-fg); }
 .ov-spark .spark { width: 100%; height: 100%; }
 
@@ -4073,6 +4092,15 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .tr-chart-axis span { white-space: nowrap; }
 .tr-chart-axis span:nth-child(2) { white-space: normal; text-align: center; }
 .tr-chart-axis { display: flex; justify-content: space-between; gap: var(--kp-space-3); font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); color: var(--kp-fg-3); }
+.tr-bars { margin-bottom: var(--kp-space-4); }
+.tr-bars-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--kp-space-3); margin: var(--kp-space-3) 0 4px; font-size: var(--kp-text-2xs); color: var(--kp-fg-3); letter-spacing: 0.04em; text-transform: uppercase; }
+.tr-bars-head:first-child { margin-top: 0; }
+.tr-bars-read { font-family: var(--kp-font-mono); letter-spacing: 0; text-transform: none; color: var(--kp-fg); }
+.sbars { position: relative; touch-action: pan-y; cursor: crosshair; }
+.sbars svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.tr-sbars { height: 64px; }
+.tr-chart-short { height: 70px; }
+.tr-sbars-tall { height: 110px; }
 .tr-table { display: flex; flex-direction: column; }
 .tr-row { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(70px, 1fr) minmax(60px, 0.8fr) minmax(0, 1.6fr) minmax(70px, 1fr); align-items: center; gap: var(--kp-space-3); padding: 9px 0; border-bottom: 1px solid var(--kp-border); font-size: var(--kp-text-sm); }
 .tr-row-buys { grid-template-columns: minmax(0, 2fr) repeat(4, minmax(60px, 1fr)); }

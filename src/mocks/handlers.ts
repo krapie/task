@@ -266,7 +266,7 @@ export const handlers: HttpHandler[] = [
   http.get('/api/assets/notify-settings', async () => ok({ financeNotifyEnabled: 'true', financeNotifyDay: '22', financeNotifyHour: '9', financeNotifyMinute: '0' })),
   http.post('/api/assets/notify-settings', async () => ok({ ok: true })),
   http.get('/api/health-data/summary', async () => ok(empty() ? null : db.healthSummary)),
-  http.get('/api/trader/summary', async () => ok(empty() ? { ...db.traderSummary, etfs: [], portfolio: { ...db.traderSummary.portfolio, history: [] }, buys: { ...db.traderSummary.buys, n: 0, rows: [] } } : db.traderSummary)),
+  http.get('/api/trader/summary', async () => ok(empty() ? { ...db.traderSummary, etfs: [], portfolio: { ...db.traderSummary.portfolio, history: [] }, buys: { ...db.traderSummary.buys, n: 0, rows: [] }, daytrade: { days: [] } } : db.traderSummary)),
 
   http.get('/api/push/vapid-key', async () => ok({ key: '' })),
   http.get('/api/push/subscriptions', async () => ok({ subscriptions: [] })),

@@ -13,6 +13,8 @@ export function wonShort(n: number): string {
 }
 
 export const signedWon = (n: number) => `${n > 0 ? '+' : ''}${wonShort(n)}`
+// The exact amount with a sign (+₩15,718): for a result the owner wants to read to the won.
+export const signedWonExact = (n: number) => `${n > 0 ? '+' : ''}${won(n)}`
 // Ratios from ops are fractions (0.0123 is 1.23 %), like the admin Trader tab.
 export const pct = (frac: number, digits = 1) => `${(frac * 100).toFixed(digits)}%`
 export const signedPct = (frac: number, digits = 1) => `${frac > 0 ? '+' : ''}${(frac * 100).toFixed(digits)}%`

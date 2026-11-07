@@ -160,12 +160,14 @@ etfs.forEach((e) => { e.share = e.value / etfTotal })
 
 export const traderSummary: TraderSummary = {
   env: 'paper', generated_at: iso(1),
-  trader: { holdings_value: etfTotal, invested: etfs.reduce((t, e) => t + e.qty * e.avg, 0), gain: etfs.reduce((t, e) => t + e.gain, 0), gain_pct: 0.0101, daytrade_net: -12_400, cash: 9_450_280, total_value: 9_450_280 + etfTotal, as_of: iso(60 * 5), source: 'broker',
+  trader: { holdings_value: etfTotal, invested: etfs.reduce((t, e) => t + e.qty * e.avg, 0), gain: etfs.reduce((t, e) => t + e.gain, 0), gain_pct: 0.0101, daytrade_net: 15_718, cash: 9_450_280, total_value: 9_450_280 + etfTotal, as_of: iso(60 * 5), source: 'broker',
     history: wave(8, 9_990_000, 10_017_000, 0.0015).map((v, i) => [day(-7 + i), Math.round(v)] as [string, number]) },
   portfolio: {
     value: 78_000_000, cost: 70_000_000, gain: 8_000_000, gain_pct: 0.114, as_of: day(-1),
     history: wave(60, 60_000_000, 78_000_000, 0.015).map((v, i) => [day(-60 + i), v, Math.round(52_000_000 + (18_000_000 * i) / 59)] as [string, number, number]),
   },
+  // 16 trading days, oldest first: mostly small, a few zero days, one bigger loss (synthetic)
+  daytrade: { days: [2418, 0, -1904, 5576, 0, 1575, -1744, 0, 2557, 3100, -2200, 0, 880, 4210, -650, 1900].map((net, i, all) => ({ date: day(-(all.length - i) - Math.floor((all.length - i) / 5) * 2), entries: net === 0 ? 0 : 1 + (i % 2), net })) },
   etfs,
   buys: {
     n: 5, bought: 2_750_000, value_now: 2_811_000, ret: 0.022, enough: false, min_buys: 13,

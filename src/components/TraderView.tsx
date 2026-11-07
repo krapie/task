@@ -1,14 +1,61 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
-import { pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
-import type { TraderSummary } from '../types'
+import { pct, shortDate, signedPct, signedWon, signedWonExact, won, wonShort } from '../lib/format'
+import type { TraderBuy, TraderDay, TraderSummary } from '../types'
 import StepUpBar from './StepUpBar'
-import { Spark, spanDomain } from './Charts'
+import { SignedBars, Spark, spanDomain } from './Charts'
 import { Empty } from './Ui'
 
 const MASK = '••••••'
 const VERDICT = { clear: 'All clear', attention: 'Needs a look', bad: 'Problem' } as const
+
+// The weekly buys as two rows of bars, oldest week on the left: what each week's buy is worth now, and how that
+// compares with the same money in the S&P 500 ETF. Same numbers as the table under it.
+function WeeklyBars({ rows }: { rows: TraderBuy[] }) {
+  const [at, setAt] = useState<number | null>(null)
+  const weeks = useMemo(() => [...rows].reverse(), [rows])
+  if (weeks.length === 0) return null
+  const w = at != null ? weeks[at] : undefined // the data can shrink under a stale index
+  const last = weeks[weeks.length - 1]
+  const shown = w ?? last
+  return (
+    <div className="tr-bars">
+      <div className="tr-bars-head">
+        <span>Return per week</span>
+        <span className="tr-bars-read">{shown.period} · {signedPct(shown.ret)} · {signedPct(shown.ret - shown.bench)} vs S&amp;P</span>
+      </div>
+      <SignedBars values={weeks.map(b => b.ret)} onActive={setAt} label="Return of each weekly buy" className="tr-sbars" />
+      <div className="tr-bars-head"><span>Against the S&amp;P 500 ETF</span></div>
+      <SignedBars values={weeks.map(b => b.ret - b.bench)} onActive={setAt} label="Return of each weekly buy minus the S&P 500 ETF" className="tr-sbars" />
+      <div className="tr-chart-axis"><span>{weeks[0].period}</span><span>bar up: ahead, bar down: behind · hover for a week</span><span>{last.period}</span></div>
+    </div>
+  )
+}
+
+// The day trader's results, oldest day on the left: the estimated net of each day, and the running total under it.
+function DayTradeBars({ all }: { all: TraderDay[] }) {
+  const [at, setAt] = useState<number | null>(null)
+  const days = useMemo(() => all.slice(-30), [all]) // the last 30 days
+  const cum = useMemo(() => days.reduce<number[]>((a, d) => [...a, (a[a.length - 1] ?? 0) + d.net], []), [days])
+  if (days.length === 0) return <p className="tr-muted">No day-trade day has finished yet.</p>
+  const d = at != null ? days[at] : undefined // the data can shrink under a stale index
+  const entries = days.reduce((t, x) => t + x.entries, 0)
+  return (
+    <div className="tr-bars">
+      <div className="tr-bars-head">
+        <span>Net per day (est.)</span>
+        <span className="tr-bars-read">
+          {d ? `${shortDate(d.date)} · ${d.entries} ${d.entries === 1 ? 'entry' : 'entries'} · ${signedWonExact(d.net)}` : `${days.length} days · ${entries} entries · ${signedWonExact(cum[cum.length - 1])}`}
+        </span>
+      </div>
+      <SignedBars values={days.map(x => x.net)} onActive={setAt} label="Estimated day-trade result of each day" className="tr-sbars tr-sbars-tall" />
+      <div className="tr-bars-head"><span>Running total</span></div>
+      <div className="tr-chart tr-chart-short"><Spark points={cum} base={0} fill label="Running total of the day-trade results" /></div>
+      <div className="tr-chart-axis"><span>{shortDate(days[0].date)}</span><span>dashed: zero</span><span>{shortDate(days[days.length - 1].date)}</span></div>
+    </div>
+  )
+}
 
 // Trader (the weekly ETF buys and the day-trade experiment): the summary of what the admin Trader tab shows,
 // behind the same passkey step-up as Assets and Health. Read-only: orders, switches and the plumbing stay in admin.
@@ -78,7 +125,7 @@ export default function TraderView({ isAuth }: { isAuth: boolean }) {
         </div>
         <div className="assets-stat">
           <span className="assets-stat-label">Day trade, net</span>
-          <span className="assets-stat-value">{hide || !t ? MASK : signedWon(t.daytrade_net)}</span>
+          <span className="assets-stat-value">{hide || !t ? MASK : signedWonExact(t.daytrade_net)}</span>
         </div>
       </div>
 
@@ -138,6 +185,7 @@ export default function TraderView({ isAuth }: { isAuth: boolean }) {
       <section className="assets-section tr-wide">
         <div className="section-label">Weekly buys</div>
         {data && !data.buys.enough && <p className="tr-muted">{data.buys.n} of {data.buys.min_buys} buys so far: the comparison with the S&amp;P 500 ETF means little before that.</p>}
+        {data && !hide && <WeeklyBars rows={data.buys.rows} />}
         <div className="tr-table" role="table">
           <div className="tr-row tr-row-buys tr-head" role="row">
             <span>Week</span><span className="tr-num">Bought</span><span className="tr-num">Now</span><span className="tr-num">Return</span><span className="tr-num">vs S&amp;P</span>
@@ -154,6 +202,13 @@ export default function TraderView({ isAuth }: { isAuth: boolean }) {
           {data && data.buys.rows.length === 0 && <p className="tr-muted">No weekly buy has run yet.</p>}
         </div>
       </section>
+
+      {data?.daytrade && (
+        <section className="assets-section tr-wide">
+          <div className="section-label">Day trade</div>
+          {masked ? <p className="tr-muted">{MASK}</p> : <DayTradeBars all={data.daytrade.days} />}
+        </section>
+      )}
     </div>
   )
 }

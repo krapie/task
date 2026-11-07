@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '../lib/api'
-import { clockKst, hoursText, monthLabel, monthName, num, pct, shortDate, signedPct, signedWon, won, wonShort } from '../lib/format'
+import { clockKst, hoursText, monthLabel, monthName, num, pct, shortDate, signedPct, signedWon, signedWonExact, won, wonShort } from '../lib/format'
 import { useStepUp } from '../lib/useStepUp'
 import type { AssetSummary, HealthSummary, TraderSummary } from '../types'
-import { LineChart, NightBars, Ring, SplitBar, PairBars, Spark } from './Charts'
+import { LineChart, NightBars, Ring, SignedBars, SplitBar, PairBars, Spark } from './Charts'
 import { Icon } from './Icons'
 import { Panel } from './OverviewPanel'
 import StepUpBar from './StepUpBar'
@@ -214,34 +214,81 @@ function TraderPanel({ unlocked, masked, s, onOpen }: PanelProps<TraderSummary>)
   if (!unlocked || !t || masked) {
     return (
       <Panel title="Trader" onOpen={onOpen} className="ov-trader">
-        {masked && unlocked && t ? <p className="ov-masked">{MASK}</p> : <Placeholder unlocked={unlocked} failed={s.failed} loaded={s.loaded} hint="Portfolio value, the ETF mix and the latest weekly buy." />}
+        {masked && unlocked && t ? <p className="ov-masked">{MASK}</p> : <Placeholder unlocked={unlocked} failed={s.failed} loaded={s.loaded} hint="Portfolio value, weekly buys, day trade, the ETF mix." />}
       </Panel>
     )
   }
-  const series = (t.trader.history ?? []).map(h => h[1])
+  return (
+    <Panel title="Trader" count={`${t.env === 'real' ? 'Real' : 'Paper'} · ${t.verdict.level === 'clear' ? 'all clear' : t.verdict.level === 'attention' ? 'needs a look' : 'problem'}`} onOpen={onOpen} className="ov-trader">
+      <TraderBody t={t} />
+    </Panel>
+  )
+}
+
+// Like the Assets hero: the account value on the left, its line on the right as tall as the numbers (dashed: the starting
+// value). Under it the two results with bars (weekly buys: return per week; day trade: net per day), then the ETF mix
+// with names and the facts on one line.
+function TraderBody({ t }: { t: TraderSummary }) {
+  const [weekAt, setWeekAt] = useState<number | null>(null)
+  const [dayAt, setDayAt] = useState<number | null>(null)
+  const hist = t.trader.history ?? []
+  const series = hist.map(h => h[1])
+  const start = series[0]
+  const change = series.length > 1 && start > 0 ? series[series.length - 1] - start : null // no percentage from a zero start
+  const weeks = [...t.buys.rows].reverse()
+  const w = weekAt != null ? weeks[weekAt] : undefined // the data can shrink under a stale index
+  const days = (t.daytrade?.days ?? []).slice(-14)
+  const d = dayAt != null ? days[dayAt] : undefined
   const etfs = [...t.etfs].sort((a, b) => b.share - a.share)
   const parts = etfs.map(e => ({ label: e.name.replace(/^KODEX\s*/, ''), value: e.share }))
   const last = t.buys.rows[0]
   return (
-    <Panel title="Trader" count={`${t.env === 'real' ? 'Real' : 'Paper'} · ${t.verdict.level === 'clear' ? 'all clear' : t.verdict.level === 'attention' ? 'needs a look' : 'problem'}`} onOpen={onOpen} className="ov-trader">
-      <div className="ov-hero">
-        <div>
+    <>
+      <div className="ov-hero ov-hero-trend">
+        <div className="ov-hero-main">
           <b className="ov-big">{won(t.trader.total_value)}</b>
-          <span className="ov-sub-inline">{signedWon(t.trader.gain)} ({signedPct(t.trader.gain_pct)}) on the ETFs</span>
+          <span className="ov-sub-inline">{change != null ? `${signedWon(change)} (${signedPct(change / start)}) since start` : 'account value'}</span>
         </div>
+        {series.length > 1 && start > 0 && (
+          <div className="ov-hero-spark">
+            <div className="ov-hero-spark-plot"><Spark points={series} base={start} label="Account value since the start" /></div>
+            <div className="ov-chart-cap"><span>{shortDate(hist[0][0])} · dashed = start</span></div>
+          </div>
+        )}
       </div>
-      {series.length > 1 && <div className="ov-spark"><Spark points={series} fill label="Account value" /></div>}
-      {parts.length > 0 && (
-        <div className="ov-block">
-          <div className="ov-sub">ETF mix</div>
-          <SplitBar parts={parts} legend={false} />
+      {(weeks.length > 0 || days.length > 0) && (
+        <div className="ov-block ov-results">
+          {weeks.length > 0 && (
+            <div className="ov-result">
+              <span className="ov-sub">Weekly buys</span>
+              <b className="ov-big">{signedPct(t.buys.ret)}</b>
+              <span className="ov-sub-inline">{w ? `${w.period.replace(/^\d{4}-/, '')} · ${signedPct(w.ret)}` : `${t.buys.n} ${t.buys.n === 1 ? 'buy' : 'buys'} so far`}</span>
+              <SignedBars values={weeks.map(b => b.ret)} onActive={setWeekAt} label="Return of each weekly buy" className="ov-sbars" />
+              <div className="ov-chart-cap"><span>return per week · up: gain</span></div>
+            </div>
+          )}
+          {days.length > 0 && (
+            <div className="ov-result">
+              <span className="ov-sub">Day trade · est. net</span>
+              <b className="ov-big">{signedWonExact(t.trader.daytrade_net)}</b>
+              <span className="ov-sub-inline">{d ? `${shortDate(d.date)} · ${signedWonExact(d.net)}` : `since ${shortDate((t.daytrade?.days ?? [])[0].date)}`}</span>
+              <SignedBars values={days.map(x => x.net)} onActive={setDayAt} label="Estimated day-trade result of each day" className="ov-sbars" />
+              <div className="ov-chart-cap"><span>per day, last {days.length} · up: gain</span></div>
+            </div>
+          )}
         </div>
       )}
-      <ul className="ov-facts">
+      {parts.length > 0 && (
+        <div className="ov-block">
+          <div className="ov-chart-cap"><span>ETF mix · share of the ETFs held</span><span>cash not counted</span></div>
+          <SplitBar parts={parts} />
+        </div>
+      )}
+      <ul className="ov-facts ov-facts-line">
         <li><span>Cash</span><b>{wonShort(t.trader.cash)}</b></li>
-        <li><span>Day trade</span><b>{signedWon(t.trader.daytrade_net)}</b></li>
-        {last && <li><span>Last buy · {last.period}</span><b>{wonShort(last.bought)} · {pct(last.ret)}</b></li>}
+        <li><span>ETF gain</span><b>{signedWon(t.trader.gain)} ({signedPct(t.trader.gain_pct)})</b></li>
+        {last && <li><span>Last buy · {last.period.replace(/^\d{4}-/, '')}</span><b>{wonShort(last.bought)} · {pct(last.ret)}</b></li>}
       </ul>
-    </Panel>
+    </>
   )
 }

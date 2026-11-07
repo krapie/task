@@ -194,7 +194,7 @@ export interface AssetSummary {
   creditScore: number | null
   categoryBreakdown: { category: string; amount: number }[]
   investment: { principal: number; value: number; pnl: number }
-  // The month with the newest transactions (YYYY-MM; null when there are none), which is not always the calendar month.
+  // The newest month that has income, else the month of the newest transaction (YYYY-MM; null when there are none); not always the calendar month.
   thisMonth: { month: string | null; income: number; expense: number; netSavings: number }
   // [YYYY-MM, net worth]: one point per month, its last snapshot (the daily snapshots repeat within a month).
   netWorthHistory: [string, number][]
@@ -292,11 +292,15 @@ export interface TraderBuy {
   // ret and bench are fractions
   bought: number; value_now: number; ret: number; bench: number
 }
+// One finished day-trade day: entries opened and the estimated result after costs, in KRW.
+export interface TraderDay { date: string; entries: number; net: number }
 export interface TraderSummary {
   env: 'paper' | 'real'
   generated_at: string
   trader: { holdings_value: number; invested: number; gain: number; gain_pct: number; daytrade_net: number; cash: number; total_value: number; as_of: string | null; source: 'broker' | 'fills'; history?: [string, number][] }
   portfolio: { value: number; cost: number; gain: number; gain_pct: number; as_of: string | null; history: [string, number, number][] }
+  // absent while ops is an older build than this app (deploy order: ops first)
+  daytrade?: { days: TraderDay[] }
   etfs: TraderEtf[]
   buys: { rows: TraderBuy[]; n: number; bought: number; value_now: number; ret: number; enough: boolean; min_buys: number }
   checks: { id: string; status: 'ok' | 'info' | 'warn' | 'bad' }[]
