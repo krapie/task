@@ -35,7 +35,7 @@ test('the allowed list is the enabled sites\' domains and sign-in domains, once 
     { enabled: false, domains: ['off.com'], login_domains: ['off-login.com'] },
   ]
   assert.deepEqual(allowedDomains(rows), ['a.com', 'b.com', 'kakao.com'])
-  assert.deepEqual(allowedDomains(SEED_SITES.map(s => ({ enabled: true, login_domains: [], ...s }))), ['catchtable.co.kr', 'catchtable.net', 'coupang.com', 'gov.kr', 'kakao.com', 'naver.com'])
+  assert.deepEqual(allowedDomains(SEED_SITES.map(s => ({ enabled: true, login_domains: [], ...s }))), ['catchtable.co.kr', 'catchtable.net', 'coupang.com', 'kakao.com', 'naver.com'])
 })
 
 test('a site that repeats a label or an own domain is a duplicate; a sign-in domain is not', () => {

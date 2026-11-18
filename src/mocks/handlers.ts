@@ -37,7 +37,6 @@ const mockSite = (label: string, url: string, domains: string[], quick_link = tr
 let sites = [
   mockSite('Coupang', 'https://www.coupang.com/', ['coupang.com']),
   mockSite('Catch Table', 'https://www.catchtable.co.kr/', ['catchtable.co.kr', 'catchtable.net'], true, 'needs_login'),
-  mockSite('정부24', 'https://www.gov.kr/portal/main', ['gov.kr'], true, 'signed_in'),
   mockSite('Naver', 'https://www.naver.com/', ['naver.com']),
   mockSite('Kakao', 'https://www.kakao.com/', ['kakao.com'], false),
 ]

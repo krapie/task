@@ -150,7 +150,6 @@ export function ApprovalCard({ part, onOpenBrowser }: { part: ToolPart; onOpenBr
 const FALLBACK_SITES = [
   { label: 'Coupang', url: 'https://www.coupang.com/' },
   { label: 'Catch Table', url: 'https://www.catchtable.co.kr/' },
-  { label: '정부24', url: 'https://www.gov.kr/portal/main' },
   { label: 'Naver', url: 'https://www.naver.com/' },
 ]
 

@@ -104,11 +104,10 @@ export function tooManyDomains(rows, site) {
   return allowedDomains([...others, { enabled: true, ...site }]).length > MAX_ALLOWED_DOMAINS
 }
 
-// What a fresh install knows: the five sites the browser could use before the list was editable.
+// What a fresh install knows: the sites the browser could use before the list was editable (정부24 was dropped on the owner's request, 2026-11-18).
 export const SEED_SITES = [
   { label: 'Coupang', url: 'https://www.coupang.com/', domains: ['coupang.com'], quick_link: true },
   { label: 'Catch Table', url: 'https://www.catchtable.co.kr/', domains: ['catchtable.co.kr', 'catchtable.net'], quick_link: true },
-  { label: '정부24', url: 'https://www.gov.kr/portal/main', domains: ['gov.kr'], quick_link: true },
   { label: 'Naver', url: 'https://www.naver.com/', domains: ['naver.com'], quick_link: true },
   { label: 'Kakao', url: 'https://www.kakao.com/', domains: ['kakao.com'], quick_link: false, note: 'Sign-in provider of other sites' },
 ]

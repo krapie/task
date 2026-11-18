@@ -234,7 +234,7 @@ interface AssistantViewProps {
 
 // The Assistant tab: one list of chats behind one passkey step-up; each chat is answered by one of two agents of
 // the operator. "Assistant" does things (add events and todos, check mail, drive a browser for Coupang, Catch Table
-// and 정부24, asking before it spends or submits). "Personal" reads private data (money, health, notes, the market).
+// and Naver, asking before it spends or submits). "Personal" reads private data (money, health, notes, the market).
 // A new chat is routed by its first question (Auto), the owner can change the agent in the chat, and each chat shows
 // a badge. The agents are not merged: the one that reads untrusted text has no private-data tool. The step-up is the
 // same as Assets and Health, so nothing is requested until unlocked and a lock drops everything fetched.
@@ -484,7 +484,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
                 <Icon name="assistant" size={28} className="empty-icon" />
                 <h1>{profile === 'assistant' ? 'What should I do?' : profile === 'personal' ? 'What do you want to know?' : 'How can I help?'}</h1>
                 <p className="as-meta">{profile === 'assistant'
-                  ? 'I add events, todos and tasks, check your mail, and use a browser for Coupang, Catch Table and 정부24. I ask before I spend, book or submit anything.'
+                  ? 'I add events, todos and tasks, check your mail, and use a browser for the sites you listed. I ask before I spend, book or submit anything.'
                   : profile === 'personal'
                     ? 'Spending and assets, health, your notes and the market. Read-only: I never change anything (use Assistant for that).'
                     : 'Ask me to do something (events, todos, mail, a browser) or about your money, health, notes and the market. The question picks the agent; you can change it in the chat.'}</p>
