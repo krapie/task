@@ -343,6 +343,8 @@ export const api = {
     translate: (id: string, target: 'ko' | 'en') =>
       req<{ translated: string; html: string | null; lang: string; cached: boolean }>('POST', `/mail/items/${id}/translate`, { target }),
   },
+  // POST /api/translate: the texts of one view in a single request; the answer has the same length and order.
+  translate: (texts: string[], target: 'ko' | 'en') => req<{ texts: string[] }>('POST', '/translate', { texts, target }).then(r => r.texts),
   todos: {
     getAll: () => req<TodoItem[]>('GET', '/todos'),
     create: (text: string, due_date?: string) => req<TodoItem>('POST', '/todos', { text, due_date }),

@@ -9,6 +9,8 @@ import StepUpBar from './StepUpBar'
 import { Icon } from './Icons'
 import { Empty, Loading } from './Ui'
 import { Markdown } from './Markdown'
+import { TranslateButton } from './TranslateButton'
+import { useTranslation } from '../lib/translate'
 import type { AssistantChoice, AssistantFolder, AssistantPart, AssistantProfile, AssistantSummary, AssistantTurn } from '../types'
 
 export const FOLDERS: { id: AssistantFolder; label: string }[] = [
@@ -159,13 +161,16 @@ export function TurnView({ turn, onOpenBrowser }: { turn: AssistantTurn; onOpenB
   const tools = turn.parts.filter(p => p.kind === 'tool').length
   const last = turn.parts[turn.parts.length - 1]
   const working = turn.state === 'streaming' && last?.kind !== 'text'
+  // Offered once the answer is complete; the owner asks for it, per answer.
+  const texts = turn.parts.flatMap(p => (p.kind === 'text' ? [p.text] : []))
+  const tx = useTranslation(turn.done ? texts : [])
   return (
     <li className="as-turn">
       <div className="as-user"><div className="as-bubble">{turn.question}</div></div>
       <div className="as-answer">
         {turn.notice && <p className="as-meta">{turn.notice}</p>}
         {turn.parts.map((p, i) => {
-          if (p.kind === 'text') return <Markdown key={i} text={p.text} />
+          if (p.kind === 'text') return <Markdown key={i} text={tx.t(p.text)} />
           if (p.name.endsWith('propose_note') && p.result && !p.result.error) return <NoteProposal key={p.id} part={p} />
           if (p.name.endsWith('propose_site') && p.result && !p.result.error) return <SiteProposal key={p.id} part={p} />
           if (isWriteTool(p.name)) return <ActionCard key={p.id} part={p} />
@@ -175,10 +180,13 @@ export function TurnView({ turn, onOpenBrowser }: { turn: AssistantTurn; onOpenB
         {working && <p className="as-meta as-working">{turn.status ?? (tools ? 'Looking into it…' : 'Thinking…')}</p>}
         {turn.state === 'error' && <p className="as-error">{turn.error}</p>}
         {turn.done && (
-          <p className="as-meta">
-            {(turn.done.duration_ms / 1000).toFixed(0)}s · {tools} {tools === 1 ? 'tool call' : 'tool calls'}
-            {!turn.done.ok && ` · stopped: ${turn.done.reason ?? ''}`}
-          </p>
+          <div className="as-foot">
+            <p className="as-meta">
+              {(turn.done.duration_ms / 1000).toFixed(0)}s · {tools} {tools === 1 ? 'tool call' : 'tool calls'}
+              {!turn.done.ok && ` · stopped: ${turn.done.reason ?? ''}`}
+            </p>
+            {texts.some(t => t.trim()) && <TranslateButton on={tx.on} busy={tx.busy} error={tx.error} onToggle={tx.toggle} />}
+          </div>
         )}
       </div>
     </li>

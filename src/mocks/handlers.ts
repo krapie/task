@@ -415,6 +415,12 @@ export const handlers: HttpHandler[] = [
     if (b.type === 'open' && b.url) browserUrl = b.url
     return ok({ url: browserUrl, title: 'Catch Table (mock)' })
   }),
+  // The staging translation marks every paragraph so the swap is visible; the real one is Haiku (server/translate.js).
+  http.post('/api/translate', async ({ request }) => {
+    const { texts } = (await request.json()) as { texts: string[] }
+    await new Promise(r => setTimeout(r, 400))
+    return ok({ texts: texts.map(t => `[한국어] ${t}`) })
+  }),
   http.get('/api/mail/accounts', async () => ok(list(db.mailAccounts))),
   http.get('/api/mail/threads/items', async () => ok(list(db.mailItems))),
   http.get('/api/mail/threads', async ({ request }) => {

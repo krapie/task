@@ -6,6 +6,7 @@ import webpush from 'web-push'
 import { load as loadHtml } from 'cheerio'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { getOrCreateRetro } from './retro.js'
+import { TranslateError, translateTexts } from './translate.js'
 import { startMetricsServer, telemetry, withSpan } from './telemetry.js'
 import { poolOptions, warmPool } from './pool.js'
 import { noteAccess, NOTE_EDIT_AUDIT_WINDOW_MINUTES } from './notes-access.js'
@@ -1325,6 +1326,17 @@ async function translateHtml(html, target) {
     return null
   }
 }
+
+// On-demand translation of text shown in the app (assistant answers, checkup findings): {texts, target} -> {texts}.
+// Only when the user presses a button; same length and order as the request (translate.js).
+app.post('/api/translate', auth, async (req, res) => {
+  try {
+    res.json({ texts: await translateTexts(req.user.username, req.body?.texts, req.body?.target) })
+  } catch (err) {
+    if (!(err instanceof TranslateError)) console.error('POST /api/translate:', err.stack || err)
+    res.status(err instanceof TranslateError ? err.status : 500).json({ error: err instanceof TranslateError ? err.message : 'Translation failed' })
+  }
+})
 
 // On-demand email translation (English/Japanese -> Korean, or vice versa).
 // Never called from the sync path — only when the user clicks the button —

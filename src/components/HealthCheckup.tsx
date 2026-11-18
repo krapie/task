@@ -1,4 +1,6 @@
 import type { HealthReport, HealthReportMetric } from '../types'
+import { TranslateButton } from './TranslateButton'
+import { useTranslation } from '../lib/translate'
 
 const MASK = '••••'
 
@@ -109,6 +111,8 @@ interface HealthCheckupProps {
 // test group collapsed. Values, range markers and the names of out-of-range results are all
 // masked together with the rest of the tab.
 export default function HealthCheckup({ report, hide }: HealthCheckupProps) {
+  // The findings are written in English; the owner can read them in Korean (the metrics are numbers and test names).
+  const tx = useTranslation(hide ? [] : [report.judgement ?? '', ...report.findings.flatMap(f => [f.title, f.detail ?? ''])])
   const byKey = new Map(report.metrics.map(m => [m.key, m]))
   const shown = new Set<string>()
   const keyGroups = KEY_GROUPS.map(g => {
@@ -135,9 +139,12 @@ export default function HealthCheckup({ report, hide }: HealthCheckupProps) {
 
   return (
     <div className="assets-section ck-section">
-      <div className="section-label">Checkup · {hide ? MASK : date}</div>
+      <div className="section-label ck-head">
+        <span>Checkup · {hide ? MASK : date}</span>
+        {!hide && (report.judgement || report.findings.length > 0) && <TranslateButton on={tx.on} busy={tx.busy} error={tx.error} onToggle={tx.toggle} />}
+      </div>
       {!hide && report.judgement && (
-        <p className="sleep-times">{report.judgement}{report.institution ? ` · ${report.institution}` : ''}</p>
+        <p className="sleep-times">{tx.t(report.judgement)}{report.institution ? ` · ${report.institution}` : ''}</p>
       )}
 
       {report.findings.length > 0 && (
@@ -145,8 +152,8 @@ export default function HealthCheckup({ report, hide }: HealthCheckupProps) {
           {report.findings.map((f, i) => (
             <li key={`${i}:${f.title}`}>
               <span className="ck-level">{hide ? MASK : f.level === 'follow_up' ? 'Follow up' : 'Advice'}</span>
-              <span className="ck-title">{hide ? MASK : f.title}</span>
-              {!hide && f.detail && <span className="ck-detail">{f.detail}</span>}
+              <span className="ck-title">{hide ? MASK : tx.t(f.title)}</span>
+              {!hide && f.detail && <span className="ck-detail">{tx.t(f.detail)}</span>}
             </li>
           ))}
         </ul>

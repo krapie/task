@@ -4324,3 +4324,10 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .ov-asst { left: var(--kp-space-3); right: var(--kp-space-3); bottom: calc(54px + env(safe-area-inset-bottom, 0px) + var(--kp-space-2)); }
   .ov-asst-bar input { font-size: 16px; }
 }
+
+/* ── Translate toggle (lib/translate.ts) ───────────────────────────── */
+.tx-wrap { display: inline-flex; align-items: center; gap: var(--kp-space-1); }
+.tx-btn { width: 28px; height: 28px; }
+.tx-status { white-space: nowrap; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.as-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--kp-space-2); }
+.ck-head { display: flex; align-items: center; justify-content: space-between; gap: var(--kp-space-2); }
