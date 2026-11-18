@@ -162,9 +162,19 @@ export const healthReports: HealthReport[] = [{
   metrics: [
     metric('body', 'height', 'Height', 172.0, 'cm', null, null),
     metric('body', 'weight', 'Weight', 64.2, 'kg', null, null),
+    metric('body', 'waist', 'Waist', 74, 'cm', null, 90),
+    metric('body', 'body_fat_pct', 'Body fat', 17.8, '%', 10, 25),
     metric('body', 'bmi', 'BMI', 21.7, 'kg/m²', 18.5, 24.9),
     metric('vitals', 'sbp', 'Systolic BP', 121, 'mmHg', 90, 119),
     metric('vitals', 'dbp', 'Diastolic BP', 74, 'mmHg', 60, 79),
+    metric('vitals', 'heart_rate', 'Heart rate', 71, 'bpm', 60, 100),
+    metric('inbody', 'inbody_score', 'InBody score', 76, '/100', null, null),
+    metric('inbody', 'skeletal_muscle_mass', 'Skeletal muscle mass', 28.1, 'kg', 27, 33),
+    metric('inbody', 'body_fat_mass', 'Body fat mass', 11.4, 'kg', 7.6, 15.2),
+    metric('inbody', 'visceral_fat_area', 'Visceral fat area', 52.0, 'cm²', null, 100),
+    metric('inbody', 'smi', 'Skeletal muscle index', 7.4, 'kg/m²', null, null),
+    metric('inbody', 'bmr', 'Basal metabolic rate', 1452, 'kcal', 1380, 1600),
+    metric('inbody', 'total_body_water', 'Total body water', 36.1, 'L', 37.0, 45.0),
     metric('cbc', 'wbc', 'WBC', 6.12, '10³/μL', 4, 10),
     metric('wbc_diff', 'neutrophil_seg', 'Neutrophils (seg)', 38.4, '%', 40, 70),
     metric('wbc_diff', 'lymphocyte', 'Lymphocytes', 51.7, '%', 20, 50),
@@ -173,7 +183,6 @@ export const healthReports: HealthReport[] = [{
     metric('endocrine', 'hba1c', 'HbA1c', 5.4, '%', null, 5.6),
     metric('iron', 'ferritin', 'Ferritin', 24, 'ng/mL', 30, 300),
     metric('exams', 'endoscopy', 'Gastroscopy', null, '', null, null, 'No significant findings'),
-    metric('inbody', 'skeletal_muscle_mass', 'Skeletal muscle mass', 28.1, 'kg', 27, 33),
   ],
 }]
 

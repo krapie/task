@@ -3478,6 +3478,11 @@ a { color: var(--kp-fg); text-decoration: none; }
 .ck-group summary span { font-family: var(--kp-font-mono); font-size: 12px; color: var(--kp-fg-3); }
 .ck-group[open] summary { color: var(--kp-fg); }
 .ck-list li span:last-child { text-align: right; }
+.ck-key { display: flex; flex-direction: column; gap: var(--kp-space-4); }
+.ck-keygroup .assets-stat-grid { margin-top: var(--kp-space-2); }
+.ck-stat .ck-unit { margin-left: 4px; font-size: 12px; font-weight: 400; color: var(--kp-fg-3); }
+.ck-stat .ck-range { text-align: left; }
+.ck-stat-flag { outline: 1px solid var(--kp-border-strong); outline-offset: -1px; }
 
 .assets-grafana-link {
   font-size: 13px;
@@ -3670,6 +3675,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .ck-section .ck-findings,
   .ck-section .ck-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--kp-space-6); align-items: start; }
   .ck-section .ck-findings { gap: var(--kp-space-2) var(--kp-space-6); }
+  .ck-section .ck-key { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 var(--kp-space-6); align-items: start; }
   .ck-section .ck-cols > .ck-col { min-width: 0; }
   .ck-section .ck-cols.ck-masked { grid-template-columns: 1fr; }
   .ck-section .ck-cols > .ck-col:empty { display: none; }
