@@ -77,7 +77,6 @@ async function callModel(texts, target) {
     body: JSON.stringify({
       model: TRANSLATE_MODEL,
       max_tokens: 16000,
-      temperature: 0,
       system: systemPrompt(target),
       tools: [
         {
