@@ -22,7 +22,7 @@ export const isApprovalTool = (name: string) => /(^|__)(request_approval|browser
 
 // Two kinds of waiting question: approve a risky step, or "I'm signed in" after the owner signed in by hand.
 const approvalWords = (kind?: string) => kind === 'login'
-  ? { head: 'Sign in needed', yes: "I'm signed in", no: 'Cancel', yesDone: 'Signed in: the assistant checks the page', noDone: 'Cancelled' }
+  ? { head: 'Sign in needed', yes: '', no: 'Cancel', yesDone: 'Signed in: the assistant saw your account', noDone: 'Cancelled' } // nothing to press when done: the assistant watches the page
   : { head: 'Needs your approval', yes: 'Approve', no: 'Deny', yesDone: 'Approved', noDone: 'Denied' }
 
 interface ActionResult { created?: 'event' | 'todo' | 'task'; updated?: 'event' | 'todo'; id?: string; title?: string; text?: string; start_date?: string; end_date?: string; time?: string | null; due_date?: string | null; slot_date?: string; completed?: boolean }
@@ -136,7 +136,7 @@ export function ApprovalCard({ part, onOpenBrowser }: { part: ToolPart; onOpenBr
         {answered === 'error' && <span className="as-meta">Could not ask for approval</span>}
         {!answered && (
           <>
-            <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy || !pending}>{words.yes}</button>
+            {words.yes && <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy || !pending}>{words.yes}</button>}
             <button type="button" className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={busy || !pending}>{words.no}</button>
             {onOpenBrowser && <button type="button" className="btn-ghost btn-sm" onClick={onOpenBrowser}><Icon name="globe" size={14} /> Show page</button>}
           </>
@@ -461,24 +461,51 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
     setSiteNote(null)
     try { synced((await fn()).synced); loadSites() } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) }
   }
-  // Integrations → "Set up sign-in": open the site on the page and wait for the owner to say they are signed in. The assistant
-  // reads that state in browser_sites, and still checks the page before it relies on it.
-  const startSignIn = (s: BrowserSite) => {
-    enqueue({ type: 'open', url: s.url })
-    setSignIn(s)
-    setView('page')
-  }
-  const onSignInSite = (() => {
-    if (!signIn || !info) return false
+  // Integrations → "Set up sign-in": open the site on the page and let the assistant watch it. The owner signs in by hand and presses
+  // nothing; the operator marks the site signed in when the page shows the account, and this bar notices (it reads the list every 3 s).
+  const signInFrom = useRef<string | null>(null)
+  const [signedDone, setSignedDone] = useState(false)
+  const signInRef = useRef<BrowserSite | null>(null)
+  signInRef.current = signIn
+  // The bar appears once the watch really runs (and the baseline is the list as it is now), so it never promises a watch that failed.
+  const startSignIn = async (s: BrowserSite) => {
+    setError(null)
     try {
-      const host = new URL(info.url).hostname
-      return [...signIn.domains, ...signIn.login_domains].some(d => host === d || host.endsWith(`.${d}`))
-    } catch { return false }
-  })()
-  const confirmSignedIn = async () => {
-    if (!signIn) return
-    try { await api.assistant.updateSite(signIn.id, { login_status: 'signed_in' }); setSignIn(null); loadSites() } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+      const list = await api.assistant.sites()
+      setSites(list)
+      signInFrom.current = list.find(x => x.id === s.id)?.login_checked_at ?? null
+      await api.assistant.watchSignIn(s.id)
+      enqueue({ type: 'open', url: s.url })
+      setSignedDone(false)
+      setSignIn(s)
+      setView('page')
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
   }
+  const cancelSignIn = () => {
+    if (signIn) api.assistant.stopSignInWatch(signIn.id).catch(() => {})
+    setSignIn(null)
+    setSignedDone(false)
+  }
+  // Closing the panel ends the watch; so does the end of the server's 10 minutes (the bar goes with it).
+  useEffect(() => () => { if (signInRef.current) api.assistant.stopSignInWatch(signInRef.current.id).catch(() => {}) }, [])
+  useEffect(() => {
+    if (!signIn) return
+    let stop = false
+    const t = setInterval(() => {
+      api.assistant.sites().then(list => {
+        if (stop) return
+        setSites(list)
+        const s = list.find(x => x.id === signIn.id)
+        if (s?.login_status === 'signed_in' && s.login_checked_at !== signInFrom.current) {
+          clearInterval(t)
+          setSignedDone(true)
+          setTimeout(() => { if (!stop) { setSignIn(null); setSignedDone(false) } }, 2500)
+        }
+      }, () => {})
+    }, 3000)
+    const end = setTimeout(() => { if (!stop) { setSignIn(null); setSignedDone(false) } }, 10 * 60_000 + 5000)
+    return () => { stop = true; clearInterval(t); clearTimeout(end) }
+  }, [signIn])
 
   return (
     <aside className="br-panel" aria-label="Browser">
@@ -494,7 +521,7 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
           <span className="as-proposal-kind"><Icon name="lock" size={12} /> {approvalWords(pending.kind).head}</span>
           <p className="as-proposal-summary">{pending.summary}</p>
           <div className="as-proposal-actions">
-            <button className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={deciding}>{approvalWords(pending.kind).yes}</button>
+            {approvalWords(pending.kind).yes && <button className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={deciding}>{approvalWords(pending.kind).yes}</button>}
             <button className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={deciding}>{approvalWords(pending.kind).no}</button>
           </div>
         </div>
@@ -514,12 +541,13 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
       </div>
       {signIn && (
         <div className="br-signin">
-          <span className="as-proposal-kind"><Icon name="lock" size={12} /> Signing in to {signIn.label}</span>
-          <p className="as-meta">Sign in on the page below (a phone confirmation or a robot check too), then press the button. The assistant never sees your password.</p>
-          <div className="as-proposal-actions">
-            <button type="button" className="btn-primary btn-sm" onClick={() => void confirmSignedIn()} disabled={!onSignInSite} title={onSignInSite ? undefined : 'Waiting for the site to open on the page'}>I'm signed in</button>
-            <button type="button" className="btn-ghost btn-sm" onClick={() => setSignIn(null)}>Cancel</button>
-          </div>
+          <span className="as-proposal-kind"><Icon name="lock" size={12} /> {signedDone ? `Signed in to ${signIn.label}` : `Signing in to ${signIn.label}`}</span>
+          {!signedDone && <p className="as-meta">Sign in on the page below (a phone confirmation or a robot check too). The assistant watches the page and marks the site signed in by itself; it never sees your password.</p>}
+          {!signedDone && (
+            <div className="as-proposal-actions">
+              <button type="button" className="btn-ghost btn-sm" onClick={cancelSignIn}>Cancel</button>
+            </div>
+          )}
         </div>
       )}
       <div className="br-screen" ref={screenRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onContextMenu={e => e.preventDefault()}>
@@ -556,7 +584,7 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
                   <span className={`as-meta br-site-state${s.login_status === 'needs_login' ? ' br-site-state-warn' : ''}`}>{signInText(s)}{s.login_note ? ` · ${s.login_note}` : ''}</span>
                 </div>
                 <div className="br-site-actions">
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => startSignIn(s)} disabled={!s.enabled}>{s.login_status === 'signed_in' ? 'Sign in again' : 'Set up sign-in'}</button>
+                  <button type="button" className="btn-ghost btn-sm" onClick={() => void startSignIn(s)} disabled={!s.enabled}>{s.login_status === 'signed_in' ? 'Sign in again' : 'Set up sign-in'}</button>
                   {s.login_status === 'signed_in' && <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { login_status: 'needs_login' }))}>Signed out</button>}
                   <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { enabled: !s.enabled }))} aria-pressed={s.enabled}>{s.enabled ? 'On' : 'Off'}</button>
                   <button type="button" className="icon-btn" aria-label={`Remove ${s.label}`} title="Remove" onClick={async () => { if (await confirmDialog({ title: 'Remove site', body: `${s.label} leaves the browser's sites.`, confirmLabel: 'Remove', danger: true })) void siteAction(() => api.assistant.removeSite(s.id)) }}><Icon name="close" size={14} /></button>
@@ -657,7 +685,7 @@ export function PendingApproval({ hide }: { hide?: boolean }) {
       <p className="as-proposal-summary">{pending.summary}</p>
       {error && <p className="as-error">{error}</p>}
       <div className="as-proposal-actions">
-        <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy}>{approvalWords(pending.kind).yes}</button>
+        {approvalWords(pending.kind).yes && <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy}>{approvalWords(pending.kind).yes}</button>}
         <button type="button" className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={busy}>{approvalWords(pending.kind).no}</button>
       </div>
     </div>

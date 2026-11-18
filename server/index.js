@@ -1935,6 +1935,15 @@ app.patch('/api/assistant/browser/sites/:id', stepUpAuth, async (req, res) => {
   res.json({ site: siteView(row), synced: await pushBrowserConfig() })
 })
 
+// "Set up sign-in": the operator watches the page and marks the site signed in once it shows the owner's account (body { stop: true } ends it).
+app.post('/api/assistant/browser/sites/:id/signin-watch', stepUpAuth, async (req, res) => {
+  const stop = !!req.body?.stop
+  if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return res.status(400).json({ error: 'bad site id' })
+  if (!stop && !(await pool.query('SELECT 1 FROM browser_sites WHERE id = $1 AND enabled', [req.params.id])).rowCount) return res.status(404).json({ error: 'no such site' })
+  await audit(`assistant_site_signin_${stop ? 'stop' : 'watch'}:${req.params.id}`, req)
+  return assistantJson(req, res, '/browser/signin-watch', { method: 'POST', body: JSON.stringify(stop ? { stop: true } : { site_id: req.params.id }) })
+})
+
 app.delete('/api/assistant/browser/sites/:id', stepUpAuth, async (req, res) => {
   const { rowCount } = await pool.query('DELETE FROM browser_sites WHERE id = $1', [req.params.id])
   if (!rowCount) return res.status(404).json({ error: 'not found' })

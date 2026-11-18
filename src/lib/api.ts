@@ -453,6 +453,9 @@ export const api = {
     sites: () => assetReq<{ sites: BrowserSite[] }>('GET', '/assistant/browser/sites').then(r => r.sites),
     addSite: (s: BrowserSiteInput) => assetReq<{ site: BrowserSite; synced: boolean }>('POST', '/assistant/browser/sites', s),
     updateSite: (id: string, patch: Partial<Pick<BrowserSite, 'label' | 'url' | 'domains' | 'login_domains' | 'note' | 'quick_link' | 'enabled' | 'login_status'>>) => assetReq<{ site: BrowserSite; synced: boolean }>('PATCH', `/assistant/browser/sites/${id}`, patch),
+    // "Set up sign-in": the assistant watches the page and marks the site signed in once it shows the owner's account.
+    watchSignIn: (id: string) => assetReq<{ watching: string }>('POST', `/assistant/browser/sites/${id}/signin-watch`, {}),
+    stopSignInWatch: (id: string) => assetReq<{ ok: boolean }>('POST', `/assistant/browser/sites/${id}/signin-watch`, { stop: true }),
     removeSite: (id: string) => assetReq<{ ok: boolean; synced: boolean }>('DELETE', `/assistant/browser/sites/${id}`),
     browserInput: (ev: BrowserInput) => assetReq<{ url: string; title: string }>('POST', '/assistant/browser/input', ev),
     // The live view as a stream (server-sent events), read with the step-up token (EventSource cannot send it). Resolves when the

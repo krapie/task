@@ -62,9 +62,10 @@ function assistantChat({ request }: { request: Request }) {
           const site = sites.find(s => s.label === 'Catch Table')!
           send({ type: 'text', text: 'Catch Table shows a sign-in page. I will ask you to sign in.' })
           send({ type: 'tool', id: 'l1', name: 'browser_request_login', input: { site: site.label, message: 'approve the sign-in on your phone if it asks' } })
-          pendingApproval = { id: `a-${uid()}`, kind: 'login', summary: `Sign in to ${site.label} in the Browser panel: approve the sign-in on your phone if it asks. Then press "I'm signed in".`, url: site.url, site: { id: site.id, label: site.label }, created_at: new Date().toISOString() }
+          pendingApproval = { id: `a-${uid()}`, kind: 'login', summary: `Sign in to ${site.label} in the Browser panel: approve the sign-in on your phone if it asks. Nothing to press: the assistant watches the page and carries on once it shows your account.`, url: site.url, site: { id: site.id, label: site.label }, created_at: new Date().toISOString() }
           approvalDecision = null
-          for (let i = 0; i < 300 && !approvalDecision; i++) await sleep(200)
+          // the watch "sees the account" after a few seconds unless the owner cancels
+          for (let i = 0; i < 300 && !approvalDecision; i++) { await sleep(200); if (i === 17 && !approvalDecision) { approvalDecision = 'approve'; pendingApproval = null } }
           const result = approvalDecision === 'approve' ? 'approved' : approvalDecision === 'deny' ? 'denied' : 'timed out'
           send({ type: 'tool_result', id: 'l1', error: false, output: JSON.stringify({ result }) })
           if (result === 'approved') {
@@ -323,6 +324,12 @@ export const handlers: HttpHandler[] = [
     const b = (await request.json()) as Partial<(typeof sites)[number]>
     sites = sites.map(s => (s.id === params.id ? { ...s, ...b } : s))
     return ok({ site: sites.find(s => s.id === params.id), synced: false })
+  }),
+  http.post('/api/assistant/browser/sites/:id/signin-watch', async ({ request, params }) => {
+    const b = (await request.json().catch(() => ({}))) as { stop?: boolean }
+    // the watch sees the account a few seconds after the owner signs in (here: after 4 s)
+    if (!b.stop) setTimeout(() => { sites = sites.map(s => (s.id === params.id ? { ...s, login_status: 'signed_in' as const, login_checked_at: new Date().toISOString(), login_note: 'seen after you signed in' } : s)) }, 4000)
+    return ok({ ok: true })
   }),
   http.delete('/api/assistant/browser/sites/:id', async ({ params }) => {
     sites = sites.filter(s => s.id !== params.id)
