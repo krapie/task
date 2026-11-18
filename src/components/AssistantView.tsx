@@ -4,7 +4,8 @@ import { useStepUp } from '../lib/useStepUp'
 import { confirmDialog } from '../lib/notify'
 import { useEscToStop } from '../lib/useEscToStop'
 import { ask, assistantStore, isRemoteStreaming, moveChat, open, refreshList, remove, setChatProfile, setChoice, setError as setStoreError, startNew, stop } from '../lib/assistantStore'
-import { ActionCard, ApprovalCard, BrowserPanel, ReservationProposal, SiteProposal, isApprovalTool, isWriteTool } from './AssistantCards'
+import { ActionCard, ApprovalCard, BrowserPanel, ReservationProposal, SiteProposal, isApprovalTool, isWriteTool, requestSignIn } from './AssistantCards'
+import { IntegrationsView, ReservationLine, ScheduleView } from './AssistantTools'
 import StepUpBar from './StepUpBar'
 import { Icon } from './Icons'
 import { Empty, Loading } from './Ui'
@@ -273,6 +274,12 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
   const { choice, chat, list, live, loading: loadingChat, error: chatError } = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
   // The agent of this chat, or of the next new chat when the owner picked one (null = Auto, not routed yet).
   const profile: AssistantProfile | null = chat.profile ?? (chat.id ? null : choice === 'auto' ? null : choice)
+  // What the chat area shows: the conversation, or one of the two views opened from the top bar (they used to sit in the browser panel).
+  const [tool, setTool] = useState<'chat' | 'integrations' | 'schedule'>('chat')
+  const [browserForced, setBrowserForced] = useState(false) // "Set up sign-in" opens the panel whatever the chat's agent is
+  const showBrowser = browserOpen && (chat.profile === 'assistant' || browserForced)
+  const toggleTool = (t: 'integrations' | 'schedule') => setTool(cur => (cur === t ? 'chat' : t))
+  const setUpSignIn = (site: Parameters<typeof requestSignIn>[0]) => { setBrowserForced(true); setBrowserOpen(true); requestSignIn(site) }
   const scrollRef = useRef<HTMLDivElement>(null)
   const pendingOpen = useRef(initialChatId)
 
@@ -322,8 +329,8 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
   }, [chat.turns])
 
   const send = (q: string) => { setInput(''); void ask(q) }
-  const openChat = (id: string) => { setSidebar(false); void open(id) }
-  const newChat = () => { startNew(); setSidebar(false); setInput('') }
+  const openChat = (id: string) => { setSidebar(false); setTool('chat'); void open(id) }
+  const newChat = () => { startNew(); setSidebar(false); setTool('chat'); setInput('') }
   const removeChat = async (c: AssistantSummary) => {
     if (!await confirmDialog({ title: 'Delete conversation', body: c.title, confirmLabel: 'Delete', danger: true })) return
     await remove(c.id)
@@ -411,8 +418,9 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
       {!unlocked ? (
         <Empty icon="assistant" title="Assistant is locked" hint="Unlock with your passkey. One chat list, two agents: Assistant adds events and todos, checks mail and uses a browser; Personal answers about money, health, notes and the market, and holds the Tuesday market note." />
       ) : (
-        <div ref={splitRef} className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${sbHidden ? ' as-collapsed' : ''}${dragging ? ' as-dragging' : ''}${brDragging ? ' br-dragging' : ''}${browserOpen && chat.profile === 'assistant' && brEff >= BR_WIDE_AT ? ' as-br-wide' : ''}${masked ? ' as-masked' : ''}`} style={{ '--as-sidebar-w': `${sbWidth}px`, '--br-w': `${brEff}px` } as CSSProperties}>
+        <div ref={splitRef} className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${sbHidden ? ' as-collapsed' : ''}${dragging ? ' as-dragging' : ''}${brDragging ? ' br-dragging' : ''}${showBrowser && brEff >= BR_WIDE_AT ? ' as-br-wide' : ''}${masked ? ' as-masked' : ''}`} style={{ '--as-sidebar-w': `${sbWidth}px`, '--br-w': `${brEff}px` } as CSSProperties}>
           <aside className="split-sidebar as-sidebar" aria-label="Conversations">
+            <ReservationLine onOpen={() => { setTool('schedule'); setSidebar(false) }} />
             <div className="as-sidebar-actions">
               <button className="btn-ghost btn-sm" onClick={newChat}><Icon name="plus" size={14} /> New chat</button>
               <button className="btn-ghost btn-sm" onClick={onOpenNotes} title="Your notes, which the Personal agent searches and can propose changes to"><Icon name="note" size={14} /> Notes</button>
@@ -479,6 +487,8 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
                   <option value="personal">Personal</option>
                 </select>
               </label>
+              <button className={`icon-btn${tool === 'integrations' ? ' icon-btn-active' : ''}`} onClick={() => toggleTool('integrations')} aria-label="Integrations" aria-pressed={tool === 'integrations'} title="Sites the assistant's browser may use, and their sign-in"><Icon name="integrations" /></button>
+              <button className={`icon-btn${tool === 'schedule' ? ' icon-btn-active' : ''}`} onClick={() => toggleTool('schedule')} aria-label="Schedule" aria-pressed={tool === 'schedule'} title="Reservations the assistant runs when a shop opens"><Icon name="calendar" /></button>
               {chat.profile === 'assistant' && (
                 <button className={`icon-btn${browserOpen ? ' icon-btn-active' : ''}`} onClick={() => setBrowserOpen(o => !o)} aria-label="Browser" aria-pressed={browserOpen} title="The assistant's browser: watch it, sign in, take over"><Icon name="globe" /></button>
               )}
@@ -491,7 +501,15 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
                 </label>
               )}
             </div>
-            {loadingChat ? (
+            {tool !== 'chat' ? (
+              <div className="as-scroll as-tool">
+                <div className="as-tool-head">
+                  <h2>{tool === 'integrations' ? 'Integrations' : 'Schedule'}</h2>
+                  <button type="button" className="btn-ghost btn-sm" onClick={() => setTool('chat')}>Back to the chat</button>
+                </div>
+                {tool === 'integrations' ? <IntegrationsView onSetUpSignIn={setUpSignIn} /> : <ScheduleView onOpenChat={id => { setTool('chat'); void open(id) }} />}
+              </div>
+            ) : loadingChat ? (
               <div className="as-scroll"><Loading rows={5} /></div>
             ) : chat.turns.length === 0 ? (
               <div className="as-empty">
@@ -519,7 +537,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
               </>
             )}
           </section>
-          {browserOpen && chat.profile === 'assistant' && (
+          {showBrowser && (
             <>
               <div
                 className="br-resizer"
@@ -533,7 +551,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
                 onKeyDown={onBrKey}
                 onDoubleClick={() => resizeBr(BR_DEFAULT)}
               />
-              <BrowserPanel onClose={() => setBrowserOpen(false)} wide={brEff >= BR_WIDE_AT} onToggleWide={toggleBrWide} />
+              <BrowserPanel onClose={() => { setBrowserOpen(false); setBrowserForced(false) }} wide={brEff >= BR_WIDE_AT} onToggleWide={toggleBrWide} />
             </>
           )}
         </div>

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type CompositionEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type TouchEvent } from 'react'
 import { api } from '../lib/api'
 import { TASK_DATA_CHANGED } from '../lib/assistantStore'
-import { confirmDialog } from '../lib/notify'
 import { Icon } from './Icons'
-import type { AssistantApproval, AssistantPart, BrowserInput, BrowserSite, BrowserState, BrowserStreamEvent, ReservationJob, ReservationInput } from '../types'
+import type { AssistantApproval, AssistantPart, BrowserInput, BrowserSite, BrowserState, BrowserStreamEvent, ReservationInput } from '../types'
 
 type ToolPart = Extract<AssistantPart, { kind: 'tool' }>
 
@@ -168,6 +167,15 @@ const IDLE_MS = 1000
 const ACTIVE_FOR_MS = 15_000
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
+// "Set up sign-in" in Integrations (a view of the chat area) asks this panel to open the site and watch the sign-in. The panel may not
+// be open yet: the request waits until it mounts.
+const SIGNIN_EVENT = 'kp-browser-signin'
+let signInRequest: BrowserSite | null = null
+export function requestSignIn(s: BrowserSite) {
+  signInRequest = s
+  window.dispatchEvent(new Event(SIGNIN_EVENT))
+}
+
 // The assistant's one browser, live: the real Chrome on the homeserver, used like a browser. Click, drag, double-click, scroll
 // with the wheel (or a finger), type (Korean too: the IME's committed text is sent), use shortcuts and paste, right on the page.
 // The agent and the owner share it. Events are queued and sent one at a time; moves and wheel turns are merged, typed
@@ -180,12 +188,8 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
   const [editingAddr, setEditingAddr] = useState(false)
   const [pending, setPending] = useState<AssistantApproval | null>(null)
   const [deciding, setDeciding] = useState(false)
-  const [view, setView] = useState<'page' | 'integrations'>('page')
   const [signIn, setSignIn] = useState<BrowserSite | null>(null)
   const [sites, setSites] = useState<BrowserSite[] | null>(null)
-  const [siteNote, setSiteNote] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ label: '', url: '', login: '' })
   const last = useRef<string | null>(null)
   const editingAddrRef = useRef(false)
   editingAddrRef.current = editingAddr
@@ -231,16 +235,6 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
   // The sites: loaded now, and again whenever the assistant may have recorded a sign-in (the pending question changes).
   const loadSites = useCallback(() => { api.assistant.sites().then(setSites, () => {}) }, [])
   useEffect(() => { loadSites() }, [loadSites, pending?.id])
-
-  // Scheduled reservations: listed in Integrations, refreshed while it is open (a run changes state within seconds).
-  const [jobs, setJobs] = useState<ReservationJob[] | null>(null)
-  const loadJobs = useCallback(() => { api.assistant.reservations().then(setJobs, () => {}) }, [])
-  useEffect(() => {
-    if (view !== 'integrations') return
-    loadJobs()
-    const t = setInterval(() => { if (!document.hidden) loadJobs() }, 10_000)
-    return () => clearInterval(t)
-  }, [view, loadJobs])
 
   useEffect(() => {
     void refresh()
@@ -453,23 +447,6 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
     setEditingAddr(false)
     enqueue({ type: 'open', url: /^https?:\/\//i.test(v) ? v : `https://${v}` })
   }
-  const synced = (ok: boolean) => setSiteNote(ok ? null : 'Saved. The browser picks the new list up within a few minutes.')
-  const addSite = async (e: FormEvent) => {
-    e.preventDefault()
-    setSiteNote(null)
-    try {
-      const login = form.login.split(/[\s,]+/).filter(Boolean)
-      const r = await api.assistant.addSite({ label: form.label, url: /^https?:\/\//i.test(form.url.trim()) ? form.url.trim() : `https://${form.url.trim()}`, ...(login.length ? { login_domains: login } : {}) })
-      synced(r.synced)
-      setForm({ label: '', url: '', login: '' })
-      setAdding(false)
-      loadSites()
-    } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) }
-  }
-  const siteAction = async (fn: () => Promise<{ synced: boolean }>) => {
-    setSiteNote(null)
-    try { synced((await fn()).synced); loadSites() } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) }
-  }
   // Integrations → "Set up sign-in": open the site on the page and let the assistant watch it. The owner signs in by hand and presses
   // nothing; the operator marks the site signed in when the page shows the account, and this bar notices (it reads the list every 3 s).
   const signInFrom = useRef<string | null>(null)
@@ -477,17 +454,6 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
   const signInRef = useRef<BrowserSite | null>(null)
   signInRef.current = signIn
   // The bar appears once the watch really runs (and the baseline is the list as it is now), so it never promises a watch that failed.
-  // Integrations → "Check sign-in": the assistant opens the site's account page and records the answer.
-  const [checking, setChecking] = useState<string | null>(null)
-  const checkSignIn = async (s: BrowserSite) => {
-    setChecking(s.id)
-    setSiteNote(`Checking ${s.label}…`)
-    try {
-      const r = await api.assistant.checkSignIn(s.id)
-      setSiteNote(`${s.label}: ${r.status === 'signed_in' ? 'signed in' : r.status === 'needs_login' ? 'signed out: use Set up sign-in' : r.note}`)
-      loadSites()
-    } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) } finally { setChecking(null) }
-  }
   const startSignIn = async (s: BrowserSite) => {
     setError(null)
     try {
@@ -498,9 +464,16 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
       enqueue({ type: 'open', url: s.url })
       setSignedDone(false)
       setSignIn(s)
-      setView('page')
     } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
   }
+  const startSignInRef = useRef(startSignIn)
+  startSignInRef.current = startSignIn
+  useEffect(() => {
+    const take = () => { const r = signInRequest; signInRequest = null; if (r) void startSignInRef.current(r) }
+    take()
+    window.addEventListener(SIGNIN_EVENT, take)
+    return () => window.removeEventListener(SIGNIN_EVENT, take)
+  }, [])
   const cancelSignIn = () => {
     if (signIn) api.assistant.stopSignInWatch(signIn.id).catch(() => {})
     setSignIn(null)
@@ -530,9 +503,8 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
   return (
     <aside className="br-panel" aria-label="Browser">
       <div className="br-head">
-        <Icon name={view === 'integrations' ? 'integrations' : 'globe'} size={14} />
-        <span className="br-title" title={info?.url}>{view === 'integrations' ? 'Integrations' : info ? (info.title || info.url) : 'Browser'}</span>
-        <button className={`icon-btn${view === 'integrations' ? ' icon-btn-active' : ''}`} onClick={() => setView(v => (v === 'page' ? 'integrations' : 'page'))} aria-label="Integrations" aria-pressed={view === 'integrations'} title="Integrations: sites and sign-ins"><Icon name="integrations" size={16} /></button>
+        <Icon name="globe" size={14} />
+        <span className="br-title" title={info?.url}>{info ? (info.title || info.url) : 'Browser'}</span>
         <button className="icon-btn br-wide-btn" onClick={onToggleWide} aria-label={wide ? 'Narrower browser' : 'Wider browser'} aria-pressed={wide} title={wide ? 'Narrower' : 'Wider (or drag the edge)'}><Icon name={wide ? 'collapse' : 'expand'} size={16} /></button>
         <button className="icon-btn" onClick={onClose} aria-label="Close browser" title="Close browser"><Icon name="close" size={16} /></button>
       </div>
@@ -547,7 +519,7 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
         </div>
       )}
       {error && <p className="as-error">{error}</p>}
-      <div className="br-page" hidden={view !== 'page'}>
+      <div className="br-page">
       <form className="br-addr" onSubmit={go}>
         <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'back' })} aria-label="Back" title="Back"><Icon name="chevronLeft" size={16} /></button>
         <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'forward' })} aria-label="Forward" title="Forward"><Icon name="chevronRight" size={16} /></button>
@@ -592,75 +564,8 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
       </div>
       <p className="as-meta br-note">The real Chrome on the homeserver, shared with the assistant. Click, drag, scroll, type and paste right on the page; sign in here yourself, the assistant never sees passwords. Right-click and copying out are not forwarded.</p>
       </div>
-      {view === 'integrations' && (
-        <div className="br-int">
-          <p className="as-meta br-int-intro">The sites the assistant's browser may use. Set up a sign-in once: the browser keeps the session, and the assistant looks at the page before it relies on it. You never give it a password.</p>
-          <ul className="br-site-list">
-            {(sites ?? []).map(s => (
-              <li key={s.id} className={s.enabled ? '' : 'br-site-off'}>
-                <div className="br-site-main">
-                  <span className="br-site-name">{s.label}</span>
-                  <span className="as-meta br-site-domains">{[...s.domains, ...s.login_domains].join(' · ')}</span>
-                  <span className={`as-meta br-site-state${s.login_status === 'needs_login' ? ' br-site-state-warn' : ''}`}>{signInText(s)}{s.login_note ? ` · ${s.login_note}` : ''}</span>
-                </div>
-                <div className="br-site-actions">
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => void checkSignIn(s)} disabled={!s.enabled || checking !== null} title="Open the account page and see whether you are signed in" aria-label="Check sign-in">Check</button>
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => void startSignIn(s)} disabled={!s.enabled}>{s.login_status === 'signed_in' ? 'Sign in again' : 'Set up sign-in'}</button>
-                  {s.login_status === 'signed_in' && <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { login_status: 'needs_login' }))}>Signed out</button>}
-                  <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { enabled: !s.enabled }))} aria-pressed={s.enabled}>{s.enabled ? 'On' : 'Off'}</button>
-                  <button type="button" className="icon-btn" aria-label={`Remove ${s.label}`} title="Remove" onClick={async () => { if (await confirmDialog({ title: 'Remove site', body: `${s.label} leaves the browser's sites.`, confirmLabel: 'Remove', danger: true })) void siteAction(() => api.assistant.removeSite(s.id)) }}><Icon name="close" size={14} /></button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {adding ? (
-            <form className="br-site-form" onSubmit={addSite}>
-              <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Name" aria-label="Site name" maxLength={40} required />
-              <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://www.example.com/" aria-label="Start page" autoCapitalize="off" spellCheck={false} required />
-              <input value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value }))} placeholder="Sign-in through other domains (optional, e.g. kakao.com)" aria-label="Sign-in domains" autoCapitalize="off" spellCheck={false} />
-              <div className="as-proposal-actions">
-                <button type="submit" className="btn-primary btn-sm">Add site</button>
-                <button type="button" className="btn-ghost btn-sm" onClick={() => { setAdding(false); setSiteNote(null) }}>Cancel</button>
-              </div>
-            </form>
-          ) : (
-            <button type="button" className="btn-ghost btn-sm br-site-add" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add site</button>
-          )}
-          {siteNote && <p className="as-meta br-site-note">{siteNote}</p>}
-          <h3 className="br-int-head">Reservations</h3>
-          <p className="as-meta br-int-intro">Scheduled by the assistant and approved by you. At the opening time the assistant takes this browser over (your input pauses), tries the slots from the latest, and confirms only a reservation that costs nothing.</p>
-          <ul className="br-site-list">
-            {(jobs ?? []).length === 0 && <li className="as-meta">{jobs === null ? 'Loading…' : 'Nothing scheduled. Ask the assistant to reserve a shop when it opens.'}</li>}
-            {(jobs ?? []).map(j => (
-              <li key={j.id}>
-                <div className="br-site-main">
-                  <span className="br-site-name">{j.shop_name}{j.mode === 'dry_run' ? ' · dry run' : ''}</span>
-                  <span className="as-meta br-site-domains">{j.date} {j.open_time} · {j.party} {j.party === 1 ? 'person' : 'people'} · {j.slots.join(' → ')}</span>
-                  <span className={`as-meta br-site-state${j.state === 'failed' || j.state === 'expired' ? ' br-site-state-warn' : ''}`}>{RESERVATION_STATE[j.state]}{j.result?.time ? ` · ${j.result.time}` : ''}{j.result?.booking_number ? ` · No. ${j.result.booking_number}` : ''}{j.result?.detail && !['scheduled', 'preparing', 'running'].includes(j.state) ? ` · ${j.result.detail}` : ''}</span>
-                </div>
-                <div className="br-site-actions">
-                  {['scheduled', 'preparing', 'running'].includes(j.state) && (
-                    <button type="button" className="btn-ghost btn-sm" onClick={async () => { if (await confirmDialog({ title: 'Cancel reservation', body: `${j.shop_name} ${j.date} ${j.open_time}`, confirmLabel: 'Cancel reservation', danger: true })) { try { await api.assistant.cancelReservation(j.id) } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) } loadJobs() } }}>Cancel</button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </aside>
   )
-}
-
-const RESERVATION_STATE: Record<ReservationJob['state'], string> = {
-  scheduled: 'Waiting for the opening',
-  preparing: 'Taking over the browser',
-  running: 'Reserving now',
-  succeeded: 'Reserved',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-  expired: 'Missed',
-  dry_run_done: 'Dry run finished',
 }
 
 // A reservation the assistant proposed. Nothing is scheduled until the owner approves (the passkey session): then at the

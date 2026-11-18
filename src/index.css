@@ -4264,6 +4264,23 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .br-page[hidden] { display: none; }
 .br-int { flex: 1; min-height: 0; overflow-y: auto; padding: var(--kp-space-3); display: flex; flex-direction: column; gap: var(--kp-space-3); }
 .br-int-intro { margin: 0; }
+/* Integrations and Schedule, as views of the chat area (opened from the top bar), and the reservation line above the conversation list */
+.as-tool { padding: var(--kp-space-4) var(--kp-space-5); }
+.as-tool-head { display: flex; align-items: center; justify-content: space-between; gap: var(--kp-space-3); max-width: 760px; margin: 0 auto var(--kp-space-3); }
+.as-tool-head h2 { margin: 0; font-size: 16px; font-weight: 600; }
+.as-tool-body { display: flex; flex-direction: column; gap: var(--kp-space-3); max-width: 760px; margin: 0 auto; }
+.as-tool-body > p { margin: 0; }
+.as-tool-list { max-height: none; overflow: visible; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-md); }
+.as-tool-history { margin-top: var(--kp-space-1); }
+.br-site-list .as-tool-history li { display: block; padding: 1px 0; border-bottom: 0; }
+.as-tool-history summary { cursor: pointer; }
+.as-tool-history ol { margin: var(--kp-space-1) 0 0; padding-left: var(--kp-space-4); }
+.as-tool-time { font-family: var(--kp-font-mono); margin-right: var(--kp-space-1); }
+.as-resline { display: flex; align-items: center; gap: var(--kp-space-2); width: 100%; padding: var(--kp-space-2) var(--kp-space-3); background: none; border: 0; border-bottom: 1px solid var(--kp-border); color: var(--kp-fg-2); font: inherit; font-size: 12px; text-align: left; cursor: pointer; flex-shrink: 0; }
+.as-resline:hover { background: var(--kp-hover-bg); color: var(--kp-fg); }
+.as-resline-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.as-resline-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kp-fg); }
+.as-resline-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--kp-fg-3); font-family: var(--kp-font-mono); font-size: 11px; }
 .br-int-head { margin: var(--kp-space-5) 0 0; font-size: 13px; font-weight: 600; color: var(--kp-fg); }
 .br-int .br-site-list { max-height: none; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); }
 .br-int .br-site-actions { flex-wrap: wrap; justify-content: flex-end; }

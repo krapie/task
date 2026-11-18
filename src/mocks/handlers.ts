@@ -56,7 +56,15 @@ const convs: MockConv[] = [
   { id: '00000000-0000-4000-8000-000000000003', profile: 'personal', title: 'Summarize my week', folder: 'summaries', created_at: hoursAgo(70), updated_at: hoursAgo(70), turns: [mockTurn('s3', 'Summarize my week', 'Four workouts, 7h 10m of sleep on average, and 12 of 15 tasks done (mock numbers).')] },
 ]
 // Scheduled reservations (the Integrations list and the proposal card's approval).
-const reservations: ReservationJob[] = []
+const hAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
+const tomorrow = new Date(Date.now() + 86_400_000)
+const reservations: ReservationJob[] = [
+  // tomorrow's, as the owner approved it
+  { id: 'rv-seed-0', shop_name: '고디바 롯데월드몰점', shop_url: 'https://app.catchtable.co.kr/ct/shop/godiva_lotteworldmall', party: 1, slots: ['16:30', '15:30', '14:30', '12:30', '11:30', '10:30'], open_time: '09:00', date: new Date(tomorrow.getTime() + 9 * 3600_000).toISOString().slice(0, 10), mode: 'live', fire_at: new Date(new Date(tomorrow.getTime() + 9 * 3600_000).toISOString().slice(0, 10) + 'T09:00:00+09:00').toISOString(), state: 'scheduled', result: {}, attempts: [], created_at: hAgo(1) },
+  // yesterday's run, to show what the history looks like
+  { id: 'rv-seed-1', shop_name: '고디바 롯데월드몰점', shop_url: 'https://app.catchtable.co.kr/ct/shop/godiva_lotteworldmall', party: 1, slots: ['16:30', '15:30', '14:30', '12:30', '11:30', '10:30'], open_time: '09:00', date: '2026-11-17', mode: 'live', fire_at: hAgo(30), state: 'succeeded', result: { time: '15:30', booking_number: '1411125955', detail: 'booked', conversation_id: '00000000-0000-4000-8000-000000000002' },
+    attempts: [{ at: hAgo(30.5), kind: 'preflight', note: 'sign-in: signed_in' }, { at: hAgo(30.02), kind: 'prepare' }, { at: hAgo(30), kind: 'open', note: 'looked 3 times, 4100 ms' }, { at: hAgo(29.99), kind: 'refused', note: '16:30 is not shown on the page' }, { at: hAgo(29.98), kind: 'gate', note: '15:30 for 1' }], created_at: hAgo(40) },
+]
 const kstDay = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10)
 
 // The operator routes a new chat by its first question (keyword rule); unclear goes to personal.
@@ -373,7 +381,7 @@ export const handlers: HttpHandler[] = [
     const b = (await request.json()) as { shop_name: string; shop_url: string; party: number; slots: string[]; open_time: string; date?: string; mode?: 'live' | 'dry_run' }
     if (reservations.some((r) => ['scheduled', 'preparing', 'running'].includes(r.state) && r.shop_url === b.shop_url)) return HttpResponse.json({ error: 'that shop is already scheduled for that day' }, { status: 409 })
     const date = b.date ?? kstDay(new Date(Date.now() + 86_400_000))
-    const j: ReservationJob = { id: `rv-${uid()}`, shop_name: b.shop_name, shop_url: b.shop_url, party: b.party, slots: [...b.slots].sort().reverse(), open_time: b.open_time, date, mode: b.mode ?? 'live', fire_at: new Date(`${date}T${b.open_time}:00+09:00`).toISOString(), state: 'scheduled', result: {}, created_at: new Date().toISOString() }
+    const j: ReservationJob = { id: `rv-${uid()}`, shop_name: b.shop_name, shop_url: b.shop_url, party: b.party, slots: [...b.slots].sort().reverse(), open_time: b.open_time, date, mode: b.mode ?? 'live', fire_at: new Date(`${date}T${b.open_time}:00+09:00`).toISOString(), state: 'scheduled', result: {}, attempts: [], created_at: new Date().toISOString() }
     reservations.unshift(j)
     return HttpResponse.json({ reservation: j }, { status: 201 })
   }),
