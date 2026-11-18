@@ -9,6 +9,7 @@ import { getOrCreateRetro } from './retro.js'
 import { startMetricsServer, telemetry, withSpan } from './telemetry.js'
 import { poolOptions, warmPool } from './pool.js'
 import { noteAccess, NOTE_EDIT_AUDIT_WINDOW_MINUTES } from './notes-access.js'
+import { AGENT_LOGIN_STATUSES, SEED_SITES, allowedDomains, duplicateOf, siteChanges, siteFromInput, tooManyDomains } from './browser-sites.js'
 
 const PORT = process.env.PORT || 3000
 // Sign-in is on auth.kevinprk.com. The web app sends access tokens from
@@ -48,6 +49,46 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
 const pool = new pg.Pool(poolOptions(process.env.POSTGRES_URL, { max: 8, application_name: 'task-api' }))
 // Without a listener a dropped idle connection (postgres restart) is an uncaught 'error' event and kills the process.
 pool.on('error', err => console.error('pg pool:', err.message))
+
+// The sites of the assistant's browser (docs/apps/browser-agent.md). A fresh table is seeded once with the sites the
+// browser knew before the list was editable; a later start never re-adds what the owner removed.
+async function initBrowserSites() {
+  // One transaction under an advisory lock: two pods starting together, or a crash in the middle, cannot leave a doubled or a partial seed.
+  const c = await pool.connect()
+  try {
+    await c.query('BEGIN')
+    await c.query('SELECT pg_advisory_xact_lock(7240101)')
+    const had = (await c.query(`SELECT to_regclass('browser_sites') AS t`)).rows[0].t
+    await c.query(`
+      CREATE TABLE IF NOT EXISTS browser_sites (
+        id TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        url TEXT NOT NULL,
+        domains TEXT[] NOT NULL,
+        login_domains TEXT[] NOT NULL DEFAULT '{}',
+        quick_link BOOLEAN NOT NULL DEFAULT true,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        note TEXT NOT NULL DEFAULT '',
+        login_status TEXT NOT NULL DEFAULT 'unknown',
+        login_checked_at TIMESTAMPTZ,
+        login_note TEXT NOT NULL DEFAULT '',
+        created_by TEXT NOT NULL DEFAULT 'owner',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `)
+    if (!had) {
+      for (const s of SEED_SITES) {
+        await c.query('INSERT INTO browser_sites (id, label, url, domains, quick_link, note, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)', [randomUUID(), s.label, s.url, s.domains, s.quick_link, s.note ?? '', 'seed'])
+      }
+    }
+    await c.query('COMMIT')
+  } catch (err) {
+    await c.query('ROLLBACK').catch(() => {})
+    throw err
+  } finally {
+    c.release()
+  }
+}
 
 async function initDb() {
   await pool.query(`
@@ -198,6 +239,7 @@ async function initDb() {
   await pool.query(`UPDATE notes SET created_at = updated_at WHERE created_at > updated_at`)
   await pool.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS fts tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(title, '') || ' ' || body)) STORED`)
   await pool.query('CREATE INDEX IF NOT EXISTS notes_fts_idx ON notes USING GIN (fts)')
+  await initBrowserSites()
   await pool.query('CREATE EXTENSION IF NOT EXISTS pg_trgm').then(
     () => pool.query(`CREATE INDEX IF NOT EXISTS notes_trgm_idx ON notes USING GIN ((coalesce(title, '') || ' ' || body) gin_trgm_ops)`),
   ).catch(err => console.warn('notes pg_trgm:', err.message))
@@ -1800,6 +1842,94 @@ app.post('/internal/assistant/additions', operatorAuth, async (req, res) => {
   await pool.query('INSERT INTO daily_additions VALUES ($1, $2, $3, false, $4)', [id, slotDate, text.trim().slice(0, 300), now])
   await audit(`assistant_task_add:${id}`, req)
   res.json({ id, slot_date: slotDate, text: text.trim().slice(0, 300), completed: false })
+})
+
+// ── Sites of the assistant's browser ────────────────────────────────────────────────────────────
+// The owner manages the list in the Browser panel (passkey step-up). Every change is pushed as the full allowed-domain list
+// to the browser worker (task-api -> operator -> worker); the operator also pulls it at start and every few minutes.
+// The assistant can only propose a site (a card the owner applies) and report whether a site is signed in.
+const SITE_COLUMNS = ['label', 'url', 'domains', 'login_domains', 'note', 'quick_link', 'enabled', 'login_status']
+const siteView = r => ({ id: r.id, label: r.label, url: r.url, domains: r.domains, login_domains: r.login_domains, quick_link: r.quick_link, enabled: r.enabled, note: r.note, login_status: r.login_status, login_checked_at: r.login_checked_at, login_note: r.login_note, created_by: r.created_by })
+const listSites = async () => (await pool.query('SELECT * FROM browser_sites ORDER BY created_at, label')).rows
+
+// True when the worker took the list. False means the list is saved but the browser keeps the old one until the next pull.
+// Pushes run one after another and each reads the table when it runs, so two quick changes cannot arrive out of order.
+let pushChain = Promise.resolve(false)
+function pushBrowserConfig() {
+  pushChain = pushChain.then(sendBrowserConfig, sendBrowserConfig)
+  return pushChain
+}
+async function sendBrowserConfig() {
+  if (!PERSONAL_TOKEN) return false
+  try {
+    const r = await fetch(`${OPERATOR_URL}/personal/browser/config`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${PERSONAL_TOKEN}`, 'X-User': 'task-api', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domains: allowedDomains(await listSites()) }),
+      signal: AbortSignal.timeout(8000),
+    })
+    return r.ok
+  } catch (err) {
+    console.error(`browser config push failed: ${err.message}`)
+    return false
+  }
+}
+
+const badSite = (res, err) => res.status(400).json({ error: err instanceof Error ? err.message : String(err) })
+
+app.get('/api/assistant/browser/sites', stepUpAuth, async (_req, res) => res.json({ sites: (await listSites()).map(siteView) }))
+
+app.post('/api/assistant/browser/sites', stepUpAuth, async (req, res) => {
+  let s
+  try { s = siteFromInput(req.body) } catch (err) { return badSite(res, err) }
+  const rows = await listSites()
+  if (rows.length >= 100) return res.status(400).json({ error: 'at most 100 sites' })
+  const dup = duplicateOf(rows, s)
+  if (dup) return res.status(409).json({ error: `already in the list as "${dup.label}"` })
+  if (tooManyDomains(rows, s)) return res.status(400).json({ error: 'too many allowed domains in all (at most 200)' })
+  const id = randomUUID()
+  await pool.query('INSERT INTO browser_sites (id, label, url, domains, login_domains, note, quick_link, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [id, s.label, s.url, s.domains, s.login_domains, s.note, s.quick_link, req.body?.created_by === 'assistant' ? 'assistant' : 'owner'])
+  await audit(`assistant_site_add:${id}`, req)
+  const row = (await pool.query('SELECT * FROM browser_sites WHERE id = $1', [id])).rows[0]
+  res.status(201).json({ site: siteView(row), synced: await pushBrowserConfig() })
+})
+
+app.patch('/api/assistant/browser/sites/:id', stepUpAuth, async (req, res) => {
+  const cur = (await pool.query('SELECT * FROM browser_sites WHERE id = $1', [req.params.id])).rows[0]
+  if (!cur) return res.status(404).json({ error: 'not found' })
+  let ch
+  try { ch = siteChanges(req.body, cur) } catch (err) { return badSite(res, err) }
+  if ((ch.domains || ch.login_domains || ch.enabled === true) && tooManyDomains(await listSites(), { ...cur, ...ch })) return res.status(400).json({ error: 'too many allowed domains in all (at most 200)' })
+  const keys = Object.keys(ch).filter(k => SITE_COLUMNS.includes(k))
+  if (!keys.length) return res.status(400).json({ error: 'nothing to change' })
+  const sets = keys.map((k, i) => `${k} = $${i + 2}`)
+  if (ch.login_status) sets.push('login_checked_at = NOW()')
+  await pool.query(`UPDATE browser_sites SET ${sets.join(', ')} WHERE id = $1`, [req.params.id, ...keys.map(k => ch[k])])
+  await audit(`assistant_site_edit:${req.params.id}`, req)
+  const row = (await pool.query('SELECT * FROM browser_sites WHERE id = $1', [req.params.id])).rows[0]
+  res.json({ site: siteView(row), synced: await pushBrowserConfig() })
+})
+
+app.delete('/api/assistant/browser/sites/:id', stepUpAuth, async (req, res) => {
+  const { rowCount } = await pool.query('DELETE FROM browser_sites WHERE id = $1', [req.params.id])
+  if (!rowCount) return res.status(404).json({ error: 'not found' })
+  await audit(`assistant_site_remove:${req.params.id}`, req)
+  res.json({ ok: true, synced: await pushBrowserConfig() })
+})
+
+// For the operator: the list with the domain union the worker should allow, and the assistant's sign-in report.
+app.get('/internal/assistant/browser-sites', operatorAuth, async (_req, res) => {
+  const rows = await listSites()
+  res.json({ sites: rows.map(siteView), domains: allowedDomains(rows) })
+})
+
+app.post('/internal/assistant/browser-sites/:id/login-status', operatorAuth, async (req, res) => {
+  const { status, note } = req.body ?? {}
+  if (!AGENT_LOGIN_STATUSES.includes(status)) return res.status(400).json({ error: 'status must be signed_in or needs_login' })
+  const { rowCount } = await pool.query('UPDATE browser_sites SET login_status = $2, login_checked_at = NOW(), login_note = $3 WHERE id = $1', [req.params.id, status, String(note ?? '').trim().slice(0, 200)])
+  if (!rowCount) return res.status(404).json({ error: 'not found' })
+  await audit(`assistant_site_login:${req.params.id}:${status}`, req)
+  res.json({ id: req.params.id, login_status: status })
 })
 
 // The owner's notes: written in the Note tab, searched and read by the assistant (notes_search / note_get),

@@ -3,7 +3,7 @@ import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import { confirmDialog } from '../lib/notify'
 import { ask, assistantStore, isRemoteStreaming, moveChat, open, refreshList, remove, setError as setStoreError, setProfile, startNew, stop } from '../lib/assistantStore'
-import { ActionCard, ApprovalCard, BrowserPanel, isApprovalTool, isWriteTool } from './AssistantCards'
+import { ActionCard, ApprovalCard, BrowserPanel, SiteProposal, isApprovalTool, isWriteTool } from './AssistantCards'
 import StepUpBar from './StepUpBar'
 import { Icon } from './Icons'
 import { Empty, Loading } from './Ui'
@@ -157,6 +157,7 @@ export function TurnView({ turn, onOpenBrowser }: { turn: AssistantTurn; onOpenB
         {turn.parts.map((p, i) => {
           if (p.kind === 'text') return <Markdown key={i} text={p.text} />
           if (p.name.endsWith('propose_note') && p.result && !p.result.error) return <NoteProposal key={p.id} part={p} />
+          if (p.name.endsWith('propose_site') && p.result && !p.result.error) return <SiteProposal key={p.id} part={p} />
           if (isWriteTool(p.name)) return <ActionCard key={p.id} part={p} />
           if (isApprovalTool(p.name)) return <ApprovalCard key={p.id} part={p} onOpenBrowser={onOpenBrowser} />
           return <ToolCall key={p.id} part={p} />

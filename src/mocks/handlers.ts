@@ -30,7 +30,17 @@ const uid = () => Math.random().toString(36).slice(2, 10)
 // ── Assistant: a scripted chat (SSE) ──
 // "Assistant" profile: a question with table / book / Coupang opens the browser and waits for an approval;
 // anything else adds a calendar event. "Personal": a short read-only answer.
-let pendingApproval: { id: string; summary: string; url: string | null; created_at: string } | null = null
+let pendingApproval: { id: string; kind?: 'action' | 'login'; summary: string; url: string | null; site?: { id: string; label: string } | null; created_at: string } | null = null
+
+// The sites of the browser (a fresh install's list). The scripted chat records a sign-in on them like the real assistant does.
+const mockSite = (label: string, url: string, domains: string[], quick_link = true, login_status: 'unknown' | 'signed_in' | 'needs_login' = 'unknown') => ({ id: `s-${uid()}`, label, url, domains, login_domains: [] as string[], quick_link, enabled: true, note: '', login_status, login_checked_at: login_status === 'signed_in' ? new Date().toISOString() : null as string | null, login_note: '', created_by: 'seed' })
+let sites = [
+  mockSite('Coupang', 'https://www.coupang.com/', ['coupang.com']),
+  mockSite('Catch Table', 'https://www.catchtable.co.kr/', ['catchtable.co.kr', 'catchtable.net'], true, 'needs_login'),
+  mockSite('정부24', 'https://www.gov.kr/portal/main', ['gov.kr'], true, 'signed_in'),
+  mockSite('Naver', 'https://www.naver.com/', ['naver.com']),
+  mockSite('Kakao', 'https://www.kakao.com/', ['kakao.com'], false),
+]
 let approvalDecision: 'approve' | 'deny' | null = null
 let browserUrl = 'https://www.catchtable.co.kr/'
 
@@ -45,7 +55,28 @@ function assistantChat({ request }: { request: Request }) {
         const convId = `00000000-0000-4000-8000-${uid().padEnd(12, '0').slice(0, 12)}`
         send({ type: 'conversation', id: convId, turn_id: `t-${uid()}` })
         await sleep(300)
-        if (profile === 'assistant' && /table|book|coupang|쿠팡|예약/i.test(question)) {
+        if (profile === 'assistant' && /sign in|log ?in|로그인/i.test(question)) {
+          const site = sites.find(s => s.label === 'Catch Table')!
+          send({ type: 'text', text: 'Catch Table shows a sign-in page. I will ask you to sign in.' })
+          send({ type: 'tool', id: 'l1', name: 'browser_request_login', input: { site: site.label, message: 'approve the sign-in on your phone if it asks' } })
+          pendingApproval = { id: `a-${uid()}`, kind: 'login', summary: `Sign in to ${site.label} in the Browser panel: approve the sign-in on your phone if it asks. Then press "I'm signed in".`, url: site.url, site: { id: site.id, label: site.label }, created_at: new Date().toISOString() }
+          approvalDecision = null
+          for (let i = 0; i < 300 && !approvalDecision; i++) await sleep(200)
+          const result = approvalDecision === 'approve' ? 'approved' : approvalDecision === 'deny' ? 'denied' : 'timed out'
+          send({ type: 'tool_result', id: 'l1', error: false, output: JSON.stringify({ result }) })
+          if (result === 'approved') {
+            send({ type: 'tool', id: 'l2', name: 'site_login_status', input: { site: site.label, status: 'signed_in', note: 'shows the account menu' } })
+            site.login_status = 'signed_in'; site.login_checked_at = new Date().toISOString(); site.login_note = 'shows the account menu'
+            send({ type: 'tool_result', id: 'l2', error: false, output: JSON.stringify({ site: site.label, sign_in: 'signed_in' }) })
+            send({ type: 'text', text: 'You are signed in to Catch Table; I recorded it.' })
+          } else send({ type: 'text', text: 'Okay, I did not continue with Catch Table.' })
+        } else if (profile === 'assistant' && /add .*site|new site|사이트 추가|opentable|yanolja/i.test(question)) {
+          send({ type: 'text', text: 'Yanolja is not in the browser\'s list. I propose adding it:' })
+          send({ type: 'tool', id: 'p1', name: 'propose_site', input: { label: 'Yanolja', url: 'https://www.yanolja.com/', note: 'Hotel booking' } })
+          await sleep(300)
+          send({ type: 'tool_result', id: 'p1', error: false, output: JSON.stringify({ status: 'proposed', label: 'Yanolja', url: 'https://www.yanolja.com/' }) })
+          send({ type: 'text', text: 'Press Add on the card and I can use it.' })
+        } else if (profile === 'assistant' && /table|book|coupang|쿠팡|예약/i.test(question)) {
           send({ type: 'text', text: 'Opening Catch Table to look for a table for two on Friday at 19:00.' })
           send({ type: 'tool', id: 'b1', name: 'browser_open', input: { url: browserUrl } })
           await sleep(400)
@@ -275,6 +306,24 @@ export const handlers: HttpHandler[] = [
     const b = (await request.json()) as { id: string; decision: 'approve' | 'deny' }
     if (pendingApproval && pendingApproval.id === b.id) { approvalDecision = b.decision; pendingApproval = null }
     return ok({ ok: true })
+  }),
+  http.get('/api/assistant/browser/sites', async () => ok({ sites })),
+  http.post('/api/assistant/browser/sites', async ({ request }) => {
+    const b = (await request.json()) as { label?: string; url?: string; login_domains?: string[]; domains?: string[]; created_by?: string }
+    if (!b.label?.trim() || !/^https:\/\//.test(b.url ?? '')) return HttpResponse.json({ error: 'url must be a full https address, like https://www.example.com/' }, { status: 400 })
+    const host = new URL(b.url!).hostname.replace(/^www\./, '')
+    const s = { ...mockSite(b.label.trim(), b.url!, b.domains ?? [host]), login_domains: b.login_domains ?? [], created_by: b.created_by ?? 'owner' }
+    sites = [...sites, s]
+    return HttpResponse.json({ site: s, synced: true }, { status: 201 })
+  }),
+  http.patch('/api/assistant/browser/sites/:id', async ({ request, params }) => {
+    const b = (await request.json()) as Partial<(typeof sites)[number]>
+    sites = sites.map(s => (s.id === params.id ? { ...s, ...b } : s))
+    return ok({ site: sites.find(s => s.id === params.id), synced: false })
+  }),
+  http.delete('/api/assistant/browser/sites/:id', async ({ params }) => {
+    sites = sites.filter(s => s.id !== params.id)
+    return ok({ ok: true, synced: true })
   }),
   http.get('/api/assistant/browser/state', async () => ok({ url: browserUrl, title: 'Catch Table (mock)', tabs: 1, gate_open_seconds: 0 })),
   http.get('/api/assistant/browser/screenshot', async () => {

@@ -4274,6 +4274,25 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .br-wide-btn { display: none; }
   .as-profile-btn { padding: 4px 8px; }
 }
+/* Sites of the browser: the list the owner manages, and the sign-in state the assistant reports */
+.br-site-warn { position: relative; }
+.br-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--kp-fg); vertical-align: middle; }
+.br-manage { margin: 0 var(--kp-space-3); border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); }
+.br-manage > summary { cursor: pointer; padding: var(--kp-space-1) var(--kp-space-2); font-size: 13px; color: var(--kp-fg-2); }
+.br-manage[open] > summary { border-bottom: 1px solid var(--kp-border); }
+.br-site-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.br-site-list li { display: flex; align-items: center; gap: var(--kp-space-2); padding: var(--kp-space-2); border-bottom: 1px solid var(--kp-border); }
+.br-site-list li:last-child { border-bottom: 0; }
+.br-site-off .br-site-main { opacity: 0.5; }
+.br-site-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.br-site-name { font-size: 13px; font-weight: 600; }
+.br-site-domains { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--kp-font-mono); }
+.br-site-state-warn { color: var(--kp-fg); font-weight: 600; }
+.br-site-actions { display: flex; align-items: center; gap: var(--kp-space-1); flex-shrink: 0; }
+.br-site-form { display: flex; flex-direction: column; gap: var(--kp-space-2); padding: var(--kp-space-2); border-top: 1px solid var(--kp-border); }
+.br-site-form input { height: 30px; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); background: var(--kp-bg); color: var(--kp-fg); font: inherit; font-size: 16px; padding: 0 var(--kp-space-2); min-width: 0; }
+.br-site-add { margin: var(--kp-space-2); display: inline-flex; align-items: center; gap: var(--kp-space-1); }
+.br-site-note { margin: 0; padding: 0 var(--kp-space-2) var(--kp-space-2); }
 .br-approval { margin: var(--kp-space-2) var(--kp-space-3); padding: var(--kp-space-3); border: 1px solid var(--kp-border-strong); border-radius: var(--kp-radius-md); display: flex; flex-direction: column; gap: var(--kp-space-2); }
 .br-approval .as-proposal-kind { display: inline-flex; align-items: center; gap: var(--kp-space-1); }
 

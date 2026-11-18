@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantApproval, AssistantConversation, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
+import type { AssistantApproval, AssistantConversation, BrowserSite, BrowserSiteInput, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -449,6 +449,11 @@ export const api = {
     approval: () => assetReq<{ approval: AssistantApproval | null }>('GET', '/assistant/approval').then(r => r.approval),
     decide: (id: string, decision: 'approve' | 'deny') => assetReq<{ ok: boolean }>('POST', '/assistant/approval', { id, decision }),
     browserState: () => assetReq<BrowserState>('GET', '/assistant/browser/state'),
+    // The sites the browser may use. `synced: false` = saved, but the browser worker has not taken the list yet (it pulls it every 2 minutes).
+    sites: () => assetReq<{ sites: BrowserSite[] }>('GET', '/assistant/browser/sites').then(r => r.sites),
+    addSite: (s: BrowserSiteInput) => assetReq<{ site: BrowserSite; synced: boolean }>('POST', '/assistant/browser/sites', s),
+    updateSite: (id: string, patch: Partial<Pick<BrowserSite, 'label' | 'url' | 'domains' | 'login_domains' | 'note' | 'quick_link' | 'enabled' | 'login_status'>>) => assetReq<{ site: BrowserSite; synced: boolean }>('PATCH', `/assistant/browser/sites/${id}`, patch),
+    removeSite: (id: string) => assetReq<{ ok: boolean; synced: boolean }>('DELETE', `/assistant/browser/sites/${id}`),
     browserInput: (ev: BrowserInput) => assetReq<{ url: string; title: string }>('POST', '/assistant/browser/input', ev),
     // The live page as an image: fetched with the step-up token (an <img src> cannot send it), shown from an object URL.
     browserShot: async (): Promise<string> => {

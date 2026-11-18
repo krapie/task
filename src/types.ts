@@ -262,7 +262,11 @@ export interface PushDevice {
 
 // ── Assistant (operator profiles: "assistant" does things, "personal" reads private data) ──
 export type AssistantProfile = 'assistant' | 'personal'
-export interface AssistantApproval { id: string; summary: string; url: string | null; created_at: string }
+// kind "login": the assistant waits for the owner to sign in by hand; "action": a step that spends or submits.
+export interface AssistantApproval { id: string; kind?: 'action' | 'login'; summary: string; url: string | null; site?: { id: string; label: string } | null; created_at: string }
+export type SiteLoginStatus = 'unknown' | 'signed_in' | 'needs_login'
+export interface BrowserSite { id: string; label: string; url: string; domains: string[]; login_domains: string[]; quick_link: boolean; enabled: boolean; note: string; login_status: SiteLoginStatus; login_checked_at: string | null; login_note: string; created_by: string }
+export interface BrowserSiteInput { label: string; url: string; domains?: string[]; login_domains?: string[]; note?: string; quick_link?: boolean; created_by?: 'assistant' }
 export interface BrowserState { url: string; title: string; tabs: number; gate_open_seconds: number }
 export type BrowserInput =
   | { type: 'click'; fx: number; fy: number } // fractions (0..1) of the screenshot, so the window may be any size

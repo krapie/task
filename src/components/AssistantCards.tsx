@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type CompositionEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type TouchEvent } from 'react'
 import { api } from '../lib/api'
 import { TASK_DATA_CHANGED } from '../lib/assistantStore'
+import { confirmDialog } from '../lib/notify'
 import { Icon } from './Icons'
-import type { AssistantApproval, AssistantPart, BrowserInput, BrowserState } from '../types'
+import type { AssistantApproval, AssistantPart, BrowserInput, BrowserSite, BrowserState } from '../types'
 
 type ToolPart = Extract<AssistantPart, { kind: 'tool' }>
 
@@ -16,7 +17,13 @@ function writeStore(key: string, value: string) {
 // Tools of the Assistant profile that change the Task app. Each shows what it did; additions can be undone.
 export const WRITE_TOOL = /(^|__)(event_add|event_update|todo_add|todo_complete|task_add)$/
 export const isWriteTool = (name: string) => WRITE_TOOL.test(name)
-export const isApprovalTool = (name: string) => /(^|__)request_approval$/.test(name)
+const isLoginTool = (name: string) => /(^|__)browser_request_login$/.test(name)
+export const isApprovalTool = (name: string) => /(^|__)(request_approval|browser_request_login)$/.test(name)
+
+// Two kinds of waiting question: approve a risky step, or "I'm signed in" after the owner signed in by hand.
+const approvalWords = (kind?: string) => kind === 'login'
+  ? { head: 'Sign in needed', yes: "I'm signed in", no: 'Cancel', yesDone: 'Signed in: the assistant checks the page', noDone: 'Cancelled' }
+  : { head: 'Needs your approval', yes: 'Approve', no: 'Deny', yesDone: 'Approved', noDone: 'Denied' }
 
 interface ActionResult { created?: 'event' | 'todo' | 'task'; updated?: 'event' | 'todo'; id?: string; title?: string; text?: string; start_date?: string; end_date?: string; time?: string | null; due_date?: string | null; slot_date?: string; completed?: boolean }
 
@@ -78,7 +85,7 @@ export function ActionCard({ part }: { part: ToolPart }) {
 
 // A step the assistant will not take alone: it waits here. Approve opens the browser's gate for a few minutes.
 export function ApprovalCard({ part, onOpenBrowser }: { part: ToolPart; onOpenBrowser?: () => void }) {
-  const summary = (part.input as { summary?: string })?.summary ?? ''
+  const inp = part.input as { summary?: string; site?: string }
   type Answer = 'approved' | 'denied' | 'timed out' | 'cancelled' | 'superseded' | 'failed' | 'error'
   const answered: Answer | null = part.result ? ((): Answer => {
     if (part.result.error) return 'error'
@@ -108,18 +115,20 @@ export function ApprovalCard({ part, onOpenBrowser }: { part: ToolPart; onOpenBr
     try { await api.assistant.decide(pending.id, d) } catch (err) { setError(err instanceof Error ? err.message : String(err)) } finally { setBusy(false) }
   }
 
+  const words = approvalWords(pending?.kind ?? (isLoginTool(part.name) ? 'login' : undefined))
+  const summary = inp?.summary ?? pending?.summary ?? (inp?.site ? `Sign in to ${inp.site} in the Browser panel. Then press "I'm signed in".` : '')
   return (
     <div className="as-proposal as-approval">
       <div className="as-proposal-head">
         <Icon name="lock" size={14} />
-        <span className="as-proposal-kind">Needs your approval</span>
+        <span className="as-proposal-kind">{words.head}</span>
       </div>
       <p className="as-proposal-summary">{summary}</p>
       {pending?.url && <p className="as-meta as-approval-url">{pending.url}</p>}
       {error && <p className="as-error">{error}</p>}
       <div className="as-proposal-actions">
-        {answered === 'approved' && <span className="as-meta">Approved</span>}
-        {answered === 'denied' && <span className="as-meta">Denied</span>}
+        {answered === 'approved' && <span className="as-meta">{words.yesDone}</span>}
+        {answered === 'denied' && <span className="as-meta">{words.noDone}</span>}
         {answered === 'timed out' && <span className="as-meta">No answer in time, nothing was done</span>}
         {answered === 'cancelled' && <span className="as-meta">Cancelled, nothing was done</span>}
         {answered === 'superseded' && <span className="as-meta">Replaced by a newer request, nothing was done</span>}
@@ -127,8 +136,8 @@ export function ApprovalCard({ part, onOpenBrowser }: { part: ToolPart; onOpenBr
         {answered === 'error' && <span className="as-meta">Could not ask for approval</span>}
         {!answered && (
           <>
-            <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy || !pending}>Approve</button>
-            <button type="button" className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={busy || !pending}>Deny</button>
+            <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy || !pending}>{words.yes}</button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={busy || !pending}>{words.no}</button>
             {onOpenBrowser && <button type="button" className="btn-ghost btn-sm" onClick={onOpenBrowser}><Icon name="globe" size={14} /> Show page</button>}
           </>
         )}
@@ -137,12 +146,20 @@ export function ApprovalCard({ part, onOpenBrowser }: { part: ToolPart; onOpenBr
   )
 }
 
-const SITES = [
+// Shown until the owner's list (api.assistant.sites) has loaded, or when it cannot be read.
+const FALLBACK_SITES = [
   { label: 'Coupang', url: 'https://www.coupang.com/' },
   { label: 'Catch Table', url: 'https://www.catchtable.co.kr/' },
   { label: '정부24', url: 'https://www.gov.kr/portal/main' },
   { label: 'Naver', url: 'https://www.naver.com/' },
 ]
+
+function ago(iso: string | null): string {
+  if (!iso) return ''
+  const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000))
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 48 * 60 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`
+}
+const signInText = (s: BrowserSite) => s.login_status === 'signed_in' ? `Signed in${s.login_checked_at ? ` · checked ${ago(s.login_checked_at)}` : ''}` : s.login_status === 'needs_login' ? 'Needs sign-in' : 'Sign-in not checked'
 
 const WIDE_KEY = 'kp-as-browser-wide'
 const NAMED_KEYS = new Set(['Enter', 'Backspace', 'Tab', 'Escape', 'Delete', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`)])
@@ -165,6 +182,10 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
   const [pending, setPending] = useState<AssistantApproval | null>(null)
   const [deciding, setDeciding] = useState(false)
   const [wide, setWide] = useState(() => readStore(WIDE_KEY) === '1')
+  const [sites, setSites] = useState<BrowserSite[] | null>(null)
+  const [siteNote, setSiteNote] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState({ label: '', url: '', login: '' })
   const last = useRef<string | null>(null)
   const editingAddrRef = useRef(false)
   editingAddrRef.current = editingAddr
@@ -203,6 +224,10 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
       inflight.current = false
     }
   }, [])
+
+  // The sites: loaded now, and again whenever the assistant may have recorded a sign-in (the pending question changes).
+  const loadSites = useCallback(() => { api.assistant.sites().then(setSites, () => {}) }, [])
+  useEffect(() => { loadSites() }, [loadSites, pending?.id])
 
   useEffect(() => {
     void refresh()
@@ -359,6 +384,23 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
     setEditingAddr(false)
     enqueue({ type: 'open', url: /^https?:\/\//i.test(v) ? v : `https://${v}` })
   }
+  const synced = (ok: boolean) => setSiteNote(ok ? null : 'Saved. The browser picks the new list up within a few minutes.')
+  const addSite = async (e: FormEvent) => {
+    e.preventDefault()
+    setSiteNote(null)
+    try {
+      const login = form.login.split(/[\s,]+/).filter(Boolean)
+      const r = await api.assistant.addSite({ label: form.label, url: /^https?:\/\//i.test(form.url.trim()) ? form.url.trim() : `https://${form.url.trim()}`, ...(login.length ? { login_domains: login } : {}) })
+      synced(r.synced)
+      setForm({ label: '', url: '', login: '' })
+      setAdding(false)
+      loadSites()
+    } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) }
+  }
+  const siteAction = async (fn: () => Promise<{ synced: boolean }>) => {
+    setSiteNote(null)
+    try { synced((await fn()).synced); loadSites() } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) }
+  }
   const toggleWide = () => setWide(w => { writeStore(WIDE_KEY, w ? '0' : '1'); return !w })
 
   return (
@@ -376,15 +418,50 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
         <input value={addr} onChange={e => setAddr(e.target.value)} onFocus={e => { setEditingAddr(true); e.currentTarget.select() }} onBlur={() => setEditingAddr(false)} placeholder="Address (https://…)" aria-label="Address" autoComplete="off" autoCapitalize="off" spellCheck={false} />
       </form>
       <div className="br-sites">
-        {SITES.map(s => <button key={s.url} className="btn-ghost btn-sm" onClick={() => enqueue({ type: 'open', url: s.url })}>{s.label}</button>)}
+        {(sites ? sites.filter(s => s.enabled && s.quick_link) : FALLBACK_SITES.map(s => ({ ...s, id: s.url, login_status: 'unknown' as const, login_checked_at: null, login_note: '' }))).map(s => (
+          <button key={s.id} className={`btn-ghost btn-sm${s.login_status === 'needs_login' ? ' br-site-warn' : ''}`} onClick={() => enqueue({ type: 'open', url: s.url })} title={'domains' in s ? signInText(s as BrowserSite) : undefined}>{s.label}{s.login_status === 'needs_login' && <span className="br-dot" aria-label="needs sign-in" />}</button>
+        ))}
       </div>
+      <details className="br-manage">
+        <summary>Sites{sites ? ` (${sites.length})` : ''}</summary>
+        <ul className="br-site-list">
+          {(sites ?? []).map(s => (
+            <li key={s.id} className={s.enabled ? '' : 'br-site-off'}>
+              <div className="br-site-main">
+                <span className="br-site-name">{s.label}</span>
+                <span className="as-meta br-site-domains">{[...s.domains, ...s.login_domains].join(' · ')}</span>
+                <span className={`as-meta br-site-state${s.login_status === 'needs_login' ? ' br-site-state-warn' : ''}`}>{signInText(s)}{s.login_note ? ` · ${s.login_note}` : ''}</span>
+              </div>
+              <div className="br-site-actions">
+                <button type="button" className="btn-ghost btn-sm" onClick={() => enqueue({ type: 'open', url: s.url })} disabled={!s.enabled}>Sign in</button>
+                <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { enabled: !s.enabled }))} aria-pressed={s.enabled}>{s.enabled ? 'On' : 'Off'}</button>
+                <button type="button" className="icon-btn" aria-label={`Remove ${s.label}`} title="Remove" onClick={async () => { if (await confirmDialog({ title: 'Remove site', body: `${s.label} leaves the browser's sites.`, confirmLabel: 'Remove', danger: true })) void siteAction(() => api.assistant.removeSite(s.id)) }}><Icon name="close" size={14} /></button>
+              </div>
+            </li>
+          ))}
+        </ul>
+        {adding ? (
+          <form className="br-site-form" onSubmit={addSite}>
+            <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Name" aria-label="Site name" maxLength={40} required />
+            <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://www.example.com/" aria-label="Start page" autoCapitalize="off" spellCheck={false} required />
+            <input value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value }))} placeholder="Sign-in through other domains (optional, e.g. kakao.com)" aria-label="Sign-in domains" autoCapitalize="off" spellCheck={false} />
+            <div className="as-proposal-actions">
+              <button type="submit" className="btn-primary btn-sm">Add site</button>
+              <button type="button" className="btn-ghost btn-sm" onClick={() => { setAdding(false); setSiteNote(null) }}>Cancel</button>
+            </div>
+          </form>
+        ) : (
+          <button type="button" className="btn-ghost btn-sm br-site-add" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add site</button>
+        )}
+        {siteNote && <p className="as-meta br-site-note">{siteNote}</p>}
+      </details>
       {pending && (
         <div className="br-approval">
-          <span className="as-proposal-kind"><Icon name="lock" size={12} /> Needs your approval</span>
+          <span className="as-proposal-kind"><Icon name="lock" size={12} /> {approvalWords(pending.kind).head}</span>
           <p className="as-proposal-summary">{pending.summary}</p>
           <div className="as-proposal-actions">
-            <button className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={deciding}>Approve</button>
-            <button className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={deciding}>Deny</button>
+            <button className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={deciding}>{approvalWords(pending.kind).yes}</button>
+            <button className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={deciding}>{approvalWords(pending.kind).no}</button>
           </div>
         </div>
       )}
@@ -414,6 +491,54 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+// A site the assistant proposed for the browser's list. Nothing is added until Add (the passkey session); the card shows the
+// tool input, the operator's result only says whether it exists already.
+export function SiteProposal({ part }: { part: ToolPart }) {
+  const input = part.input as { label: string; url: string; login_domains?: string[]; note?: string }
+  let exists = false
+  try { exists = (JSON.parse(part.result?.output ?? '') as { status?: string }).status === 'exists' } catch { /* proposed */ }
+  const doneKey = `kp-site-added:${part.id}`
+  const [state, setState] = useState<'idle' | 'adding' | 'added' | 'dismissed'>(() => (readStore(doneKey) ? 'added' : 'idle'))
+  const [error, setError] = useState<string | null>(null)
+  const add = async () => {
+    setState('adding')
+    setError(null)
+    try {
+      await api.assistant.addSite({ label: input.label, url: input.url, ...(input.login_domains?.length ? { login_domains: input.login_domains } : {}), ...(input.note ? { note: input.note } : {}), created_by: 'assistant' })
+      writeStore(doneKey, '1')
+      setState('added')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/already in the list/i.test(msg)) { writeStore(doneKey, '1'); setState('added') } else { setState('idle'); setError(msg) }
+    }
+  }
+  let host = input.url
+  try { host = new URL(input.url).hostname } catch { /* shown as typed */ }
+  return (
+    <div className="as-proposal">
+      <div className="as-proposal-head">
+        <Icon name="globe" size={14} />
+        <span className="as-proposal-kind">{exists ? 'Site already listed' : 'Add site to the browser'}</span>
+        <span className="as-proposal-title">{input.label}</span>
+      </div>
+      <p className="as-proposal-summary">{host}{input.login_domains?.length ? ` · signs in through ${input.login_domains.join(', ')}` : ''}</p>
+      {input.note && <p className="as-meta">{input.note}</p>}
+      {error && <p className="as-error">{error}</p>}
+      <div className="as-proposal-actions">
+        {exists && <span className="as-meta">Already in the list</span>}
+        {!exists && state === 'added' && <span className="as-meta">Added</span>}
+        {!exists && state === 'dismissed' && <span className="as-meta">Dismissed</span>}
+        {!exists && (state === 'idle' || state === 'adding') && (
+          <>
+            <button type="button" className="btn-primary btn-sm" onClick={add} disabled={state === 'adding'}>Add</button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setState('dismissed')} disabled={state === 'adding'}>Dismiss</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // An approval that is waiting, wherever the turn that asked for it was started (a card in a chat only shows its own).
 // Polls while mounted; renders nothing when none waits. `hide`: the open chat already shows its own card.
 export function PendingApproval({ hide }: { hide?: boolean }) {
@@ -435,12 +560,12 @@ export function PendingApproval({ hide }: { hide?: boolean }) {
   }
   return (
     <div className="as-proposal as-approval">
-      <div className="as-proposal-head"><Icon name="lock" size={14} /><span className="as-proposal-kind">Needs your approval</span></div>
+      <div className="as-proposal-head"><Icon name="lock" size={14} /><span className="as-proposal-kind">{approvalWords(pending.kind).head}</span></div>
       <p className="as-proposal-summary">{pending.summary}</p>
       {error && <p className="as-error">{error}</p>}
       <div className="as-proposal-actions">
-        <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy}>Approve</button>
-        <button type="button" className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={busy}>Deny</button>
+        <button type="button" className="btn-primary btn-sm" onClick={() => decide('approve')} disabled={busy}>{approvalWords(pending.kind).yes}</button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => decide('deny')} disabled={busy}>{approvalWords(pending.kind).no}</button>
       </div>
     </div>
   )
