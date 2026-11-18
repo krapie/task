@@ -236,6 +236,22 @@ export interface HealthSummary {
   runs: { at: string; km: number | null; durationMin: number | null; paceMinKm: number | null; avgHr: number | null }[]
 }
 
+// Health-checkup results (GET /api/health-data/reports, passkey step-up), newest report first.
+// Results only: no name, address or ids ever reach this app.
+export interface HealthReportMetric {
+  section: string; key: string; label: string
+  value: number | null; text: string | null; unit: string | null
+  refLow: number | null; refHigh: number | null; refText: string | null
+  flag: 'H' | 'L' | null
+}
+export interface HealthReport {
+  examDate: string
+  institution: string | null
+  judgement: string | null
+  findings: { level: 'follow_up' | 'advice'; title: string; titleKo: string | null; detail: string | null }[]
+  metrics: HealthReportMetric[]
+}
+
 // A browser subscribed to Web Push (one row per device).
 export interface PushDevice {
   endpoint: string

@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, PushDevice, TraderSummary } from '../types'
+import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -460,5 +460,6 @@ export const api = {
   },
   health: {
     getSummary: () => assetReq<HealthSummary | null>('GET', '/health-data/summary'),
+    getReports: () => assetReq<HealthReport[]>('GET', '/health-data/reports'),
   },
 }

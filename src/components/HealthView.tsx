@@ -3,9 +3,10 @@ import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import StepUpBar from './StepUpBar'
 import { NightBars } from './Charts'
+import HealthCheckup from './HealthCheckup'
 import { Empty, Meter } from './Ui'
 import { clockKst } from '../lib/format'
-import type { HealthSummary } from '../types'
+import type { HealthReport, HealthSummary } from '../types'
 
 const MASK = '••••'
 
@@ -67,14 +68,16 @@ interface HealthViewProps {
 // Apple Health summary behind the same passkey step-up as Assets. The tab
 // opens without a passkey but shows placeholders only; nothing is requested
 // from /api/health-data/* until the step-up succeeds. GPS routes and raw
-// samples never reach this app (the server can only read hk_task_summary).
+// samples never reach this app (the server can only read hk_task_summary and hk_task_reports).
 export default function HealthView({ isAuth }: HealthViewProps) {
   const [masked, setMasked] = useState(false)
   const [summary, setSummary] = useState<HealthSummary | null>(null)
+  const [reports, setReports] = useState<HealthReport[]>([])
 
   const clearData = useCallback(() => {
     setMasked(false)
     setSummary(null)
+    setReports([])
   }, [])
   const { unlocked, busy, setBusy, error, setError, remaining, lock, unlock, handleError } =
     useStepUp('health', isAuth, clearData)
@@ -83,9 +86,16 @@ export default function HealthView({ isAuth }: HealthViewProps) {
     setBusy(true)
     setError(null)
     try {
-      const s = await api.health.getSummary()
+      // The checkup reports are a separate view: a failure there must not hide the summary.
+      let reportsFailed = false
+      const [s, r] = await Promise.all([
+        api.health.getSummary(),
+        api.health.getReports().catch(() => { reportsFailed = true; return [] as HealthReport[] }),
+      ])
       if (!s) setError('No health data imported yet')
+      else if (reportsFailed) setError('Checkup results are unavailable right now')
       setSummary(s)
+      setReports(r ?? [])
     } catch (err) {
       handleError(err)
     } finally {
@@ -212,6 +222,8 @@ export default function HealthView({ isAuth }: HealthViewProps) {
           {summary && !masked && summary.runs.length === 0 && <li><span>No runs recorded</span><span /></li>}
         </ul>
       </div>
+
+      {reports.length > 0 && <HealthCheckup report={reports[0]} hide={masked} />}
 
       {unlocked && summary && (
         <div className="assets-section">

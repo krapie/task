@@ -3462,6 +3462,23 @@ a { color: var(--kp-fg); text-decoration: none; }
 }
 
 
+/* Health checkup: findings, out-of-range rows, collapsed test groups */
+.ck-findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--kp-space-2); }
+.ck-findings li { display: grid; grid-template-columns: auto 1fr; gap: 2px var(--kp-space-3); padding: 10px 12px; background: var(--kp-bg-subtle); border-radius: var(--kp-radius-sm); }
+.ck-level { grid-row: 1; font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); color: var(--kp-fg-3); text-transform: uppercase; letter-spacing: 0.04em; align-self: center; }
+.ck-title { grid-row: 1; font-size: 14px; font-weight: 600; color: var(--kp-fg); }
+.ck-detail { grid-column: 1 / -1; font-size: 13px; color: var(--kp-fg-2); }
+.ck-sub { font-size: 12px; color: var(--kp-fg-3); padding-top: var(--kp-space-2); }
+.ck-flagged span:first-child { color: var(--kp-fg); font-weight: 600; }
+.ck-flag { margin-left: 4px; font-weight: 600; }
+.ck-range { display: block; text-align: right; font-size: 11px; color: var(--kp-fg-3); font-weight: 400; }
+.ck-group { border-top: 1px solid var(--kp-border); }
+.ck-group summary { display: flex; justify-content: space-between; align-items: center; cursor: pointer; list-style: none; padding: 10px 0; font-size: 13px; color: var(--kp-fg-2); }
+.ck-group summary::-webkit-details-marker { display: none; }
+.ck-group summary span { font-family: var(--kp-font-mono); font-size: 12px; color: var(--kp-fg-3); }
+.ck-group[open] summary { color: var(--kp-fg); }
+.ck-list li span:last-child { text-align: right; }
+
 .assets-grafana-link {
   font-size: 13px;
   color: var(--kp-fg-2);
@@ -3648,6 +3665,14 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .assets-view > .empty-state,
   .assets-view > .assets-grafana-link { grid-column: 1 / -1; }
   .assets-section { break-inside: avoid; }
+  /* The checkup is long: it takes the full width, with findings and test groups in two columns */
+  .assets-view > .ck-section { grid-column: 1 / -1; }
+  .ck-section .ck-findings,
+  .ck-section .ck-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--kp-space-6); align-items: start; }
+  .ck-section .ck-findings { gap: var(--kp-space-2) var(--kp-space-6); }
+  .ck-section .ck-cols > .ck-col { min-width: 0; }
+  .ck-section .ck-cols.ck-masked { grid-template-columns: 1fr; }
+  .ck-section .ck-cols > .ck-col:empty { display: none; }
 }
 
 /* Denser rows on desktop windows (the checkbox keeps its 44px hit area) */

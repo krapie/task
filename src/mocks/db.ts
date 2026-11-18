@@ -1,6 +1,6 @@
 // Synthetic, in-memory state for the staging build (docs/staging.md). Nothing here is real data.
 // Typed against the app's own types so a changed shape fails `tsc`. A page reload resets it.
-import type { Addition, AssetSummary, CalendarEvent, FinanceStatus, GoalPeriod, HealthSummary, MailAccount, MailItem, MailSenderRule, NewsItem, Note, Settings, Slot, Template, TodoItem, TraderSummary } from '../types'
+import type { Addition, AssetSummary, CalendarEvent, FinanceStatus, GoalPeriod, HealthReport, HealthSummary, MailAccount, MailItem, MailSenderRule, NewsItem, Note, Settings, Slot, Template, TodoItem, TraderSummary } from '../types'
 
 const day = (offset = 0) => {
   const d = new Date(Date.now() + offset * 86_400_000)
@@ -147,6 +147,35 @@ export const healthSummary: HealthSummary = {
     { at: iso(60 * 100), km: 8.0, durationMin: 49, paceMinKm: 6.1, avgHr: 148 },
   ],
 }
+
+// Mock checkup: invented values, shaped like hk_task_reports.
+const metric = (section: string, key: string, label: string, value: number | null, unit: string, refLow: number | null, refHigh: number | null, text: string | null = null, refText: string | null = null): HealthReport['metrics'][number] => ({
+  section, key, label, value, text, unit: unit || null, refLow, refHigh, refText,
+  flag: value != null && refHigh != null && value > refHigh ? 'H' : value != null && refLow != null && value < refLow ? 'L' : null,
+})
+export const healthReports: HealthReport[] = [{
+  examDate: '2025-06-10', institution: 'Example Clinic', judgement: 'Normal B (borderline)',
+  findings: [
+    { level: 'follow_up', title: 'Mildly low iron stores', titleKo: null, detail: 'Ferritin is below the reference range. Recheck in six months.' },
+    { level: 'advice', title: 'Borderline LDL cholesterol', titleKo: null, detail: 'Diet and exercise; recheck at the next yearly checkup.' },
+  ],
+  metrics: [
+    metric('body', 'height', 'Height', 172.0, 'cm', null, null),
+    metric('body', 'weight', 'Weight', 64.2, 'kg', null, null),
+    metric('body', 'bmi', 'BMI', 21.7, 'kg/m²', 18.5, 24.9),
+    metric('vitals', 'sbp', 'Systolic BP', 121, 'mmHg', 90, 119),
+    metric('vitals', 'dbp', 'Diastolic BP', 74, 'mmHg', 60, 79),
+    metric('cbc', 'wbc', 'WBC', 6.12, '10³/μL', 4, 10),
+    metric('wbc_diff', 'neutrophil_seg', 'Neutrophils (seg)', 38.4, '%', 40, 70),
+    metric('wbc_diff', 'lymphocyte', 'Lymphocytes', 51.7, '%', 20, 50),
+    metric('lipid', 'ldl', 'LDL cholesterol', 108, 'mg/dL', null, 100, null, 'Optimal < 100'),
+    metric('endocrine', 'fasting_glucose', 'Fasting glucose', 103, 'mg/dL', 70, 99),
+    metric('endocrine', 'hba1c', 'HbA1c', 5.4, '%', null, 5.6),
+    metric('iron', 'ferritin', 'Ferritin', 24, 'ng/mL', 30, 300),
+    metric('exams', 'endoscopy', 'Gastroscopy', null, '', null, null, 'No significant findings'),
+    metric('inbody', 'skeletal_muscle_mass', 'Skeletal muscle mass', 28.1, 'kg', 27, 33),
+  ],
+}]
 
 const etf = (code: string, name: string, target: number, qty: number, avg: number, price: number, from: number, amp = 0.02): TraderSummary['etfs'][number] => {
   const value = qty * price

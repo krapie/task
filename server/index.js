@@ -312,6 +312,20 @@ app.get('/api/health-data/summary', stepUpAuth, async (req, res) => {
   }
 })
 
+// Health-checkup reports (results of a PDF checkup, no identifiers). A second view, hk_task_reports,
+// granted to the same role; loaded on demand so the summary stays small and fast.
+app.get('/api/health-data/reports', stepUpAuth, async (req, res) => {
+  if (!healthPool) return res.status(503).json({ error: 'Health data not configured' })
+  await audit('health_reports_view', req)
+  try {
+    const { rows } = await healthPool.query('SELECT reports FROM hk_task_reports')
+    res.json(rows[0]?.reports ?? [])
+  } catch (err) {
+    console.error('health reports:', err.message)
+    res.status(502).json({ error: 'Health data unavailable' })
+  }
+})
+
 // ── Trader (summary from ops) ─────────────────────────────────────────
 // The Trader views are fetched from ops GET /internal/trader-summary with its own token
 // (TRADER_SUMMARY_TOKEN): the same numbers as the admin Trader tab, reduced to a summary with no run
