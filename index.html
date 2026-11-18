@@ -7,8 +7,7 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Daily task board — routine + bonus tasks, rotating daily" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -30,6 +29,8 @@
         var t = localStorage.getItem('task_theme');
         if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', t);
+        // Title bar / status bar follows the app theme, not the OS (same colours as --kp-bg).
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', t === 'dark' ? '#0a0a0a' : '#ffffff');
       } catch (e) {}
     </script>
     <style>

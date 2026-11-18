@@ -56,6 +56,8 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
+    // Keep the PWA title bar / browser chrome in step with the app theme (same colours as --kp-bg).
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0a0a0a' : '#ffffff')
     localStorage.setItem('task_theme', theme)
   }, [theme])
 
