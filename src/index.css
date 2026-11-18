@@ -4255,16 +4255,23 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .br-head { display: flex; align-items: center; gap: var(--kp-space-2); padding: var(--kp-space-2) var(--kp-space-3); border-bottom: 1px solid var(--kp-border); }
 .br-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .br-sites { display: flex; flex-wrap: wrap; gap: var(--kp-space-2); padding: var(--kp-space-2) var(--kp-space-3); }
-.br-screen { padding: 0 var(--kp-space-3); }
-.br-screen:focus-visible { outline: 1px solid var(--kp-border-strong); outline-offset: 2px; }
-.br-addr { display: flex; gap: var(--kp-space-2); padding: var(--kp-space-2) var(--kp-space-3) 0; }
+/* Wider: the browser takes what the chat leaves. The conversation list folds away and the chat keeps a readable 340px. */
+.br-panel.br-wide { flex: 1 1 0; width: auto; min-width: 0; }
+@media (min-width: 601px) {
+  .as-split:has(.br-wide) .as-sidebar, .as-split:has(.br-wide) .as-resizer { display: none; }
+  .as-split:has(.br-wide) .as-main { flex: 0 0 340px; }
+}
+.br-screen { position: relative; flex: 1; min-height: 0; display: flex; align-items: flex-start; padding: var(--kp-space-2) var(--kp-space-3) 0; touch-action: none; overscroll-behavior: contain; }
+.br-screen:focus-within img { border-color: var(--kp-fg-3); }
+/* Receives the keyboard, the IME and paste for the page; never seen. */
+.br-input { position: absolute; left: 0; top: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; resize: none; overflow: hidden; font-size: 16px; pointer-events: none; }
+.br-addr { display: flex; align-items: center; gap: var(--kp-space-1); padding: var(--kp-space-2) var(--kp-space-3) 0; }
 .br-addr input { flex: 1; min-width: 0; height: 30px; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); background: var(--kp-bg); color: var(--kp-fg); font: inherit; font-size: 16px; padding: 0 var(--kp-space-2); }
-.br-screen img { display: block; width: 100%; height: auto; min-height: 120px; object-fit: contain; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); background: var(--kp-gray-100); cursor: pointer; }
-.br-controls { display: flex; flex-wrap: wrap; gap: var(--kp-space-2); padding: var(--kp-space-3); }
-.br-controls input { flex: 1 1 100%; min-width: 0; height: 32px; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); background: var(--kp-bg); color: var(--kp-fg); font: inherit; font-size: 16px; padding: 0 var(--kp-space-2); }
-.br-note { padding: 0 var(--kp-space-3) var(--kp-space-3); margin: 0; }
+.br-screen img { display: block; width: 100%; height: auto; min-height: 120px; max-height: 100%; object-fit: contain; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); background: var(--kp-gray-100); cursor: default; user-select: none; -webkit-user-drag: none; }
+.br-note { padding: var(--kp-space-2) var(--kp-space-3) var(--kp-space-3); margin: 0; }
 @media (max-width: 600px) {
-  .br-panel { position: absolute; inset: 0; z-index: 3; width: auto; border-left: 0; overflow-y: auto; }
+  .br-panel, .br-panel.br-wide { position: absolute; inset: 0; z-index: 3; width: auto; border-left: 0; overflow-y: auto; }
+  .br-wide-btn { display: none; }
   .as-profile-btn { padding: 4px 8px; }
 }
 .br-approval { margin: var(--kp-space-2) var(--kp-space-3); padding: var(--kp-space-3); border: 1px solid var(--kp-border-strong); border-radius: var(--kp-radius-md); display: flex; flex-direction: column; gap: var(--kp-space-2); }

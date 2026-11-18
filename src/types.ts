@@ -266,9 +266,15 @@ export interface AssistantApproval { id: string; summary: string; url: string | 
 export interface BrowserState { url: string; title: string; tabs: number; gate_open_seconds: number }
 export type BrowserInput =
   | { type: 'click'; fx: number; fy: number } // fractions (0..1) of the screenshot, so the window may be any size
-  | { type: 'text'; text: string }
-  | { type: 'key'; key: string }
+  | { type: 'mouse'; action: 'move' | 'down' | 'up'; fx: number; fy: number; button?: 'left' | 'middle'; clicks?: number }
+  | { type: 'wheel'; dx: number; dy: number; fx?: number; fy?: number }
+  | { type: 'text'; text: string } // typed characters and text committed by an IME (Korean)
+  | { type: 'paste'; text: string }
+  | { type: 'key'; key: string } // "Enter", "Tab", "ArrowLeft", "Control+a", "Shift+Tab"
   | { type: 'scroll'; dy: number }
+  | { type: 'back' }
+  | { type: 'forward' }
+  | { type: 'reload' }
   | { type: 'open'; url: string }
 export type AssistantFolder = 'summaries' | 'markets' | 'money' | 'health' | 'tasks' | 'mail' | 'life' | 'other'
 export interface AssistantSummary { id: string; title: string; folder: AssistantFolder | null; created_at: string; updated_at: string; turns: number; streaming: boolean }

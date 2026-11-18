@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type CompositionEvent, type FormEvent, type KeyboardEvent, type MouseEvent, type TouchEvent } from 'react'
 import { api } from '../lib/api'
 import { TASK_DATA_CHANGED } from '../lib/assistantStore'
 import { Icon } from './Icons'
-import type { AssistantApproval, AssistantPart, BrowserState } from '../types'
+import type { AssistantApproval, AssistantPart, BrowserInput, BrowserState } from '../types'
 
 type ToolPart = Extract<AssistantPart, { kind: 'tool' }>
 
@@ -141,92 +141,242 @@ const SITES = [
   { label: 'Coupang', url: 'https://www.coupang.com/' },
   { label: 'Catch Table', url: 'https://www.catchtable.co.kr/' },
   { label: '정부24', url: 'https://www.gov.kr/portal/main' },
+  { label: 'Naver', url: 'https://www.naver.com/' },
 ]
 
-// The assistant's one browser, live: the real Chrome on the homeserver. The owner can type an address, click, type and
-// scroll in it (to sign in, solve a robot check, confirm on the phone, or just watch); the assistant works in the same page.
+const WIDE_KEY = 'kp-as-browser-wide'
+const NAMED_KEYS = new Set(['Enter', 'Backspace', 'Tab', 'Escape', 'Delete', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`)])
+const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta', 'AltGraph', 'CapsLock', 'NumLock', 'ScrollLock', 'Hyper', 'Super'])
+const FAST_MS = 250 // view refresh while the owner is using the page
+const IDLE_MS = 1000 // ... and when nothing was touched for a while
+const ACTIVE_FOR_MS = 15_000
+const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
+
+// The assistant's one browser, live: the real Chrome on the homeserver, used like a browser. Click, drag, double-click, scroll
+// with the wheel (or a finger), type (Korean too: the IME's committed text is sent), use shortcuts and paste, right on the page.
+// The agent and the owner share it. Events are queued and sent one at a time; moves and wheel turns are merged, typed
+// characters are joined, so a fast typist or a fling does not build a backlog.
 export function BrowserPanel({ onClose }: { onClose: () => void }) {
   const [src, setSrc] = useState<string | null>(null)
   const [info, setInfo] = useState<BrowserState | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [text, setText] = useState('')
   const [addr, setAddr] = useState('')
   const [editingAddr, setEditingAddr] = useState(false)
   const [pending, setPending] = useState<AssistantApproval | null>(null)
   const [deciding, setDeciding] = useState(false)
+  const [wide, setWide] = useState(() => readStore(WIDE_KEY) === '1')
   const last = useRef<string | null>(null)
   const editingAddrRef = useRef(false)
   editingAddrRef.current = editingAddr
   const imgRef = useRef<HTMLImageElement>(null)
+  const screenRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const inflight = useRef(false)
+  const lastShot = useRef(0)
+  const lastState = useRef(0)
+  const activeUntil = useRef(0)
+  const queue = useRef<BrowserInput[]>([])
+  const draining = useRef(false)
+  const composing = useRef(false)
+  const justEnded = useRef(false)
+  const dragging = useRef(false)
+  const lastMove = useRef(0)
+  const touchY = useRef<number | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (withState = true) => {
+    if (inflight.current) return
+    inflight.current = true
     try {
-      // A waiting approval is shown here too: on a phone this panel covers the card in the chat.
-      api.assistant.approval().then(setPending, () => {})
-      const [url, st] = await Promise.all([api.assistant.browserShot(), api.assistant.browserState()])
-      if (last.current) URL.revokeObjectURL(last.current)
+      // The state (and a waiting approval: on a phone this panel covers the card in the chat) is read about once a second.
+      const needState = withState || Date.now() - lastState.current > 1000
+      if (needState) { lastState.current = Date.now(); api.assistant.approval().then(setPending, () => {}) }
+      const [url, st] = await Promise.all([api.assistant.browserShot(), needState ? api.assistant.browserState() : Promise.resolve(null)])
+      const old = last.current
       last.current = url
       setSrc(url)
-      setInfo(st)
-      if (!editingAddrRef.current) setAddr(st.url)
+      if (old) setTimeout(() => URL.revokeObjectURL(old), 1000)
+      if (st) { setInfo(st); if (!editingAddrRef.current) setAddr(st.url) }
       setError(null)
     } catch (err) {
       setError(err instanceof Error && err.message !== 'ASSET_SESSION_EXPIRED' ? err.message : 'Browser is not reachable')
+    } finally {
+      inflight.current = false
     }
   }, [])
 
   useEffect(() => {
     void refresh()
-    const t = setInterval(() => { if (!document.hidden) void refresh() }, 1000)
+    const t = setInterval(() => {
+      if (document.hidden) return
+      const now = Date.now()
+      if (now > activeUntil.current && now - lastShot.current < IDLE_MS) return
+      lastShot.current = now
+      void refresh(false)
+    }, FAST_MS)
     return () => { clearInterval(t); if (last.current) URL.revokeObjectURL(last.current) }
   }, [refresh])
 
-  const send = async (ev: Parameters<typeof api.assistant.browserInput>[0]) => {
-    try { await api.assistant.browserInput(ev); await refresh() } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+  // Sends queued events one at a time, merging neighbours of the same kind.
+  const pump = useCallback(async () => {
+    if (draining.current) return
+    draining.current = true
+    try {
+      while (queue.current.length) {
+        let ev = queue.current.shift()!
+        for (let next = queue.current[0]; next; next = queue.current[0]) {
+          if (ev.type === 'mouse' && ev.action === 'move' && next.type === 'mouse' && next.action === 'move') ev = queue.current.shift()!
+          else if (ev.type === 'wheel' && next.type === 'wheel') { const n = queue.current.shift() as typeof ev; ev = { ...n, dx: ev.dx + n.dx, dy: ev.dy + n.dy } }
+          else if (ev.type === 'text' && next.type === 'text') { ev = { type: 'text', text: ev.text + (queue.current.shift() as typeof ev).text } }
+          else break
+        }
+        await api.assistant.browserInput(ev)
+      }
+      setError(null)
+    } catch (err) {
+      queue.current = []
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      draining.current = false
+    }
+    void refresh(true)
+  }, [refresh])
+
+  const enqueue = useCallback((ev: BrowserInput) => {
+    activeUntil.current = Date.now() + ACTIVE_FOR_MS
+    queue.current.push(ev)
+    void pump()
+  }, [pump])
+
+  // Screen position -> fractions of the page, allowing for the bars the image is letterboxed with.
+  const toFrac = (clientX: number, clientY: number) => {
+    const img = imgRef.current
+    if (!img || !img.naturalWidth) return null
+    const r = img.getBoundingClientRect()
+    const s = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight)
+    const w = img.naturalWidth * s
+    const h = img.naturalHeight * s
+    if (!w || !h) return null
+    return { fx: clamp01((clientX - (r.left + (r.width - w) / 2)) / w), fy: clamp01((clientY - (r.top + (r.height - h) / 2)) / h) }
   }
-  const onClick = (e: MouseEvent<HTMLImageElement>) => {
-    const r = imgRef.current?.getBoundingClientRect()
-    if (!r || !r.width) return
-    void send({ type: 'click', fx: (e.clientX - r.left) / r.width, fy: (e.clientY - r.top) / r.height })
+
+  const onMouseDown = (e: MouseEvent<HTMLImageElement>) => {
+    e.preventDefault() // no native image drag or selection
+    inputRef.current?.focus()
+    if (e.button !== 0) return // right click would open a native menu nobody can see on the host
+    const p = toFrac(e.clientX, e.clientY)
+    if (!p) return
+    dragging.current = true
+    enqueue({ type: 'mouse', action: 'down', ...p, button: 'left', clicks: Math.max(1, Math.min(3, e.detail)) })
   }
+  const onMouseMove = (e: MouseEvent<HTMLImageElement>) => {
+    const now = performance.now()
+    if (now - lastMove.current < 50) return
+    lastMove.current = now
+    const p = toFrac(e.clientX, e.clientY)
+    if (p) enqueue({ type: 'mouse', action: 'move', ...p })
+  }
+  // The button can be released outside the image (a drag that ran past the edge).
+  useEffect(() => {
+    const up = (e: globalThis.MouseEvent) => {
+      if (!dragging.current) return
+      dragging.current = false
+      const p = toFrac(e.clientX, e.clientY)
+      if (p) enqueue({ type: 'mouse', action: 'up', ...p, button: 'left' })
+    }
+    window.addEventListener('mouseup', up)
+    return () => window.removeEventListener('mouseup', up)
+  }, [enqueue])
+
+  // The wheel needs a non-passive listener: the page under the panel must not scroll with it.
+  useEffect(() => {
+    const el = screenRef.current
+    if (!el) return
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 600 : 1
+      const p = toFrac(e.clientX, e.clientY)
+      enqueue({ type: 'wheel', dx: e.deltaX * k, dy: e.deltaY * k, ...(p ?? {}) })
+    }
+    el.addEventListener('wheel', wheel, { passive: false })
+    return () => el.removeEventListener('wheel', wheel)
+  }, [enqueue])
+
+  // A finger drag scrolls the page (a tap still arrives as a click).
+  const onTouchStart = (e: TouchEvent<HTMLDivElement>) => { touchY.current = e.touches[0]?.clientY ?? null }
+  const onTouchMove = (e: TouchEvent<HTMLDivElement>) => {
+    const y = e.touches[0]?.clientY
+    if (y == null || touchY.current == null) return
+    const dy = touchY.current - y
+    touchY.current = y
+    if (dy) enqueue({ type: 'wheel', dx: 0, dy: dy * 2 })
+  }
+
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    // While an IME is composing (Korean, Japanese…) the keys belong to it; the committed text arrives with compositionend.
+    if (e.nativeEvent.isComposing || e.key === 'Process' || e.key === 'Dead' || e.nativeEvent.keyCode === 229) return
+    if (MODIFIER_KEYS.has(e.key)) return
+    const mod = e.ctrlKey || e.metaKey
+    if (mod && e.key.toLowerCase() === 'v') return // the paste event carries the text
+    if (mod || e.altKey) {
+      // Shortcuts go to the page with their modifiers; Cmd acts as Control (the host is Linux).
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key
+      if (k.length !== 1 && !NAMED_KEYS.has(k)) return
+      e.preventDefault()
+      enqueue({ type: 'key', key: `${mod ? 'Control+' : ''}${e.altKey ? 'Alt+' : ''}${e.shiftKey ? 'Shift+' : ''}${k}` })
+      return
+    }
+    if (e.key.length === 1) { e.preventDefault(); enqueue({ type: 'text', text: e.key }); return }
+    if (NAMED_KEYS.has(e.key)) { e.preventDefault(); enqueue({ type: 'key', key: `${e.shiftKey ? 'Shift+' : ''}${e.key}` }) }
+  }
+  const onCompositionEnd = (e: CompositionEvent<HTMLTextAreaElement>) => {
+    composing.current = false
+    if (e.data) { enqueue({ type: 'text', text: e.data }); justEnded.current = true; setTimeout(() => { justEnded.current = false }, 0) }
+    e.currentTarget.value = ''
+  }
+  // Keyboards that do not send usable key events (phones) deliver their text here.
+  const onInput = (e: FormEvent<HTMLTextAreaElement>) => {
+    const ta = e.currentTarget
+    const ne = e.nativeEvent as InputEvent
+    if (!composing.current && !ne.isComposing && !justEnded.current && ne.data) enqueue({ type: 'text', text: ne.data })
+    else if (!composing.current && !ne.isComposing && !ne.data && ne.inputType === 'insertLineBreak') enqueue({ type: 'key', key: 'Enter' })
+    if (!composing.current) ta.value = ''
+  }
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    const text = e.clipboardData.getData('text/plain')
+    if (text) enqueue({ type: 'paste', text })
+  }
+
   const decide = async (d: 'approve' | 'deny') => {
     if (!pending) return
     setDeciding(true)
     try { await api.assistant.decide(pending.id, d); setPending(null) } catch (err) { setError(err instanceof Error ? err.message : String(err)) } finally { setDeciding(false) }
   }
-  const submitText = () => { if (text) { void send({ type: 'text', text }); setText('') } }
   const go = (e: FormEvent) => {
     e.preventDefault()
     const v = addr.trim()
     if (!v) return
     setEditingAddr(false)
-    void send({ type: 'open', url: /^https?:\/\//i.test(v) ? v : `https://${v}` })
+    enqueue({ type: 'open', url: /^https?:\/\//i.test(v) ? v : `https://${v}` })
   }
-  // Click the page, then type: printable keys go as text, the named keys as keys. (Korean and other composed text: use the field below.)
-  const onScreenKey = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.ctrlKey || e.metaKey || e.altKey || e.nativeEvent.isComposing) return
-    const named = ['Enter', 'Backspace', 'Tab', 'Escape', 'Delete', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']
-    if (e.key.length === 1) { e.preventDefault(); void send({ type: 'text', text: e.key }) }
-    else if (named.includes(e.key)) { e.preventDefault(); void send({ type: 'key', key: e.key }) }
-  }
-  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); submitText() }
-  }
+  const toggleWide = () => setWide(w => { writeStore(WIDE_KEY, w ? '0' : '1'); return !w })
 
   return (
-    <aside className="br-panel" aria-label="Browser">
+    <aside className={`br-panel${wide ? ' br-wide' : ''}`} aria-label="Browser">
       <div className="br-head">
         <Icon name="globe" size={14} />
         <span className="br-title" title={info?.url}>{info ? (info.title || info.url) : 'Browser'}</span>
-        <button className="icon-btn" onClick={() => void refresh()} aria-label="Refresh view" title="Refresh view"><Icon name="refresh" size={16} /></button>
+        <button className="icon-btn br-wide-btn" onClick={toggleWide} aria-label={wide ? 'Narrower browser' : 'Wider browser'} aria-pressed={wide} title={wide ? 'Narrower' : 'Wider'}><Icon name={wide ? 'collapse' : 'expand'} size={16} /></button>
         <button className="icon-btn" onClick={onClose} aria-label="Close browser" title="Close browser"><Icon name="close" size={16} /></button>
       </div>
       <form className="br-addr" onSubmit={go}>
-        <input value={addr} onChange={e => setAddr(e.target.value)} onFocus={() => setEditingAddr(true)} onBlur={() => setEditingAddr(false)} placeholder="Address (https://…)" aria-label="Address" autoComplete="off" autoCapitalize="off" spellCheck={false} />
-        <button className="btn-ghost btn-sm" type="submit" disabled={!addr.trim()}>Go</button>
+        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'back' })} aria-label="Back" title="Back"><Icon name="chevronLeft" size={16} /></button>
+        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'forward' })} aria-label="Forward" title="Forward"><Icon name="chevronRight" size={16} /></button>
+        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'reload' })} aria-label="Reload page" title="Reload"><Icon name="refresh" size={16} /></button>
+        <input value={addr} onChange={e => setAddr(e.target.value)} onFocus={e => { setEditingAddr(true); e.currentTarget.select() }} onBlur={() => setEditingAddr(false)} placeholder="Address (https://…)" aria-label="Address" autoComplete="off" autoCapitalize="off" spellCheck={false} />
       </form>
       <div className="br-sites">
-        {SITES.map(s => <button key={s.url} className="btn-ghost btn-sm" onClick={() => void send({ type: 'open', url: s.url })}>{s.label}</button>)}
+        {SITES.map(s => <button key={s.url} className="btn-ghost btn-sm" onClick={() => enqueue({ type: 'open', url: s.url })}>{s.label}</button>)}
       </div>
       {pending && (
         <div className="br-approval">
@@ -239,18 +389,27 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
         </div>
       )}
       {error && <p className="as-error">{error}</p>}
-      <div className="br-screen" tabIndex={0} onKeyDown={onScreenKey} aria-label="Browser page: click it, then type">
-        {src ? <img ref={imgRef} src={src} alt="The assistant's browser page" onClick={onClick} draggable={false} /> : !error && <p className="as-meta">Loading…</p>}
+      <div className="br-screen" ref={screenRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onContextMenu={e => e.preventDefault()}>
+        {src
+          ? <img ref={imgRef} src={src} alt="The assistant's browser page" onMouseDown={onMouseDown} onMouseMove={onMouseMove} draggable={false} />
+          : !error && <p className="as-meta">Loading…</p>}
+        <textarea
+          ref={inputRef}
+          className="br-input"
+          aria-label="Browser input: click the page, then type"
+          onKeyDown={onKeyDown}
+          onCompositionStart={() => { composing.current = true }}
+          onCompositionEnd={onCompositionEnd}
+          onInput={onInput}
+          onPaste={onPaste}
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          rows={1}
+        />
       </div>
-      <div className="br-controls">
-        <input value={text} onChange={e => setText(e.target.value)} onKeyDown={onKey} placeholder="Type into the focused field" aria-label="Text to type" autoComplete="off" />
-        <button className="btn-ghost btn-sm" onClick={submitText} disabled={!text}>Type</button>
-        <button className="btn-ghost btn-sm" onClick={() => void send({ type: 'key', key: 'Enter' })}>Enter</button>
-        <button className="btn-ghost btn-sm" onClick={() => void send({ type: 'key', key: 'Backspace' })}>Back</button>
-        <button className="btn-ghost btn-sm" onClick={() => void send({ type: 'scroll', dy: -500 })} aria-label="Scroll up">Up</button>
-        <button className="btn-ghost btn-sm" onClick={() => void send({ type: 'scroll', dy: 500 })} aria-label="Scroll down">Down</button>
-      </div>
-      <p className="as-meta br-note">This is the real Chrome on the homeserver. Sign in here yourself: the assistant never sees passwords. Click the page, then type. It works in this same page.</p>
+      <p className="as-meta br-note">The real Chrome on the homeserver, shared with the assistant. Click, drag, scroll, type and paste right on the page; sign in here yourself, the assistant never sees passwords. Right-click and copying out are not forwarded.</p>
     </aside>
   )
 }

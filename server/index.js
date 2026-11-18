@@ -1726,10 +1726,16 @@ app.get('/api/assistant/browser/screenshot', stepUpAuth, async (req, res) => {
     res.status(503).json({ error: 'browser unavailable' })
   }
 })
+let lastBrowserTextAudit = 0
 app.post('/api/assistant/browser/input', stepUpAuth, async (req, res) => {
   const b = req.body ?? {}
-  await audit(`assistant_browser_input_${String(b.type || '').slice(0, 12)}`, req)
-  return assistantJson(req, res, '/browser/input', { method: 'POST', body: JSON.stringify({ type: b.type, fx: b.fx, fy: b.fy, text: b.text, key: b.key, dy: b.dy, url: b.url }) })
+  // One audit line per meaningful action. Mouse moves, button presses, wheel and single keys come many times a second
+  // while the owner uses the page like a browser: only navigation, a click (button release), a paste and typed text are kept,
+  // and typed text at most once per 30 s so a sign-in does not write a line per character.
+  const kind = String(b.type || '').slice(0, 12)
+  if (['open', 'back', 'forward', 'reload', 'paste', 'click'].includes(kind) || (kind === 'mouse' && b.action === 'up')) await audit(`assistant_browser_input_${kind}`, req)
+  else if (kind === 'text' && Date.now() - lastBrowserTextAudit > 30_000) { lastBrowserTextAudit = Date.now(); await audit('assistant_browser_input_text', req) }
+  return assistantJson(req, res, '/browser/input', { method: 'POST', body: JSON.stringify({ type: b.type, action: b.action, button: b.button, clicks: b.clicks, fx: b.fx, fy: b.fy, text: b.text, key: b.key, dx: b.dx, dy: b.dy, url: b.url }) })
 })
 
 // What the assistant profile may change in the Task app: called by the operator (bearer PERSONAL_TOKEN, in-cluster,
