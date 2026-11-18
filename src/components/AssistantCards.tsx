@@ -3,7 +3,7 @@ import { api } from '../lib/api'
 import { TASK_DATA_CHANGED } from '../lib/assistantStore'
 import { confirmDialog } from '../lib/notify'
 import { Icon } from './Icons'
-import type { AssistantApproval, AssistantPart, BrowserInput, BrowserSite, BrowserState } from '../types'
+import type { AssistantApproval, AssistantPart, BrowserInput, BrowserSite, BrowserState, BrowserStreamEvent } from '../types'
 
 type ToolPart = Extract<AssistantPart, { kind: 'tool' }>
 
@@ -161,11 +161,11 @@ function ago(iso: string | null): string {
 }
 const signInText = (s: BrowserSite) => s.login_status === 'signed_in' ? `Signed in${s.login_checked_at ? ` · checked ${ago(s.login_checked_at)}` : ''}` : s.login_status === 'needs_login' ? 'Needs sign-in' : 'Sign-in not checked'
 
-const WIDE_KEY = 'kp-as-browser-wide'
 const NAMED_KEYS = new Set(['Enter', 'Backspace', 'Tab', 'Escape', 'Delete', 'Insert', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`)])
 const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta', 'AltGraph', 'CapsLock', 'NumLock', 'ScrollLock', 'Hyper', 'Super'])
-const FAST_MS = 250 // view refresh while the owner is using the page
-const IDLE_MS = 1000 // ... and when nothing was touched for a while
+// Without the live stream (an older worker, a dropped connection) the page is fetched as a screenshot: often while in use, rarely when idle.
+const FAST_MS = 250
+const IDLE_MS = 1000
 const ACTIVE_FOR_MS = 15_000
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 
@@ -173,7 +173,7 @@ const clamp01 = (n: number) => Math.max(0, Math.min(1, n))
 // with the wheel (or a finger), type (Korean too: the IME's committed text is sent), use shortcuts and paste, right on the page.
 // The agent and the owner share it. Events are queued and sent one at a time; moves and wheel turns are merged, typed
 // characters are joined, so a fast typist or a fling does not build a backlog.
-export function BrowserPanel({ onClose }: { onClose: () => void }) {
+export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => void; wide: boolean; onToggleWide: () => void }) {
   const [src, setSrc] = useState<string | null>(null)
   const [info, setInfo] = useState<BrowserState | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -181,7 +181,8 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
   const [editingAddr, setEditingAddr] = useState(false)
   const [pending, setPending] = useState<AssistantApproval | null>(null)
   const [deciding, setDeciding] = useState(false)
-  const [wide, setWide] = useState(() => readStore(WIDE_KEY) === '1')
+  const [view, setView] = useState<'page' | 'integrations'>('page')
+  const [signIn, setSignIn] = useState<BrowserSite | null>(null)
   const [sites, setSites] = useState<BrowserSite[] | null>(null)
   const [siteNote, setSiteNote] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -203,14 +204,17 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
   const dragging = useRef(false)
   const lastMove = useRef(0)
   const touchY = useRef<number | null>(null)
+  const liveRef = useRef(false) // the live stream is delivering frames
+  const frameRef = useRef<{ mime: string; data: string } | null>(null)
+  const rafRef = useRef(0)
 
   const refresh = useCallback(async (withState = true) => {
     if (inflight.current) return
     inflight.current = true
     try {
-      // The state (and a waiting approval: on a phone this panel covers the card in the chat) is read about once a second.
+      // The state is read about once a second.
       const needState = withState || Date.now() - lastState.current > 1000
-      if (needState) { lastState.current = Date.now(); api.assistant.approval().then(setPending, () => {}) }
+      if (needState) lastState.current = Date.now()
       const [url, st] = await Promise.all([api.assistant.browserShot(), needState ? api.assistant.browserState() : Promise.resolve(null)])
       const old = last.current
       last.current = url
@@ -232,7 +236,7 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     void refresh()
     const t = setInterval(() => {
-      if (document.hidden) return
+      if (document.hidden || liveRef.current) return
       const now = Date.now()
       if (now > activeUntil.current && now - lastShot.current < IDLE_MS) return
       lastShot.current = now
@@ -240,6 +244,62 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
     }, FAST_MS)
     return () => { clearInterval(t); if (last.current) URL.revokeObjectURL(last.current) }
   }, [refresh])
+
+  // A waiting question (on a phone this panel covers the card in the chat) is looked for every second and a half.
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) api.assistant.approval().then(setPending, () => {}) }
+    tick()
+    const t = setInterval(tick, 1500)
+    return () => clearInterval(t)
+  }, [])
+
+  // The live view: frames and page state arrive as a stream; when it cannot (an older worker, a lost connection) the screenshot
+  // polling above carries on, and the stream is tried again with a growing pause. It is closed while the tab is hidden.
+  useEffect(() => {
+    let stop = false
+    let ctl: AbortController | null = null
+    const onEvent = (ev: BrowserStreamEvent) => {
+      if (ev.event === 'frame') {
+        liveRef.current = true
+        frameRef.current = ev.data
+        if (!rafRef.current) {
+          rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = 0
+            const f = frameRef.current
+            frameRef.current = null
+            if (f) { setSrc(`data:${f.mime};base64,${f.data}`); setError(null) }
+          })
+        }
+      } else {
+        setInfo(prev => ({ tabs: prev?.tabs ?? 1, gate_open_seconds: prev?.gate_open_seconds ?? 0, url: ev.data.url, title: ev.data.title }))
+        if (!editingAddrRef.current) setAddr(ev.data.url)
+      }
+    }
+    const onVisible = () => { if (document.hidden) ctl?.abort() }
+    document.addEventListener('visibilitychange', onVisible)
+    // A stream that goes silent without closing (a stalled hop) would freeze the page and keep the screenshot fallback off: after 30 s
+    // with nothing (the worker sends a ping every 15 s) it is dropped, which turns the fallback back on, and reopened.
+    let lastActivity = Date.now()
+    const watchdog = setInterval(() => { if (Date.now() - lastActivity > 30_000) ctl?.abort() }, 5000)
+    const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+    void (async () => {
+      let misses = 0
+      while (!stop) {
+        if (document.hidden) { await wait(500); continue }
+        ctl = new AbortController()
+        let got = false
+        try {
+          lastActivity = Date.now()
+          await api.assistant.browserStream(ctl.signal, ev => { got = true; onEvent(ev) }, () => { lastActivity = Date.now() })
+        } catch { /* falls back to polling */ }
+        liveRef.current = false
+        if (stop) return
+        misses = got ? 0 : misses + 1
+        await wait(got ? 300 : Math.min(30_000, 1000 * 2 ** Math.min(misses, 5)))
+      }
+    })()
+    return () => { stop = true; ctl?.abort(); clearInterval(watchdog); document.removeEventListener('visibilitychange', onVisible); if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [])
 
   // Sends queued events one at a time, merging neighbours of the same kind.
   const pump = useCallback(async () => {
@@ -263,7 +323,7 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
     } finally {
       draining.current = false
     }
-    void refresh(true)
+    if (!liveRef.current) void refresh(true)
   }, [refresh])
 
   const enqueue = useCallback((ev: BrowserInput) => {
@@ -401,60 +461,34 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
     setSiteNote(null)
     try { synced((await fn()).synced); loadSites() } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) }
   }
-  const toggleWide = () => setWide(w => { writeStore(WIDE_KEY, w ? '0' : '1'); return !w })
+  // Integrations → "Set up sign-in": open the site on the page and wait for the owner to say they are signed in. The assistant
+  // reads that state in browser_sites, and still checks the page before it relies on it.
+  const startSignIn = (s: BrowserSite) => {
+    enqueue({ type: 'open', url: s.url })
+    setSignIn(s)
+    setView('page')
+  }
+  const onSignInSite = (() => {
+    if (!signIn || !info) return false
+    try {
+      const host = new URL(info.url).hostname
+      return [...signIn.domains, ...signIn.login_domains].some(d => host === d || host.endsWith(`.${d}`))
+    } catch { return false }
+  })()
+  const confirmSignedIn = async () => {
+    if (!signIn) return
+    try { await api.assistant.updateSite(signIn.id, { login_status: 'signed_in' }); setSignIn(null); loadSites() } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+  }
 
   return (
-    <aside className={`br-panel${wide ? ' br-wide' : ''}`} aria-label="Browser">
+    <aside className="br-panel" aria-label="Browser">
       <div className="br-head">
-        <Icon name="globe" size={14} />
-        <span className="br-title" title={info?.url}>{info ? (info.title || info.url) : 'Browser'}</span>
-        <button className="icon-btn br-wide-btn" onClick={toggleWide} aria-label={wide ? 'Narrower browser' : 'Wider browser'} aria-pressed={wide} title={wide ? 'Narrower' : 'Wider'}><Icon name={wide ? 'collapse' : 'expand'} size={16} /></button>
+        <Icon name={view === 'integrations' ? 'integrations' : 'globe'} size={14} />
+        <span className="br-title" title={info?.url}>{view === 'integrations' ? 'Integrations' : info ? (info.title || info.url) : 'Browser'}</span>
+        <button className={`icon-btn${view === 'integrations' ? ' icon-btn-active' : ''}`} onClick={() => setView(v => (v === 'page' ? 'integrations' : 'page'))} aria-label="Integrations" aria-pressed={view === 'integrations'} title="Integrations: sites and sign-ins"><Icon name="integrations" size={16} /></button>
+        <button className="icon-btn br-wide-btn" onClick={onToggleWide} aria-label={wide ? 'Narrower browser' : 'Wider browser'} aria-pressed={wide} title={wide ? 'Narrower' : 'Wider (or drag the edge)'}><Icon name={wide ? 'collapse' : 'expand'} size={16} /></button>
         <button className="icon-btn" onClick={onClose} aria-label="Close browser" title="Close browser"><Icon name="close" size={16} /></button>
       </div>
-      <form className="br-addr" onSubmit={go}>
-        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'back' })} aria-label="Back" title="Back"><Icon name="chevronLeft" size={16} /></button>
-        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'forward' })} aria-label="Forward" title="Forward"><Icon name="chevronRight" size={16} /></button>
-        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'reload' })} aria-label="Reload page" title="Reload"><Icon name="refresh" size={16} /></button>
-        <input value={addr} onChange={e => setAddr(e.target.value)} onFocus={e => { setEditingAddr(true); e.currentTarget.select() }} onBlur={() => setEditingAddr(false)} placeholder="Address (https://…)" aria-label="Address" autoComplete="off" autoCapitalize="off" spellCheck={false} />
-      </form>
-      <div className="br-sites">
-        {(sites ? sites.filter(s => s.enabled && s.quick_link) : FALLBACK_SITES.map(s => ({ ...s, id: s.url, login_status: 'unknown' as const, login_checked_at: null, login_note: '' }))).map(s => (
-          <button key={s.id} className={`btn-ghost btn-sm${s.login_status === 'needs_login' ? ' br-site-warn' : ''}`} onClick={() => enqueue({ type: 'open', url: s.url })} title={'domains' in s ? signInText(s as BrowserSite) : undefined}>{s.label}{s.login_status === 'needs_login' && <span className="br-dot" aria-label="needs sign-in" />}</button>
-        ))}
-      </div>
-      <details className="br-manage">
-        <summary>Sites{sites ? ` (${sites.length})` : ''}</summary>
-        <ul className="br-site-list">
-          {(sites ?? []).map(s => (
-            <li key={s.id} className={s.enabled ? '' : 'br-site-off'}>
-              <div className="br-site-main">
-                <span className="br-site-name">{s.label}</span>
-                <span className="as-meta br-site-domains">{[...s.domains, ...s.login_domains].join(' · ')}</span>
-                <span className={`as-meta br-site-state${s.login_status === 'needs_login' ? ' br-site-state-warn' : ''}`}>{signInText(s)}{s.login_note ? ` · ${s.login_note}` : ''}</span>
-              </div>
-              <div className="br-site-actions">
-                <button type="button" className="btn-ghost btn-sm" onClick={() => enqueue({ type: 'open', url: s.url })} disabled={!s.enabled}>Sign in</button>
-                <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { enabled: !s.enabled }))} aria-pressed={s.enabled}>{s.enabled ? 'On' : 'Off'}</button>
-                <button type="button" className="icon-btn" aria-label={`Remove ${s.label}`} title="Remove" onClick={async () => { if (await confirmDialog({ title: 'Remove site', body: `${s.label} leaves the browser's sites.`, confirmLabel: 'Remove', danger: true })) void siteAction(() => api.assistant.removeSite(s.id)) }}><Icon name="close" size={14} /></button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {adding ? (
-          <form className="br-site-form" onSubmit={addSite}>
-            <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Name" aria-label="Site name" maxLength={40} required />
-            <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://www.example.com/" aria-label="Start page" autoCapitalize="off" spellCheck={false} required />
-            <input value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value }))} placeholder="Sign-in through other domains (optional, e.g. kakao.com)" aria-label="Sign-in domains" autoCapitalize="off" spellCheck={false} />
-            <div className="as-proposal-actions">
-              <button type="submit" className="btn-primary btn-sm">Add site</button>
-              <button type="button" className="btn-ghost btn-sm" onClick={() => { setAdding(false); setSiteNote(null) }}>Cancel</button>
-            </div>
-          </form>
-        ) : (
-          <button type="button" className="btn-ghost btn-sm br-site-add" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add site</button>
-        )}
-        {siteNote && <p className="as-meta br-site-note">{siteNote}</p>}
-      </details>
       {pending && (
         <div className="br-approval">
           <span className="as-proposal-kind"><Icon name="lock" size={12} /> {approvalWords(pending.kind).head}</span>
@@ -466,6 +500,28 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
         </div>
       )}
       {error && <p className="as-error">{error}</p>}
+      <div className="br-page" hidden={view !== 'page'}>
+      <form className="br-addr" onSubmit={go}>
+        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'back' })} aria-label="Back" title="Back"><Icon name="chevronLeft" size={16} /></button>
+        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'forward' })} aria-label="Forward" title="Forward"><Icon name="chevronRight" size={16} /></button>
+        <button type="button" className="icon-btn" onClick={() => enqueue({ type: 'reload' })} aria-label="Reload page" title="Reload"><Icon name="refresh" size={16} /></button>
+        <input value={addr} onChange={e => setAddr(e.target.value)} onFocus={e => { setEditingAddr(true); e.currentTarget.select() }} onBlur={() => setEditingAddr(false)} placeholder="Address (https://…)" aria-label="Address" autoComplete="off" autoCapitalize="off" spellCheck={false} />
+      </form>
+      <div className="br-sites">
+        {(sites ? sites.filter(s => s.enabled && s.quick_link) : FALLBACK_SITES.map(s => ({ ...s, id: s.url, login_status: 'unknown' as const, login_checked_at: null, login_note: '' }))).map(s => (
+          <button key={s.id} className={`btn-ghost btn-sm${s.login_status === 'needs_login' ? ' br-site-warn' : ''}`} onClick={() => enqueue({ type: 'open', url: s.url })} title={'domains' in s ? signInText(s as BrowserSite) : undefined}>{s.label}{s.login_status === 'needs_login' && <span className="br-dot" aria-label="needs sign-in" />}</button>
+        ))}
+      </div>
+      {signIn && (
+        <div className="br-signin">
+          <span className="as-proposal-kind"><Icon name="lock" size={12} /> Signing in to {signIn.label}</span>
+          <p className="as-meta">Sign in on the page below (a phone confirmation or a robot check too), then press the button. The assistant never sees your password.</p>
+          <div className="as-proposal-actions">
+            <button type="button" className="btn-primary btn-sm" onClick={() => void confirmSignedIn()} disabled={!onSignInSite} title={onSignInSite ? undefined : 'Waiting for the site to open on the page'}>I'm signed in</button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setSignIn(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
       <div className="br-screen" ref={screenRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onContextMenu={e => e.preventDefault()}>
         {src
           ? <img ref={imgRef} src={src} alt="The assistant's browser page" onMouseDown={onMouseDown} onMouseMove={onMouseMove} draggable={false} />
@@ -487,6 +543,43 @@ export function BrowserPanel({ onClose }: { onClose: () => void }) {
         />
       </div>
       <p className="as-meta br-note">The real Chrome on the homeserver, shared with the assistant. Click, drag, scroll, type and paste right on the page; sign in here yourself, the assistant never sees passwords. Right-click and copying out are not forwarded.</p>
+      </div>
+      {view === 'integrations' && (
+        <div className="br-int">
+          <p className="as-meta br-int-intro">The sites the assistant's browser may use. Set up a sign-in once: the browser keeps the session, and the assistant looks at the page before it relies on it. You never give it a password.</p>
+          <ul className="br-site-list">
+            {(sites ?? []).map(s => (
+              <li key={s.id} className={s.enabled ? '' : 'br-site-off'}>
+                <div className="br-site-main">
+                  <span className="br-site-name">{s.label}</span>
+                  <span className="as-meta br-site-domains">{[...s.domains, ...s.login_domains].join(' · ')}</span>
+                  <span className={`as-meta br-site-state${s.login_status === 'needs_login' ? ' br-site-state-warn' : ''}`}>{signInText(s)}{s.login_note ? ` · ${s.login_note}` : ''}</span>
+                </div>
+                <div className="br-site-actions">
+                  <button type="button" className="btn-ghost btn-sm" onClick={() => startSignIn(s)} disabled={!s.enabled}>{s.login_status === 'signed_in' ? 'Sign in again' : 'Set up sign-in'}</button>
+                  {s.login_status === 'signed_in' && <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { login_status: 'needs_login' }))}>Signed out</button>}
+                  <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { enabled: !s.enabled }))} aria-pressed={s.enabled}>{s.enabled ? 'On' : 'Off'}</button>
+                  <button type="button" className="icon-btn" aria-label={`Remove ${s.label}`} title="Remove" onClick={async () => { if (await confirmDialog({ title: 'Remove site', body: `${s.label} leaves the browser's sites.`, confirmLabel: 'Remove', danger: true })) void siteAction(() => api.assistant.removeSite(s.id)) }}><Icon name="close" size={14} /></button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {adding ? (
+            <form className="br-site-form" onSubmit={addSite}>
+              <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="Name" aria-label="Site name" maxLength={40} required />
+              <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://www.example.com/" aria-label="Start page" autoCapitalize="off" spellCheck={false} required />
+              <input value={form.login} onChange={e => setForm(f => ({ ...f, login: e.target.value }))} placeholder="Sign-in through other domains (optional, e.g. kakao.com)" aria-label="Sign-in domains" autoCapitalize="off" spellCheck={false} />
+              <div className="as-proposal-actions">
+                <button type="submit" className="btn-primary btn-sm">Add site</button>
+                <button type="button" className="btn-ghost btn-sm" onClick={() => { setAdding(false); setSiteNote(null) }}>Cancel</button>
+              </div>
+            </form>
+          ) : (
+            <button type="button" className="btn-ghost btn-sm br-site-add" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add site</button>
+          )}
+          {siteNote && <p className="as-meta br-site-note">{siteNote}</p>}
+        </div>
+      )}
     </aside>
   )
 }

@@ -267,6 +267,8 @@ export interface AssistantApproval { id: string; kind?: 'action' | 'login'; summ
 export type SiteLoginStatus = 'unknown' | 'signed_in' | 'needs_login'
 export interface BrowserSite { id: string; label: string; url: string; domains: string[]; login_domains: string[]; quick_link: boolean; enabled: boolean; note: string; login_status: SiteLoginStatus; login_checked_at: string | null; login_note: string; created_by: string }
 export interface BrowserSiteInput { label: string; url: string; domains?: string[]; login_domains?: string[]; note?: string; quick_link?: boolean; created_by?: 'assistant' }
+// The live view: a JPEG (base64) whenever the page changes, and the page's address and title when they change.
+export type BrowserStreamEvent = { event: 'frame'; data: { mime: string; data: string; w: number; h: number } } | { event: 'state'; data: { url: string; title: string } }
 export interface BrowserState { url: string; title: string; tabs: number; gate_open_seconds: number }
 export type BrowserInput =
   | { type: 'click'; fx: number; fy: number } // fractions (0..1) of the screenshot, so the window may be any size

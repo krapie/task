@@ -44,6 +44,9 @@ let sites = [
 let approvalDecision: 'approve' | 'deny' | null = null
 let browserUrl = 'https://www.catchtable.co.kr/'
 
+// The mock page the assistant's browser "shows" (a screenshot, or a frame of the live view).
+const mockPageSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800"><rect width="1280" height="800" fill="#f4f4f4"/><rect x="0" y="0" width="1280" height="72" fill="#111"/><text x="32" y="46" font-family="sans-serif" font-size="28" fill="#fff">Mock browser page</text><text x="64" y="160" font-family="sans-serif" font-size="32" fill="#111">${browserUrl}</text><rect x="64" y="220" width="420" height="64" rx="6" fill="#fff" stroke="#111"/><text x="88" y="262" font-family="sans-serif" font-size="24" fill="#111">Reserve a table for 2</text></svg>`
+
 function assistantChat({ request }: { request: Request }) {
   return request.json().then((b) => {
     const { question = '', profile = 'personal' } = b as { question?: string; profile?: string }
@@ -326,9 +329,26 @@ export const handlers: HttpHandler[] = [
     return ok({ ok: true, synced: true })
   }),
   http.get('/api/assistant/browser/state', async () => ok({ url: browserUrl, title: 'Catch Table (mock)', tabs: 1, gate_open_seconds: 0 })),
-  http.get('/api/assistant/browser/screenshot', async () => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800"><rect width="1280" height="800" fill="#f4f4f4"/><rect x="0" y="0" width="1280" height="72" fill="#111"/><text x="32" y="46" font-family="sans-serif" font-size="28" fill="#fff">Mock browser page</text><text x="64" y="160" font-family="sans-serif" font-size="32" fill="#111">${browserUrl}</text><rect x="64" y="220" width="420" height="64" rx="6" fill="#fff" stroke="#111"/><text x="88" y="262" font-family="sans-serif" font-size="24" fill="#111">Reserve a table for 2</text></svg>`
-    return new HttpResponse(svg, { headers: { 'Content-Type': 'image/svg+xml' } })
+  http.get('/api/assistant/browser/screenshot', async () => new HttpResponse(mockPageSvg(), { headers: { 'Content-Type': 'image/svg+xml' } })),
+  // The live view: the same page pushed as events, like the worker's screencast (an SVG stands in for the JPEG).
+  http.get('/api/assistant/browser/stream', async () => {
+    const enc = new TextEncoder()
+    let timer: ReturnType<typeof setInterval> | undefined
+    const stream = new ReadableStream({
+      start(c) {
+        const send = (event: string, data: object) => c.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        const push = () => {
+          try {
+            send('state', { url: browserUrl, title: 'Catch Table (mock)' })
+            send('frame', { mime: 'image/svg+xml', data: btoa(unescape(encodeURIComponent(mockPageSvg()))), w: 1280, h: 800 })
+          } catch { clearInterval(timer) }
+        }
+        push()
+        timer = setInterval(push, 1000)
+      },
+      cancel() { clearInterval(timer) },
+    })
+    return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
   }),
   http.post('/api/assistant/browser/input', async ({ request }) => {
     const b = (await request.json()) as { type: string; url?: string }

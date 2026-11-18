@@ -24,6 +24,11 @@ export const FOLDERS: { id: AssistantFolder; label: string }[] = [
 const SIDEBAR_MIN = 180
 const SIDEBAR_MAX = 480
 const SIDEBAR_DEFAULT = 240
+// The browser panel: dragged by its left edge, remembered; from BR_WIDE_AT up the conversation list folds away.
+const BR_MIN = 320
+const BR_DEFAULT = 400
+const BR_WIDE_AT = 560
+const BR_CHAT_MIN = 300
 const isPhone = () => window.matchMedia('(max-width: 600px)').matches
 
 // localStorage is a per-viewer convenience: it can be missing or throw, and the view works without it.
@@ -230,6 +235,18 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
     return Number.isFinite(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX ? n : SIDEBAR_DEFAULT
   })
   const [sbHidden, setSbHidden] = useState(() => readStore('kp-as-sidebar-hidden') === '1')
+  const [brWidth, setBrWidth] = useState(() => {
+    const n = Number(readStore('kp-as-browser-w'))
+    return Number.isFinite(n) && n >= BR_MIN && n <= 4000 ? n : BR_DEFAULT
+  })
+  const [brDragging, setBrDragging] = useState(false)
+  const splitRef = useRef<HTMLDivElement>(null)
+  const [, setWinTick] = useState(0) // a window resize re-clamps the browser width (the stored one is the owner's choice, not changed)
+  useEffect(() => {
+    const f = () => setWinTick(n => n + 1)
+    window.addEventListener('resize', f)
+    return () => window.removeEventListener('resize', f)
+  }, [])
   const [dragging, setDragging] = useState(false)
   const [closedFolders, setClosedFolders] = useState<string[]>(() => {
     try { const v = JSON.parse(readStore('kp-as-folders-closed') ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { return [] }
@@ -279,6 +296,35 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
     await remove(c.id)
   }
 
+  // The browser panel keeps BR_CHAT_MIN for the chat; a window that shrank later is handled by the panel's max-width in CSS.
+  const clampBr = (w: number) => Math.round(Math.max(BR_MIN, Math.min(w, (splitRef.current?.clientWidth ?? window.innerWidth) - BR_CHAT_MIN)))
+  const resizeBr = (w: number) => { const v = clampBr(w); setBrWidth(v); writeStore('kp-as-browser-w', String(v)) }
+  const brEff = clampBr(brWidth) // what fits now
+  const toggleBrWide = () => resizeBr(brEff >= BR_WIDE_AT ? BR_DEFAULT : Math.min(1100, (splitRef.current?.clientWidth ?? 1200) - 340))
+  const startBrDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const el = e.currentTarget
+    const startX = e.clientX
+    const startW = brEff
+    el.setPointerCapture(e.pointerId)
+    setBrDragging(true)
+    const move = (ev: PointerEvent) => setBrWidth(clampBr(startW + startX - ev.clientX)) // the panel is on the right: dragging left widens it
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
+      setBrDragging(false)
+      resizeBr(startW + startX - ev.clientX)
+    }
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
+  }
+  const onBrKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); resizeBr(brEff + 16) }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); resizeBr(brEff - 16) }
+    else if (e.key === 'Home') { e.preventDefault(); resizeBr(BR_DEFAULT) }
+  }
   const clampWidth = (w: number) => Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(w)))
   const resizeTo = (w: number) => { const v = clampWidth(w); setSbWidth(v); writeStore('kp-as-sidebar-w', String(v)) }
   const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -332,7 +378,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
       {!unlocked ? (
         <Empty icon="assistant" title="Assistant is locked" hint="Unlock with your passkey. Assistant adds events and todos, checks mail and uses a browser; Personal answers about money, health, notes and the market, and holds the Tuesday market note." />
       ) : (
-        <div className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${sbHidden ? ' as-collapsed' : ''}${dragging ? ' as-dragging' : ''}${masked ? ' as-masked' : ''}`} style={{ '--as-sidebar-w': `${sbWidth}px` } as CSSProperties}>
+        <div ref={splitRef} className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${sbHidden ? ' as-collapsed' : ''}${dragging ? ' as-dragging' : ''}${brDragging ? ' br-dragging' : ''}${browserOpen && profile === 'assistant' && brEff >= BR_WIDE_AT ? ' as-br-wide' : ''}${masked ? ' as-masked' : ''}`} style={{ '--as-sidebar-w': `${sbWidth}px`, '--br-w': `${brEff}px` } as CSSProperties}>
           <aside className="split-sidebar as-sidebar" aria-label="Conversations">
             <div className="as-sidebar-actions">
               <button className="btn-ghost btn-sm" onClick={newChat}><Icon name="plus" size={14} /> New chat</button>
@@ -427,7 +473,23 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
               </>
             )}
           </section>
-          {browserOpen && profile === 'assistant' && <BrowserPanel onClose={() => setBrowserOpen(false)} />}
+          {browserOpen && profile === 'assistant' && (
+            <>
+              <div
+                className="br-resizer"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize browser"
+                aria-valuemin={BR_MIN}
+                aria-valuenow={brEff}
+                tabIndex={0}
+                onPointerDown={startBrDrag}
+                onKeyDown={onBrKey}
+                onDoubleClick={() => resizeBr(BR_DEFAULT)}
+              />
+              <BrowserPanel onClose={() => setBrowserOpen(false)} wide={brEff >= BR_WIDE_AT} onToggleWide={toggleBrWide} />
+            </>
+          )}
         </div>
       )}
     </div>

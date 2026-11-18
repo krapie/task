@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantApproval, AssistantConversation, BrowserSite, BrowserSiteInput, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
+import type { AssistantApproval, AssistantConversation, BrowserSite, BrowserSiteInput, BrowserStreamEvent, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -455,6 +455,35 @@ export const api = {
     updateSite: (id: string, patch: Partial<Pick<BrowserSite, 'label' | 'url' | 'domains' | 'login_domains' | 'note' | 'quick_link' | 'enabled' | 'login_status'>>) => assetReq<{ site: BrowserSite; synced: boolean }>('PATCH', `/assistant/browser/sites/${id}`, patch),
     removeSite: (id: string) => assetReq<{ ok: boolean; synced: boolean }>('DELETE', `/assistant/browser/sites/${id}`),
     browserInput: (ev: BrowserInput) => assetReq<{ url: string; title: string }>('POST', '/assistant/browser/input', ev),
+    // The live view as a stream (server-sent events), read with the step-up token (EventSource cannot send it). Resolves when the
+    // stream ends (the server closes it after 10 minutes), rejects when it cannot be opened; the caller reconnects.
+    browserStream: async (signal: AbortSignal, onEvent: (e: BrowserStreamEvent) => void, onActivity?: () => void): Promise<void> => {
+      if (!hasAssetToken()) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }
+      const res = await fetch('/api/assistant/browser/stream', { headers: { Authorization: `Bearer ${_assetToken}`, Accept: 'text/event-stream' }, signal })
+      if (res.status === 401) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) return
+        onActivity?.()
+        buf += dec.decode(value, { stream: true })
+        let i: number
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const block = buf.slice(0, i)
+          buf = buf.slice(i + 2)
+          let event = ''
+          let data = ''
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event: ')) event = line.slice(7)
+            else if (line.startsWith('data: ')) data += line.slice(6)
+          }
+          if (event === 'frame' || event === 'state') { try { onEvent({ event, data: JSON.parse(data) } as BrowserStreamEvent) } catch { /* a broken block is skipped */ } }
+        }
+      }
+    },
     // The live page as an image: fetched with the step-up token (an <img src> cannot send it), shown from an object URL.
     browserShot: async (): Promise<string> => {
       if (!hasAssetToken()) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }

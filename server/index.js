@@ -1769,6 +1769,29 @@ app.get('/api/assistant/browser/screenshot', stepUpAuth, async (req, res) => {
   }
 })
 let lastBrowserTextAudit = 0
+// The live view of the assistant's browser: a server-sent stream passed through from the operator (which passes it through
+// from the worker). The token is checked when it opens; the stream ends after 10 minutes and the panel reconnects with a fresh one.
+app.get('/api/assistant/browser/stream', stepUpAuth, async (req, res) => {
+  if (!PERSONAL_TOKEN) return res.status(503).json({ error: 'Assistant not configured' })
+  const abort = new AbortController()
+  res.on('close', () => abort.abort())
+  const cap = setTimeout(() => abort.abort(), 10 * 60_000)
+  try {
+    const r = await operatorFetch(req, '/browser/stream', {}, abort.signal)
+    if (!r.ok || !String(r.headers.get('content-type')).includes('text/event-stream')) {
+      clearTimeout(cap)
+      return res.status(r.status).json(await r.json().catch(() => ({ error: 'browser unavailable' })))
+    }
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
+    r.body.on('end', () => { clearTimeout(cap); res.end() })
+    r.body.on('error', () => { clearTimeout(cap); res.end() })
+    r.body.pipe(res)
+  } catch {
+    clearTimeout(cap)
+    if (!res.headersSent) res.status(503).json({ error: 'browser unavailable' })
+    else res.end()
+  }
+})
 app.post('/api/assistant/browser/input', stepUpAuth, async (req, res) => {
   const b = req.body ?? {}
   // One audit line per meaningful action. Mouse moves, button presses, wheel and single keys come many times a second
@@ -1848,7 +1871,7 @@ app.post('/internal/assistant/additions', operatorAuth, async (req, res) => {
 // The owner manages the list in the Browser panel (passkey step-up). Every change is pushed as the full allowed-domain list
 // to the browser worker (task-api -> operator -> worker); the operator also pulls it at start and every few minutes.
 // The assistant can only propose a site (a card the owner applies) and report whether a site is signed in.
-const SITE_COLUMNS = ['label', 'url', 'domains', 'login_domains', 'note', 'quick_link', 'enabled', 'login_status']
+const SITE_COLUMNS = ['label', 'url', 'domains', 'login_domains', 'note', 'quick_link', 'enabled', 'login_status', 'login_note']
 const siteView = r => ({ id: r.id, label: r.label, url: r.url, domains: r.domains, login_domains: r.login_domains, quick_link: r.quick_link, enabled: r.enabled, note: r.note, login_status: r.login_status, login_checked_at: r.login_checked_at, login_note: r.login_note, created_by: r.created_by })
 const listSites = async () => (await pool.query('SELECT * FROM browser_sites ORDER BY created_at, label')).rows
 
@@ -1900,6 +1923,8 @@ app.patch('/api/assistant/browser/sites/:id', stepUpAuth, async (req, res) => {
   let ch
   try { ch = siteChanges(req.body, cur) } catch (err) { return badSite(res, err) }
   if ((ch.domains || ch.login_domains || ch.enabled === true) && tooManyDomains(await listSites(), { ...cur, ...ch })) return res.status(400).json({ error: 'too many allowed domains in all (at most 200)' })
+  // The owner's own sign-in answer (the Integrations tab) leaves a note: the assistant still checks the page before it relies on it.
+  if (ch.login_status) ch.login_note = ch.login_status === 'signed_in' ? 'confirmed by you' : ch.login_status === 'needs_login' ? 'marked signed out by you' : ''
   const keys = Object.keys(ch).filter(k => SITE_COLUMNS.includes(k))
   if (!keys.length) return res.status(400).json({ error: 'nothing to change' })
   const sets = keys.map((k, i) => `${k} = $${i + 2}`)
