@@ -33,6 +33,8 @@ const BR_DEFAULT = 400
 const BR_WIDE_AT = 560
 const BR_CHAT_MIN = 300
 const isPhone = () => window.matchMedia('(max-width: 600px)').matches
+// The agent's browser tools (names may carry the MCP server prefix).
+const BROWSER_TOOL = /(^|__)browser_(open|snapshot|click|click_text|type|press|select|scroll|back|request_login)$/
 
 // localStorage is a per-viewer convenience: it can be missing or throw, and the view works without it.
 function readStore(key: string): string | null {
@@ -282,6 +284,17 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
   const mainRef = useRef<HTMLElement>(null)
   const remoteStreaming = isRemoteStreaming({ choice, chat, list, live, loading: loadingChat, error: chatError })
   useEscToStop(unlocked && (busy || remoteStreaming), stop, mainRef) // Esc in the chat interrupts the agent; the browser panel keeps its own keys
+
+  // The Browser panel opens by itself when the agent starts using the browser in an answer (once per answer: closing it
+  // keeps it closed until the next answer). Not on a phone, where the panel covers the whole chat: the button opens it.
+  const lastTurn = chat.turns[chat.turns.length - 1]
+  const browserKey = lastTurn && lastTurn.state === 'streaming' && chat.profile === 'assistant' && lastTurn.parts.some(p => p.kind === 'tool' && BROWSER_TOOL.test(p.name)) ? `${chat.turns.length}:${lastTurn.question}` : null
+  const autoOpened = useRef<string | null>(null)
+  useEffect(() => {
+    if (!browserKey || autoOpened.current === browserKey) return
+    autoOpened.current = browserKey
+    if (!isPhone()) setBrowserOpen(true)
+  }, [browserKey])
 
   // Unlocked: load the list, and the conversation a push notification pointed at.
   useEffect(() => {
