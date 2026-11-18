@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantApproval, AssistantConversation, BrowserSite, BrowserSiteInput, BrowserStreamEvent, AssistantChoice, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
+import type { AssistantApproval, AssistantConversation, BrowserSite, BrowserSiteInput, ReservationInput, ReservationJob, BrowserStreamEvent, AssistantChoice, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -453,6 +453,9 @@ export const api = {
     browserState: () => assetReq<BrowserState>('GET', '/assistant/browser/state'),
     // The sites the browser may use. `synced: false` = saved, but the browser worker has not taken the list yet (it pulls it every 2 minutes).
     sites: () => assetReq<{ sites: BrowserSite[] }>('GET', '/assistant/browser/sites').then(r => r.sites),
+    reservations: () => assetReq<{ reservations: ReservationJob[] }>('GET', '/assistant/reservations').then(r => r.reservations),
+    addReservation: (r: ReservationInput) => assetReq<{ reservation: ReservationJob }>('POST', '/assistant/reservations', r).then(x => x.reservation),
+    cancelReservation: (id: string) => assetReq<{ ok: boolean }>('DELETE', `/assistant/reservations/${id}`),
     addSite: (s: BrowserSiteInput) => assetReq<{ site: BrowserSite; synced: boolean }>('POST', '/assistant/browser/sites', s),
     updateSite: (id: string, patch: Partial<Pick<BrowserSite, 'label' | 'url' | 'domains' | 'login_domains' | 'note' | 'quick_link' | 'enabled' | 'login_status'>>) => assetReq<{ site: BrowserSite; synced: boolean }>('PATCH', `/assistant/browser/sites/${id}`, patch),
     // "Set up sign-in": the assistant watches the page and marks the site signed in once it shows the owner's account.

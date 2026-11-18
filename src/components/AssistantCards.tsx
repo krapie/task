@@ -3,7 +3,7 @@ import { api } from '../lib/api'
 import { TASK_DATA_CHANGED } from '../lib/assistantStore'
 import { confirmDialog } from '../lib/notify'
 import { Icon } from './Icons'
-import type { AssistantApproval, AssistantPart, BrowserInput, BrowserSite, BrowserState, BrowserStreamEvent } from '../types'
+import type { AssistantApproval, AssistantPart, BrowserInput, BrowserSite, BrowserState, BrowserStreamEvent, ReservationJob, ReservationInput } from '../types'
 
 type ToolPart = Extract<AssistantPart, { kind: 'tool' }>
 
@@ -231,6 +231,16 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
   // The sites: loaded now, and again whenever the assistant may have recorded a sign-in (the pending question changes).
   const loadSites = useCallback(() => { api.assistant.sites().then(setSites, () => {}) }, [])
   useEffect(() => { loadSites() }, [loadSites, pending?.id])
+
+  // Scheduled reservations: listed in Integrations, refreshed while it is open (a run changes state within seconds).
+  const [jobs, setJobs] = useState<ReservationJob[] | null>(null)
+  const loadJobs = useCallback(() => { api.assistant.reservations().then(setJobs, () => {}) }, [])
+  useEffect(() => {
+    if (view !== 'integrations') return
+    loadJobs()
+    const t = setInterval(() => { if (!document.hidden) loadJobs() }, 10_000)
+    return () => clearInterval(t)
+  }, [view, loadJobs])
 
   useEffect(() => {
     void refresh()
@@ -605,9 +615,90 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
             <button type="button" className="btn-ghost btn-sm br-site-add" onClick={() => setAdding(true)}><Icon name="plus" size={14} /> Add site</button>
           )}
           {siteNote && <p className="as-meta br-site-note">{siteNote}</p>}
+          <h3 className="br-int-head">Reservations</h3>
+          <p className="as-meta br-int-intro">Scheduled by the assistant and approved by you. At the opening time the assistant takes this browser over (your input pauses), tries the slots from the latest, and confirms only a reservation that costs nothing.</p>
+          <ul className="br-site-list">
+            {(jobs ?? []).length === 0 && <li className="as-meta">{jobs === null ? 'Loading…' : 'Nothing scheduled. Ask the assistant to reserve a shop when it opens.'}</li>}
+            {(jobs ?? []).map(j => (
+              <li key={j.id}>
+                <div className="br-site-main">
+                  <span className="br-site-name">{j.shop_name}{j.mode === 'dry_run' ? ' · dry run' : ''}</span>
+                  <span className="as-meta br-site-domains">{j.date} {j.open_time} · {j.party} {j.party === 1 ? 'person' : 'people'} · {j.slots.join(' → ')}</span>
+                  <span className={`as-meta br-site-state${j.state === 'failed' || j.state === 'expired' ? ' br-site-state-warn' : ''}`}>{RESERVATION_STATE[j.state]}{j.result?.time ? ` · ${j.result.time}` : ''}{j.result?.booking_number ? ` · No. ${j.result.booking_number}` : ''}{j.result?.detail && !['scheduled', 'preparing', 'running'].includes(j.state) ? ` · ${j.result.detail}` : ''}</span>
+                </div>
+                <div className="br-site-actions">
+                  {['scheduled', 'preparing', 'running'].includes(j.state) && (
+                    <button type="button" className="btn-ghost btn-sm" onClick={async () => { if (await confirmDialog({ title: 'Cancel reservation', body: `${j.shop_name} ${j.date} ${j.open_time}`, confirmLabel: 'Cancel reservation', danger: true })) { try { await api.assistant.cancelReservation(j.id) } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) } loadJobs() } }}>Cancel</button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </aside>
+  )
+}
+
+const RESERVATION_STATE: Record<ReservationJob['state'], string> = {
+  scheduled: 'Waiting for the opening',
+  preparing: 'Taking over the browser',
+  running: 'Reserving now',
+  succeeded: 'Reserved',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+  expired: 'Missed',
+  dry_run_done: 'Dry run finished',
+}
+
+// A reservation the assistant proposed. Nothing is scheduled until the owner approves (the passkey session): then at the
+// opening time the operator tries the slots from the latest and confirms the first one it gets, only if it costs nothing.
+export function ReservationProposal({ part }: { part: ToolPart }) {
+  let p: Partial<ReservationInput> & { status?: string } = {}
+  try { p = JSON.parse(part.result?.output ?? '') } catch { /* shown from the input */ }
+  const input = { ...(part.input as ReservationInput), ...p }
+  const doneKey = `kp-reservation:${part.id}`
+  const [state, setState] = useState<'idle' | 'saving' | 'scheduled' | 'dismissed'>(() => (readStore(doneKey) ? 'scheduled' : 'idle'))
+  const [when, setWhen] = useState<string | null>(readStore(doneKey))
+  const [error, setError] = useState<string | null>(null)
+  const slots = [...(input.slots ?? [])].sort().reverse()
+  const approve = async () => {
+    setState('saving')
+    setError(null)
+    try {
+      const j = await api.assistant.addReservation({ shop_name: input.shop_name, shop_url: input.shop_url, party: input.party, slots, open_time: input.open_time, ...(input.date ? { date: input.date } : {}), ...(input.mode ? { mode: input.mode } : {}) })
+      const text = `${j.date} ${j.open_time}`
+      writeStore(doneKey, text)
+      setWhen(text)
+      setState('scheduled')
+    } catch (err) {
+      setState('idle')
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+  return (
+    <div className="as-proposal">
+      <div className="as-proposal-head">
+        <Icon name="calendar" size={14} />
+        <span className="as-proposal-kind">{input.mode === 'dry_run' ? 'Reservation dry run' : 'Scheduled reservation'}</span>
+        <span className="as-proposal-title">{input.shop_name}</span>
+      </div>
+      <p className="as-proposal-summary">Opens {input.open_time} KST{input.date ? ` · ${input.date}` : ''} · {input.party} {input.party === 1 ? 'person' : 'people'} · slots {slots.join(' → ')} (latest first)</p>
+      <p className="as-meta">{input.mode === 'dry_run'
+        ? 'Goes as far as the final dialog and stops: nothing is booked.'
+        : 'When it opens, the assistant takes the browser over (your input pauses), tries the slots in that order and confirms the first one it gets. It confirms only a reservation that costs nothing: a payment or a deposit stops it. You can cancel in Integrations until it runs.'}</p>
+      {error && <p className="as-error">{error}</p>}
+      <div className="as-proposal-actions">
+        {state === 'scheduled' && <span className="as-meta">Scheduled for {when}</span>}
+        {state === 'dismissed' && <span className="as-meta">Dismissed</span>}
+        {(state === 'idle' || state === 'saving') && (
+          <>
+            <button type="button" className="btn-primary btn-sm" onClick={approve} disabled={state === 'saving'}>Approve and schedule</button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setState('dismissed')} disabled={state === 'saving'}>Dismiss</button>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 

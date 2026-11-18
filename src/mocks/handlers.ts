@@ -2,7 +2,7 @@
 // Anything under /api without a handler returns 501 "not mocked" so a gap is visible in the UI.
 // Not mocked yet: the finance import details (a passkey step-up tab). The assistant's chats are kept in memory (convs below) and its answers are scripted (see assistantChat).
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
-import type { AssistantTurn, DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
+import type { ReservationJob, AssistantTurn, DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
 import * as db from './db'
 
 // Read once at load: the app rewrites the URL to its #/ route after the first render, which drops the query.
@@ -55,6 +55,10 @@ const convs: MockConv[] = [
   { id: '00000000-0000-4000-8000-000000000002', profile: 'assistant', title: 'Any unread mail that needs a reply?', folder: 'mail', created_at: hoursAgo(5), updated_at: hoursAgo(5), turns: [mockTurn('s2', 'Any unread mail that needs a reply?', 'Two unread mails need a reply: the dentist (confirm Friday) and the landlord (lease question).')] },
   { id: '00000000-0000-4000-8000-000000000003', profile: 'personal', title: 'Summarize my week', folder: 'summaries', created_at: hoursAgo(70), updated_at: hoursAgo(70), turns: [mockTurn('s3', 'Summarize my week', 'Four workouts, 7h 10m of sleep on average, and 12 of 15 tasks done (mock numbers).')] },
 ]
+// Scheduled reservations (the Integrations list and the proposal card's approval).
+const reservations: ReservationJob[] = []
+const kstDay = (d: Date) => new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10)
+
 // The operator routes a new chat by its first question (keyword rule); unclear goes to personal.
 const mockRoute = (q: string): 'assistant' | 'personal' =>
   /mail|inbox|reply|event|todo|remind|book|reserve|order|table|coupang|쿠팡|메일|일정|예약|주문|로그인|sign in|site|사이트/i.test(q) && !/spend|spent|sleep|health|stock|market|note|지출|건강|자산/i.test(q) ? 'assistant' : 'personal'
@@ -103,6 +107,13 @@ function assistantChat({ request }: { request: Request }) {
             send({ type: 'tool_result', id: 'l2', error: false, output: JSON.stringify({ site: site.label, sign_in: 'signed_in' }) })
             send({ type: 'text', text: 'You are signed in to Catch Table; I recorded it.' })
           } else send({ type: 'text', text: 'Okay, I did not continue with Catch Table.' })
+        } else if (profile === 'assistant' && /when it opens|schedule.*reserv|예약 오픈|오픈.*예약|godiva|고디바/i.test(question)) {
+          send({ type: 'text', text: '고디바 롯데월드몰점은 매일 오전 9:00에 당일 예약이 열립니다. 늦은 시간부터 시도하는 예약을 제안합니다.' })
+          const prop = { status: 'proposed', shop_name: '고디바 롯데월드몰점', shop_url: 'https://app.catchtable.co.kr/ct/shop/godiva_lotteworldmall', party: 1, slots: ['16:30', '15:30', '14:30', '12:30', '11:30', '10:30'], open_time: '09:00', mode: 'live', note: 'Waiting for the owner to approve the card.' }
+          send({ type: 'tool', id: 'r1', name: 'propose_reservation', input: { ...prop, slots: ['10:30', '11:30', '12:30', '14:30', '15:30', '16:30'] } })
+          await sleep(300)
+          send({ type: 'tool_result', id: 'r1', error: false, output: JSON.stringify(prop) })
+          send({ type: 'text', text: '카드를 승인하면 내일 오전 9시에 시도합니다. 결제가 필요한 예약은 하지 않습니다.' })
         } else if (profile === 'assistant' && /add .*site|new site|사이트 추가|opentable|yanolja/i.test(question)) {
           send({ type: 'text', text: 'Yanolja is not in the browser\'s list. I propose adding it:' })
           send({ type: 'tool', id: 'p1', name: 'propose_site', input: { label: 'Yanolja', url: 'https://www.yanolja.com/', note: 'Hotel booking' } })
@@ -357,6 +368,22 @@ export const handlers: HttpHandler[] = [
   }),
   http.post('/api/assistant/chat', assistantChat),
   http.post('/api/assistant/chat/stop', async () => ok({ stopped: true })),
+  http.get('/api/assistant/reservations', async () => ok({ reservations })),
+  http.post('/api/assistant/reservations', async ({ request }) => {
+    const b = (await request.json()) as { shop_name: string; shop_url: string; party: number; slots: string[]; open_time: string; date?: string; mode?: 'live' | 'dry_run' }
+    if (reservations.some((r) => ['scheduled', 'preparing', 'running'].includes(r.state) && r.shop_url === b.shop_url)) return HttpResponse.json({ error: 'that shop is already scheduled for that day' }, { status: 409 })
+    const date = b.date ?? kstDay(new Date(Date.now() + 86_400_000))
+    const j: ReservationJob = { id: `rv-${uid()}`, shop_name: b.shop_name, shop_url: b.shop_url, party: b.party, slots: [...b.slots].sort().reverse(), open_time: b.open_time, date, mode: b.mode ?? 'live', fire_at: new Date(`${date}T${b.open_time}:00+09:00`).toISOString(), state: 'scheduled', result: {}, created_at: new Date().toISOString() }
+    reservations.unshift(j)
+    return HttpResponse.json({ reservation: j }, { status: 201 })
+  }),
+  http.delete('/api/assistant/reservations/:id', async ({ params }) => {
+    const j = reservations.find((r) => r.id === params.id)
+    if (!j || !['scheduled', 'preparing', 'running'].includes(j.state)) return HttpResponse.json({ error: 'not found or already finished' }, { status: 409 })
+    j.state = 'cancelled'
+    j.result = { detail: 'cancelled by the owner' }
+    return ok({ ok: true })
+  }),
   http.get('/api/assistant/approval', async () => ok({ approval: pendingApproval })),
   http.post('/api/assistant/approval', async ({ request }) => {
     const b = (await request.json()) as { id: string; decision: 'approve' | 'deny' }

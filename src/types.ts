@@ -268,6 +268,10 @@ export type AssistantChoice = 'auto' | AssistantProfile
 export interface AssistantApproval { id: string; kind?: 'action' | 'login'; summary: string; url: string | null; site?: { id: string; label: string } | null; created_at: string }
 export type SiteLoginStatus = 'unknown' | 'signed_in' | 'needs_login'
 export interface BrowserSite { id: string; label: string; url: string; domains: string[]; login_domains: string[]; quick_link: boolean; enabled: boolean; note: string; login_status: SiteLoginStatus; login_checked_at: string | null; login_note: string; created_by: string }
+// A scheduled reservation the owner approved: the operator runs it at the opening time (Catch Table, nothing paid).
+export type ReservationState = 'scheduled' | 'preparing' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'expired' | 'dry_run_done'
+export interface ReservationJob { id: string; shop_name: string; shop_url: string; party: number; slots: string[]; open_time: string; date: string; mode: 'live' | 'dry_run'; fire_at: string; state: ReservationState; result: { detail?: string; time?: string; booking_number?: string; conversation_id?: string }; created_at: string }
+export interface ReservationInput { shop_name: string; shop_url: string; party: number; slots: string[]; open_time: string; date?: string; mode?: 'live' | 'dry_run' }
 export interface BrowserSiteInput { label: string; url: string; domains?: string[]; login_domains?: string[]; note?: string; quick_link?: boolean; created_by?: 'assistant' }
 // The live view: a JPEG (base64) whenever the page changes, and the page's address and title when they change.
 export type BrowserStreamEvent = { event: 'frame'; data: { mime: string; data: string; w: number; h: number } } | { event: 'state'; data: { url: string; title: string } }

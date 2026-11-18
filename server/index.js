@@ -10,6 +10,7 @@ import { TranslateError, translateTexts } from './translate.js'
 import { startMetricsServer, telemetry, withSpan } from './telemetry.js'
 import { poolOptions, warmPool } from './pool.js'
 import { noteAccess, NOTE_EDIT_AUDIT_WINDOW_MINUTES } from './notes-access.js'
+import { ACTIVE as RESERVATION_ACTIVE, FINISHED as RESERVATION_FINISHED, STATES as RESERVATION_STATES, canMove, jobFromInput, pushFor } from './reservations.js'
 import { AGENT_LOGIN_STATUSES, SEED_SITES, allowedDomains, duplicateOf, siteChanges, siteFromInput, tooManyDomains } from './browser-sites.js'
 
 const PORT = process.env.PORT || 3000
@@ -89,6 +90,29 @@ async function initBrowserSites() {
   } finally {
     c.release()
   }
+}
+
+// Scheduled reservations: the owner approves a job (the passkey), the operator runs it at the opening time (docs/apps/browser-agent.md).
+async function initReservations() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reservation_jobs (
+      id TEXT PRIMARY KEY,
+      shop_name TEXT NOT NULL,
+      shop_url TEXT NOT NULL,
+      party INTEGER NOT NULL,
+      slots TEXT[] NOT NULL,
+      open_time TEXT NOT NULL,
+      date TEXT NOT NULL,
+      fire_at TIMESTAMPTZ NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'live',
+      state TEXT NOT NULL DEFAULT 'scheduled',
+      result JSONB NOT NULL DEFAULT '{}',
+      attempts JSONB NOT NULL DEFAULT '[]',
+      created_by TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS reservation_jobs_state ON reservation_jobs (state, fire_at)
+  `)
 }
 
 async function initDb() {
@@ -241,6 +265,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE notes ADD COLUMN IF NOT EXISTS fts tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(title, '') || ' ' || body)) STORED`)
   await pool.query('CREATE INDEX IF NOT EXISTS notes_fts_idx ON notes USING GIN (fts)')
   await initBrowserSites()
+  await initReservations()
   await pool.query('CREATE EXTENSION IF NOT EXISTS pg_trgm').then(
     () => pool.query(`CREATE INDEX IF NOT EXISTS notes_trgm_idx ON notes USING GIN ((coalesce(title, '') || ' ' || body) gin_trgm_ops)`),
   ).catch(err => console.warn('notes pg_trgm:', err.message))
@@ -1977,6 +2002,70 @@ app.post('/internal/assistant/browser-sites/:id/login-status', operatorAuth, asy
   if (!rowCount) return res.status(404).json({ error: 'not found' })
   await audit(`assistant_site_login:${req.params.id}:${status}`, req)
   res.json({ id: req.params.id, login_status: status })
+})
+
+// ── Scheduled reservations ───────────────────────────────────────────────
+// The owner's approval is the passkey session that creates the job (the card in the Assistant tab). The job may only confirm a
+// reservation that costs nothing, on Catch Table, for the shop, day, party and slots written here (reservations.js, and the
+// operator's reservation_confirm checks the page against them). Cancel ends it at once.
+const jobView = r => ({ id: r.id, shop_name: r.shop_name, shop_url: r.shop_url, party: r.party, slots: r.slots, open_time: r.open_time, date: r.date, mode: r.mode, fire_at: r.fire_at, state: r.state, result: r.result, attempts: r.attempts, created_by: r.created_by, created_at: r.created_at })
+
+app.get('/api/assistant/reservations', stepUpAuth, async (_req, res) => {
+  const { rows } = await pool.query('SELECT * FROM reservation_jobs ORDER BY fire_at DESC LIMIT 30')
+  res.json({ reservations: rows.map(jobView) })
+})
+
+app.post('/api/assistant/reservations', stepUpAuth, async (req, res) => {
+  let j
+  try { j = jobFromInput(req.body, allowedDomains((await listSites()).filter(s => s.enabled))) } catch (err) { return badSite(res, err) }
+  const act = (await pool.query('SELECT shop_url, date FROM reservation_jobs WHERE state = ANY($1)', [RESERVATION_ACTIVE])).rows
+  if (act.length >= 5) return res.status(400).json({ error: 'at most 5 reservations waiting at once' })
+  if (act.some(a => a.shop_url === j.shop_url && a.date === j.date)) return res.status(409).json({ error: 'that shop is already scheduled for that day' })
+  const id = randomUUID()
+  await pool.query('INSERT INTO reservation_jobs (id, shop_name, shop_url, party, slots, open_time, date, fire_at, mode, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [id, j.shop_name, j.shop_url, j.party, j.slots, j.open_time, j.date, j.fire_at, j.mode, req.user.username])
+  await audit(`assistant_reservation_add:${id}`, req)
+  res.status(201).json({ reservation: jobView((await pool.query('SELECT * FROM reservation_jobs WHERE id = $1', [id])).rows[0]) })
+})
+
+app.delete('/api/assistant/reservations/:id', stepUpAuth, async (req, res) => {
+  const { rowCount } = await pool.query(`UPDATE reservation_jobs SET state = 'cancelled', result = result || '{"detail":"cancelled by the owner"}'::jsonb WHERE id = $1 AND state = ANY($2)`, [req.params.id, RESERVATION_ACTIVE])
+  if (!rowCount) return res.status(409).json({ error: 'not found or already finished' })
+  await audit(`assistant_reservation_cancel:${req.params.id}`, req)
+  res.json({ ok: true })
+})
+
+// For the operator: the jobs still to run, one job, and the state changes it reports (task-api sends the owner's push when one ends).
+app.get('/internal/assistant/reservations', operatorAuth, async (_req, res) => {
+  const { rows } = await pool.query('SELECT * FROM reservation_jobs WHERE state = ANY($1) ORDER BY fire_at', [RESERVATION_ACTIVE])
+  res.json({ reservations: rows.map(jobView) })
+})
+
+app.get('/internal/assistant/reservations/:id', operatorAuth, async (req, res) => {
+  const row = (await pool.query('SELECT * FROM reservation_jobs WHERE id = $1', [String(req.params.id).slice(0, 40)])).rows[0]
+  if (!row) return res.status(404).json({ error: 'not found' })
+  res.json({ reservation: jobView(row) })
+})
+
+app.post('/internal/assistant/reservations/:id/state', operatorAuth, async (req, res) => {
+  const { state, result, attempt } = req.body ?? {}
+  const cur = (await pool.query('SELECT * FROM reservation_jobs WHERE id = $1', [String(req.params.id).slice(0, 40)])).rows[0]
+  if (!cur) return res.status(404).json({ error: 'not found' })
+  if (!RESERVATION_STATES.includes(state)) return res.status(400).json({ error: 'unknown state' })
+  if (state !== cur.state && !canMove(cur.state, state)) return res.status(409).json({ error: `cannot go from ${cur.state} to ${state}`, state: cur.state })
+  const patch = result && typeof result === 'object' && JSON.stringify(result).length < 4000 ? result : {}
+  const row = attempt && typeof attempt === 'object' && JSON.stringify(attempt).length < 2000 ? { at: new Date().toISOString(), ...attempt } : null
+  const upd = (await pool.query(
+    `UPDATE reservation_jobs SET state = $2, result = result || $3::jsonb, attempts = CASE WHEN $4::jsonb IS NULL THEN attempts ELSE (attempts || $4::jsonb) END WHERE id = $1 RETURNING *`,
+    [cur.id, state, JSON.stringify(patch), row ? JSON.stringify([row]) : null],
+  )).rows[0]
+  await audit(`assistant_reservation_${state}:${cur.id}`, req)
+  if (state !== cur.state && RESERVATION_FINISHED.includes(state)) {
+    const msg = pushFor(upd, state)
+    if (msg) sendPushToAll({ ...msg, tag: 'reservation', url: upd.result?.conversation_id ? `/#/assistant/${upd.result.conversation_id}` : '/#/assistant' }).catch(err => console.error(`reservation push: ${err.message}`))
+  }
+  // A heads-up the operator wants the owner to see before the run (Catch Table signed out, the browser not reachable).
+  if (row?.notify && typeof row.notify === 'string') sendPushToAll({ title: '예약 준비가 필요합니다', body: row.notify.slice(0, 200), tag: 'reservation', url: '/#/assistant' }).catch(err => console.error(`reservation push: ${err.message}`))
+  res.json({ id: upd.id, state: upd.state })
 })
 
 // The owner's notes: written in the Note tab, searched and read by the assistant (notes_search / note_get),
