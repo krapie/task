@@ -3,9 +3,9 @@ import type { IconName } from '../components/Icons'
 export type View = 'overview' | 'routine' | 'calendar' | 'mail' | 'news' | 'assets' | 'health' | 'trader' | 'notes' | 'chats' | 'settings'
 export type RoutineTab = 'tasks' | 'goals' | 'retro'
 
-// Groups kept off the phone's bottom bar and More sheet for now (2026-11-18). The Overview stays on desktop, and the
-// phone opens on Tasks instead, because a page with no tab to reach it would be a dead end. Empty this list to bring it back.
-export const PHONE_HIDDEN: readonly string[] = ['overview']
+// Groups kept off the phone's bottom bar and More sheet. Empty since 2026-11-18: the phone opens on the Overview like
+// the desktop does. A hidden group needs another way in, because a page with no tab to reach it would be a dead end.
+export const PHONE_HIDDEN: readonly string[] = []
 const onPhone = () => typeof matchMedia === 'function' && matchMedia('(max-width: 600px)').matches
 // The Overview is the main page on desktop: it is where the app opens and where the π mark leads.
 export const defaultView = (): View => (onPhone() && PHONE_HIDDEN.includes('overview') ? 'routine' : 'overview')
@@ -30,7 +30,7 @@ export interface Group { id: GroupId; label: string; icon: IconName; views: View
 
 // Eleven views fold into eight nav groups; groups with several views get sub-tabs. The Assistant tab is the former
 // Note → Chats and the Assistant in one, with a profile switch inside (Assistant / Personal). On phones it is not on the
-// bottom bar (BAR_GROUPS), so it sits in the More sheet.
+// bottom bar (BAR_GROUPS) next to the Overview.
 export const GROUPS: Group[] = [
   { id: 'overview', label: 'Overview', icon: 'overview', views: ['overview'] },
   { id: 'assistant', label: 'Assistant', icon: 'assistant', views: ['chats'] },
@@ -56,9 +56,9 @@ export function scopesFor(view: View, tab: RoutineTab): string[] {
   }
 }
 
-// The groups with their own slot on the phone's bottom bar, in this order (Tasks, Calendar, Inbox, Assistant, then More);
-// the others go into its "More" sheet. Overview is in PHONE_HIDDEN, so it is on neither.
-export const BAR_GROUPS: GroupId[] = ['today', 'calendar', 'inbox', 'assistant']
+// The groups with their own slot on the phone's bottom bar, in this order (Overview, Assistant, Calendar, Inbox, then More);
+// the others (Tasks, Life, Note, Settings) go into its "More" sheet. The Inbox slot opens on Mail, News is its sub-tab.
+export const BAR_GROUPS: GroupId[] = ['overview', 'assistant', 'calendar', 'inbox']
 
 export const groupOf = (v: View): Group => GROUPS.find(g => g.views.includes(v)) ?? GROUPS[0]
 
