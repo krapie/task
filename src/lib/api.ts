@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantConversation, AssistantEvent, AssistantFolder, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
+import type { AssistantApproval, AssistantConversation, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -201,7 +201,7 @@ const noteReq = <T,>(method: string, path: string, body?: unknown, stepUpToken?:
 
 // Assistant chat: SSE from the operator's personal profile via task-api. The
 // stream is read with the step-up token, like every other step-up request.
-async function assistantChat(conversationId: string | null, question: string, onEvent: (e: AssistantEvent) => void, signal: AbortSignal): Promise<void> {
+async function assistantChat(conversationId: string | null, question: string, onEvent: (e: AssistantEvent) => void, signal: AbortSignal, profile: AssistantProfile = 'personal'): Promise<void> {
   if (!hasAssetToken()) {
     clearAssetToken()
     throw new Error('ASSET_SESSION_EXPIRED')
@@ -209,7 +209,7 @@ async function assistantChat(conversationId: string | null, question: string, on
   const res = await fetch('/api/assistant/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${_assetToken}` },
-    body: JSON.stringify({ conversation_id: conversationId ?? undefined, question }),
+    body: JSON.stringify({ conversation_id: conversationId ?? undefined, question, profile }),
     signal,
   })
   if (res.status === 401) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }
@@ -442,10 +442,22 @@ export const api = {
   assistant: {
     chat: assistantChat,
     stop: (turnId: string) => assetReq<{ stopped: boolean }>('POST', '/assistant/chat/stop', { turn_id: turnId }),
-    list: () => assetReq<{ conversations: AssistantSummary[] }>('GET', '/assistant/conversations').then(r => r.conversations),
+    list: (profile: AssistantProfile = 'personal') => assetReq<{ conversations: AssistantSummary[] }>('GET', `/assistant/conversations?profile=${profile}`).then(r => r.conversations),
     get: (id: string) => assetReq<AssistantConversation>('GET', `/assistant/conversations/${id}`),
     remove: (id: string) => assetReq<void>('DELETE', `/assistant/conversations/${id}`),
     update: (id: string, patch: { title?: string; folder?: AssistantFolder }) => assetReq<void>('PATCH', `/assistant/conversations/${id}`, patch),
+    approval: () => assetReq<{ approval: AssistantApproval | null }>('GET', '/assistant/approval').then(r => r.approval),
+    decide: (id: string, decision: 'approve' | 'deny') => assetReq<{ ok: boolean }>('POST', '/assistant/approval', { id, decision }),
+    browserState: () => assetReq<BrowserState>('GET', '/assistant/browser/state'),
+    browserInput: (ev: BrowserInput) => assetReq<{ url: string; title: string }>('POST', '/assistant/browser/input', ev),
+    // The live page as an image: fetched with the step-up token (an <img src> cannot send it), shown from an object URL.
+    browserShot: async (): Promise<string> => {
+      if (!hasAssetToken()) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }
+      const res = await fetch('/api/assistant/browser/screenshot', { headers: { Authorization: `Bearer ${_assetToken}` } })
+      if (res.status === 401) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${res.status}`)
+      return URL.createObjectURL(await res.blob())
+    },
   },
   notes: {
     list: (q?: string) => noteReq<NoteSummary[]>('GET', q?.trim() ? `/notes?q=${encodeURIComponent(q.trim())}` : '/notes'),

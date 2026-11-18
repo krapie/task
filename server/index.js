@@ -1655,9 +1655,13 @@ async function operatorFetch(req, path, init = {}, signal) {
   return fetch(`${OPERATOR_URL}/personal${path}`, {
     ...init,
     signal,
-    headers: { Authorization: `Bearer ${PERSONAL_TOKEN}`, 'X-User': req.user.username, 'Content-Type': 'application/json', ...init.headers },
+    headers: { Authorization: `Bearer ${PERSONAL_TOKEN}`, 'X-User': req.user.username, 'X-Profile': assistantProfile(req), 'Content-Type': 'application/json', ...init.headers },
   })
 }
+
+// Two profiles share the Assistant tab: "assistant" (does things, reads mail, browses) and "personal" (finance,
+// health, notes). The tab sends ?profile= (or a body field on POST); conversations opened by id are found by the operator.
+const assistantProfile = req => ((req.query?.profile ?? req.body?.profile) === 'assistant' ? 'assistant' : 'personal')
 
 async function assistantJson(req, res, path, init = {}) {
   if (!PERSONAL_TOKEN) return res.status(503).json({ error: 'Assistant not configured' })
@@ -1702,6 +1706,95 @@ app.patch('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'PATCH', body: JSON.stringify({ title: req.body?.title, folder: req.body?.folder }) }))
 app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' }))
+
+// Approvals and the live browser of the assistant profile (docs/apps/browser-agent.md). Same passkey boundary as chats.
+app.get('/api/assistant/approval', stepUpAuth, (req, res) => assistantJson(req, res, '/approval'))
+app.post('/api/assistant/approval', stepUpAuth, async (req, res) => {
+  const decision = req.body?.decision === 'approve' ? 'approve' : 'deny'
+  await audit(`assistant_approval_${decision}`, req)
+  return assistantJson(req, res, '/approval', { method: 'POST', body: JSON.stringify({ id: req.body?.id, decision }) })
+})
+app.get('/api/assistant/browser/state', stepUpAuth, (req, res) => assistantJson(req, res, '/browser/state'))
+app.get('/api/assistant/browser/screenshot', stepUpAuth, async (req, res) => {
+  if (!PERSONAL_TOKEN) return res.status(503).json({ error: 'Assistant not configured' })
+  try {
+    const r = await operatorFetch(req, '/browser/screenshot')
+    if (!r.ok) return res.status(r.status).json(await r.json().catch(() => ({ error: 'browser error' })))
+    res.set({ 'Content-Type': r.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'no-store' })
+    res.send(Buffer.from(await r.arrayBuffer()))
+  } catch {
+    res.status(503).json({ error: 'browser unavailable' })
+  }
+})
+app.post('/api/assistant/browser/input', stepUpAuth, async (req, res) => {
+  const b = req.body ?? {}
+  await audit(`assistant_browser_input_${String(b.type || '').slice(0, 12)}`, req)
+  return assistantJson(req, res, '/browser/input', { method: 'POST', body: JSON.stringify({ type: b.type, fx: b.fx, fy: b.fy, text: b.text, key: b.key, dy: b.dy, url: b.url }) })
+})
+
+// What the assistant profile may change in the Task app: called by the operator (bearer PERSONAL_TOKEN, in-cluster,
+// not routed by Envoy). Additions and edits only, never a delete; each call leaves an audit line with the new id.
+// The owner's Undo button uses the normal DELETE routes.
+function operatorAuth(req, res, next) {
+  const got = Buffer.from(String(req.headers.authorization || '').replace(/^Bearer /, ''))
+  const want = Buffer.from(PERSONAL_TOKEN)
+  if (!PERSONAL_TOKEN || got.length !== want.length || !timingSafeEqual(got, want)) return res.status(401).json({ error: 'Unauthorized' })
+  next()
+}
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+
+app.post('/internal/assistant/events', operatorAuth, async (req, res) => {
+  const { title, start_date, end_date, time } = req.body ?? {}
+  if (!title?.trim() || !DATE_RE.test(start_date ?? '') || !DATE_RE.test(end_date ?? '')) return res.status(400).json({ error: 'title, start_date and end_date (YYYY-MM-DD) are required' })
+  if (end_date < start_date) return res.status(400).json({ error: 'end_date before start_date' })
+  if (time && !TIME_RE.test(time)) return res.status(400).json({ error: 'time must be HH:MM' })
+  const id = randomUUID()
+  const now = Date.now()
+  await pool.query('INSERT INTO events (id, title, start_date, end_date, time, recurrence, created_at) VALUES ($1,$2,$3,$4,$5,NULL,$6)', [id, title.trim().slice(0, 200), start_date, end_date, time || null, now])
+  await audit(`assistant_event_add:${id}`, req)
+  res.json({ id, title: title.trim().slice(0, 200), start_date, end_date, time: time || null })
+})
+
+app.put('/internal/assistant/events/:id', operatorAuth, async (req, res) => {
+  const { title, start_date, end_date, time } = req.body ?? {}
+  if (!title?.trim() || !DATE_RE.test(start_date ?? '') || !DATE_RE.test(end_date ?? '')) return res.status(400).json({ error: 'title, start_date and end_date (YYYY-MM-DD) are required' })
+  if (end_date < start_date) return res.status(400).json({ error: 'end_date before start_date' })
+  if (time && !TIME_RE.test(time)) return res.status(400).json({ error: 'time must be HH:MM' })
+  // recurrence is left as it is: the assistant does not edit repeating rules.
+  const { rows } = await pool.query('UPDATE events SET title=$1, start_date=$2, end_date=$3, time=$4 WHERE id=$5 RETURNING id, title, start_date, end_date, time, recurrence', [title.trim().slice(0, 200), start_date, end_date, time || null, req.params.id])
+  if (!rows.length) return res.status(404).json({ error: 'event not found' })
+  await audit(`assistant_event_update:${req.params.id}`, req)
+  res.json(rows[0])
+})
+
+app.post('/internal/assistant/todos', operatorAuth, async (req, res) => {
+  const { text, due_date } = req.body ?? {}
+  if (!text?.trim()) return res.status(400).json({ error: 'text required' })
+  if (due_date && !DATE_RE.test(due_date)) return res.status(400).json({ error: 'due_date must be YYYY-MM-DD' })
+  const id = randomUUID()
+  const { rows } = await pool.query('INSERT INTO todos (id, text, due_date) VALUES ($1, $2, $3) RETURNING *', [id, text.trim().slice(0, 300), due_date ?? null])
+  await audit(`assistant_todo_add:${id}`, req)
+  res.json(rows[0])
+})
+
+app.patch('/internal/assistant/todos/:id', operatorAuth, async (req, res) => {
+  if (typeof req.body?.completed !== 'boolean') return res.status(400).json({ error: 'completed (boolean) required' })
+  const { rows } = await pool.query('UPDATE todos SET completed = $1 WHERE id = $2 RETURNING *', [req.body.completed, req.params.id])
+  if (!rows.length) return res.status(404).json({ error: 'todo not found' })
+  await audit(`assistant_todo_update:${req.params.id}`, req)
+  res.json(rows[0])
+})
+
+app.post('/internal/assistant/additions', operatorAuth, async (req, res) => {
+  const { slotDate, text } = req.body ?? {}
+  if (!DATE_RE.test(slotDate ?? '') || !text?.trim()) return res.status(400).json({ error: 'slotDate (YYYY-MM-DD) and text required' })
+  const id = randomUUID()
+  const now = Date.now()
+  await pool.query('INSERT INTO daily_additions VALUES ($1, $2, $3, false, $4)', [id, slotDate, text.trim().slice(0, 300), now])
+  await audit(`assistant_task_add:${id}`, req)
+  res.json({ id, slot_date: slotDate, text: text.trim().slice(0, 300), completed: false })
+})
 
 // The owner's notes: written in the Note tab, searched and read by the assistant (notes_search / note_get),
 // changed by the assistant only through a proposal the owner applies here.

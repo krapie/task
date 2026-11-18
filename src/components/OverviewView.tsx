@@ -9,6 +9,7 @@ import { useRemote } from '../lib/useRemote'
 import type { CalendarEvent, MailThread, MailUnreadCounts, NewsItem, Slot, Template, TodoItem } from '../types'
 import { Ring } from './Charts'
 import { Panel } from './OverviewPanel'
+import OverviewAssistant from './OverviewAssistant'
 import OverviewSecure, { type SecureView } from './OverviewSecure'
 import { Splitter } from './Splitter'
 import { Empty, Loading } from './Ui'
@@ -23,6 +24,7 @@ interface Props {
   isOwner: boolean
   // The floating chat button sits in the bottom-right corner; the last panel keeps clear of it.
   chatButton: boolean
+  onOpenAssistant: () => void
   ready: boolean
   templates: Record<Slot, Template[]>
   dailyData: Record<string, DayData>
@@ -172,6 +174,7 @@ export function OverviewView(p: Props) {
       className={`ov${p.chatButton ? ' ov-chat-clear' : ''}${p.isOwner ? ' ov-has-secure' : ''}`}
       style={p.isOwner && secureNow != null ? { '--ov-secure-h': `${secureNow}px`, '--ov-top-min': `${TOP_MIN}px` } as CSSProperties : undefined}
     >
+      {p.isOwner && <OverviewAssistant isAuth={p.isAuth} onOpenAssistant={p.onOpenAssistant} />}
       <div className={`ov-band ov-top${p.isAuth ? '' : ' ov-top-guest'}`}>
         <Panel title="Today" count={p.ready ? (left ? `${left} left` : today_.length ? 'all done' : '') : ''} onOpen={p.onOpenTasks} className="ov-today">
           {!p.ready ? <Loading rows={6} /> : items.length === 0 ? (

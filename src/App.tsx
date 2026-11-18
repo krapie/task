@@ -17,12 +17,12 @@ import HealthView from './components/HealthView'
 import TraderView from './components/TraderView'
 import AssistantView from './components/AssistantView'
 import NotesView from './components/NotesView'
-import { startNew as startNewChat } from './lib/assistantStore'
+import { setProfile as setChatProfile, startNew as startNewChat, TASK_DATA_CHANGED } from './lib/assistantStore'
 import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
 import { DialogHost, Loading, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
 import { fetchSettled, trackMutation } from './lib/mutationGate'
-import { AUTH_ONLY_VIEWS, BAR_GROUPS, GROUPS, defaultView, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
+import { AUTH_ONLY_VIEWS, BAR_GROUPS, GROUPS, PHONE_HIDDEN, defaultView, OWNER_ONLY_VIEWS, VIEW_ICONS, VIEW_LABELS, groupOf, hashOf, isViewVisible, parseLocation, scopesFor, type RoutineTab, type View, type YearMonth } from './lib/nav'
 import { storage } from './lib/storage'
 import { expandForView, expandForDate, calendarViewRange } from './lib/recurrence'
 import { api, AUTH_LOST_EVENT, hasAuthHint } from './lib/api'
@@ -116,7 +116,8 @@ export default function App() {
   const [initialChatId] = useState<string | null>(initialRoute.chatId)
   // "Ask about this note" in Notes: a new chat whose composer starts with this text.
   const [chatDraft, setChatDraft] = useState<string | null>(null)
-  const askAboutNote = (title: string) => { startNewChat(); setChatDraft(`About my note "${title}": `); setView('chats') }
+  // Notes are read by the Personal profile only.
+  const askAboutNote = (title: string) => { setChatProfile('personal'); startNewChat(); setChatDraft(`About my note "${title}": `); setView('chats') }
   const [calendarMonth, setCalendarMonth] = useState<YearMonth>(() => {
     if (initialRoute.month) return initialRoute.month
     const now = new Date()
@@ -462,6 +463,22 @@ export default function App() {
       window.removeEventListener('focus', onVisibilityChange)
     }
   }, [selectedSlot, activeSlot, activeSlotDate, view, calendarMonth, loadTemplates, loadAllEvents, loadDaily, loadTodos, loadCalendarAdditions])
+
+  // The assistant added or changed something (or the owner pressed Undo on its card): reload what the screens show.
+  useEffect(() => {
+    const onChanged = () => {
+      if (!activeSlotDate) return
+      const slotDate = getNextSlotDate(selectedSlot, activeSlot, activeSlotDate, settings.workWeek)
+      loadedDatesRef.current.delete(slotDate)
+      loadTemplates()
+      loadAllEvents()
+      loadDaily(slotDate)
+      loadTodos()
+      if (view === 'calendar') loadCalendarAdditions(calendarMonth.year, calendarMonth.month)
+    }
+    window.addEventListener(TASK_DATA_CHANGED, onChanged)
+    return () => window.removeEventListener(TASK_DATA_CHANGED, onChanged)
+  }, [selectedSlot, activeSlot, activeSlotDate, view, calendarMonth, settings.workWeek, loadTemplates, loadAllEvents, loadDaily, loadTodos, loadCalendarAdditions])
 
   // Periodic auto-refresh every 5 minutes (when authenticated)
   useEffect(() => {
@@ -1061,7 +1078,7 @@ export default function App() {
       const k = e.key
       if (gAt && Date.now() - gAt < 1000) {
         gAt = 0
-        const target = ({ o: 'overview', t: 'today', c: 'calendar', i: 'inbox', l: 'life', n: 'note', a: 'note', s: 'settings' } as Record<string, string>)[k]
+        const target = ({ o: 'overview', t: 'today', c: 'calendar', i: 'inbox', l: 'life', n: 'note', a: 'assistant', s: 'settings' } as Record<string, string>)[k]
         if (target) { e.preventDefault(); keys.current.goGroup(target) }
         return
       }
@@ -1160,7 +1177,8 @@ export default function App() {
             <OverviewView
               isAuth={isAuth}
               isOwner={isOwner}
-              chatButton={isOwner}
+              chatButton={false}
+              onOpenAssistant={() => setView('chats')}
               ready={boardReady}
               templates={templates}
               dailyData={dailyData}
@@ -1339,7 +1357,7 @@ export default function App() {
         )}
       </main>
 
-      {isOwner && view !== 'chats' && <AssistantBubble isAuth={isAuth} onOpenTab={() => setView('chats')} />}
+      {isOwner && view !== 'chats' && view !== 'overview' && <AssistantBubble isAuth={isAuth} onOpenTab={() => setView('chats')} />}
 
       {view === 'calendar' && selectedCalendarDate && (
         <EventPanel
@@ -1372,8 +1390,8 @@ export default function App() {
 
       {/* Bottom tab bar — mobile only: four everyday groups, the rest behind "More" (a lone leftover stays a tab) */}
       {(() => {
-        const primary = visibleGroups.filter(g => BAR_GROUPS.includes(g.id))
-        const rest = visibleGroups.filter(g => !BAR_GROUPS.includes(g.id))
+        const primary = BAR_GROUPS.flatMap(id => visibleGroups.filter(g => g.id === id))
+        const rest = visibleGroups.filter(g => !BAR_GROUPS.includes(g.id) && !PHONE_HIDDEN.includes(g.id))
         const tab = (g: (typeof visibleGroups)[number]) => (
           <button key={g.id} className={`bottom-nav-btn${currentGroup?.id === g.id ? ' bottom-nav-active' : ''}`} onClick={() => { setMoreOpen(false); goGroup(g) }} aria-current={currentGroup?.id === g.id ? 'page' : undefined}>
             <Icon name={g.icon} />

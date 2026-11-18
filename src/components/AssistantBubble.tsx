@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, 
 import { useStepUp } from '../lib/useStepUp'
 import { ask, assistantStore, isRemoteStreaming, startNew, stop } from '../lib/assistantStore'
 import { Icon } from './Icons'
-import { SUGGESTIONS, TurnView } from './AssistantView'
+import { suggestionsFor, TurnView } from './AssistantView'
 
 // The passkey prompt leaves the page: remember that the panel was open so it is open again on return.
 // Read once and ignored after 5 minutes, so a later visit never opens it by surprise.
@@ -49,7 +49,7 @@ function writeSize(s: Size) {
 
 export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean; onOpenTab: () => void }) {
   const s = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
-  const { chat, live } = s
+  const { chat, live, profile } = s
   const busy = live != null || isRemoteStreaming(s)
   const [open, setOpen] = useState(takeReopen)
   const [input, setInput] = useState('')
@@ -173,7 +173,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
               <div className="as-fab-body" ref={bodyRef}>
                 {!last ? (
                   <div className="as-fab-suggestions">
-                    {SUGGESTIONS.slice(0, 4).map(q => <button key={q} className="as-suggestion" onClick={() => send(q)}>{q}</button>)}
+                    {suggestionsFor(profile).slice(0, 4).map(q => <button key={q} className="as-suggestion" onClick={() => send(q)}>{q}</button>)}
                   </div>
                 ) : (
                   <>

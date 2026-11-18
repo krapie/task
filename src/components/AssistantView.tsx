@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, 
 import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import { confirmDialog } from '../lib/notify'
-import { ask, assistantStore, isRemoteStreaming, moveChat, open, refreshList, remove, setError as setStoreError, startNew, stop } from '../lib/assistantStore'
+import { ask, assistantStore, isRemoteStreaming, moveChat, open, refreshList, remove, setError as setStoreError, setProfile, startNew, stop } from '../lib/assistantStore'
+import { ActionCard, ApprovalCard, BrowserPanel, isApprovalTool, isWriteTool } from './AssistantCards'
 import StepUpBar from './StepUpBar'
 import { Icon } from './Icons'
 import { Empty, Loading } from './Ui'
 import { Markdown } from './Markdown'
-import type { AssistantFolder, AssistantPart, AssistantSummary, AssistantTurn } from '../types'
+import type { AssistantFolder, AssistantPart, AssistantProfile, AssistantSummary, AssistantTurn } from '../types'
 
 export const FOLDERS: { id: AssistantFolder; label: string }[] = [
   { id: 'summaries', label: 'Summaries' },
@@ -33,13 +34,20 @@ function writeStore(key: string, value: string) {
   try { localStorage.setItem(key, value) } catch { /* ignore */ }
 }
 
-export const SUGGESTIONS = [
+export const PERSONAL_SUGGESTIONS = [
   'Summarize my day',
   'Summarize my week',
   'How much did I spend this month, by category?',
-  'Any unread bills or mail that needs a reply?',
   'How did I sleep and train this week?',
 ]
+export const ASSISTANT_SUGGESTIONS = [
+  'Add an event today at 15:00: dentist',
+  'Any unread mail that needs a reply?',
+  'What is on my plate this week?',
+  'Find a table for two on Friday evening on Catch Table',
+]
+export const suggestionsFor = (profile: AssistantProfile) => (profile === 'assistant' ? ASSISTANT_SUGGESTIONS : PERSONAL_SUGGESTIONS)
+export const PROFILE_LABELS: Record<AssistantProfile, string> = { assistant: 'Assistant', personal: 'Personal' }
 
 function fmtOutput(s: string): string {
   try { return JSON.stringify(JSON.parse(s), null, 2) } catch { return s }
@@ -137,7 +145,7 @@ function NoteProposal({ part }: { part: Extract<AssistantPart, { kind: 'tool' }>
   )
 }
 
-export function TurnView({ turn }: { turn: AssistantTurn }) {
+export function TurnView({ turn, onOpenBrowser }: { turn: AssistantTurn; onOpenBrowser?: () => void }) {
   const tools = turn.parts.filter(p => p.kind === 'tool').length
   const last = turn.parts[turn.parts.length - 1]
   const working = turn.state === 'streaming' && last?.kind !== 'text'
@@ -149,6 +157,8 @@ export function TurnView({ turn }: { turn: AssistantTurn }) {
         {turn.parts.map((p, i) => {
           if (p.kind === 'text') return <Markdown key={i} text={p.text} />
           if (p.name.endsWith('propose_note') && p.result && !p.result.error) return <NoteProposal key={p.id} part={p} />
+          if (isWriteTool(p.name)) return <ActionCard key={p.id} part={p} />
+          if (isApprovalTool(p.name)) return <ApprovalCard key={p.id} part={p} onOpenBrowser={onOpenBrowser} />
           return <ToolCall key={p.id} part={p} />
         })}
         {working && <p className="as-meta as-working">{turn.status ?? (tools ? 'Looking into it…' : 'Thinking…')}</p>}
@@ -164,7 +174,8 @@ export function TurnView({ turn }: { turn: AssistantTurn }) {
   )
 }
 
-function Composer({ value, onChange, onSubmit, onStop, busy }: {
+function Composer({ value, onChange, onSubmit, onStop, busy, placeholder }: {
+  placeholder: string
   value: string
   onChange: (v: string) => void
   onSubmit: () => void
@@ -184,7 +195,7 @@ function Composer({ value, onChange, onSubmit, onStop, busy }: {
   }
   return (
     <form className="as-composer" onSubmit={submit}>
-      <textarea ref={ref} rows={1} placeholder="Ask about your tasks, money, health, mail or the market" value={value} onChange={e => onChange(e.target.value)} onKeyDown={onKeyDown} aria-label="Message" />
+      <textarea ref={ref} rows={1} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)} onKeyDown={onKeyDown} aria-label="Message" />
       {busy ? (
         <button type="button" className="as-send" onClick={onStop} aria-label="Stop" title="Stop"><Icon name="stop" /></button>
       ) : (
@@ -202,9 +213,10 @@ interface AssistantViewProps {
   onDraftUsed: () => void
 }
 
-// Chat with the operator's personal profile: tasks, money, health, mail, news
-// and the market. Same passkey step-up as Assets and Health (it reads both),
-// so nothing is requested until unlocked and a lock drops everything fetched.
+// The Assistant tab: two profiles of the operator's task assistant behind one passkey step-up. "Assistant" does
+// things (add events and todos, check mail, drive a browser for Coupang, Catch Table and 정부24, asking before
+// it spends or submits). "Personal" reads private data (money, health, notes, the market). The step-up is the
+// same as Assets and Health, so nothing is requested until unlocked and a lock drops everything fetched.
 // The server owns each turn: leaving the page does not stop an answer, and a
 // finished market note is just another conversation here.
 // The conversation itself lives in assistantStore, shared with the chat button.
@@ -221,17 +233,18 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
   const [closedFolders, setClosedFolders] = useState<string[]>(() => {
     try { const v = JSON.parse(readStore('kp-as-folders-closed') ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [] } catch { return [] }
   })
-  const { chat, list, live, loading: loadingChat, error: chatError } = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
+  const [browserOpen, setBrowserOpen] = useState(false)
+  const { profile, chat, list, live, loading: loadingChat, error: chatError } = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
   const scrollRef = useRef<HTMLDivElement>(null)
   const pendingOpen = useRef(initialChatId)
 
   const onLock = () => { setMasked(false); setInput('') }
   // The open conversation rides in the return address (#/note/chats/<id>), so the passkey prompt gives it back.
-  const { unlocked, busy: unlocking, error: unlockError, remaining, lock, unlock } = useStepUp('assistant', isAuth, onLock, () => (chat.id ? `${location.origin}${location.pathname}#/note/chats/${chat.id}` : undefined))
+  const { unlocked, busy: unlocking, error: unlockError, remaining, lock, unlock } = useStepUp('assistant', isAuth, onLock, () => (chat.id ? `${location.origin}${location.pathname}#/assistant/${chat.id}` : undefined))
   const error = unlockError ?? chatError
 
   const busy = live != null
-  const remoteStreaming = isRemoteStreaming({ chat, list, live, loading: loadingChat, error: chatError })
+  const remoteStreaming = isRemoteStreaming({ profile, chat, list, live, loading: loadingChat, error: chatError })
 
   // Unlocked: load the list, and the conversation a push notification pointed at.
   useEffect(() => {
@@ -309,20 +322,20 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
   const groups = FOLDERS.map(f => ({ ...f, items: (list ?? []).filter(c => (c.folder ?? 'other') === f.id) })).filter(g => g.items.length > 0)
   const currentFolder: AssistantFolder = list?.find(c => c.id === chat.id)?.folder ?? 'other'
 
-  const composer = <Composer value={input} onChange={setInput} onSubmit={() => send(input)} onStop={stop} busy={busy || remoteStreaming} />
+  const composer = <Composer placeholder={profile === 'assistant' ? 'Ask me to do something: add an event, check mail, book a table' : 'Ask about your money, health, notes or the market'} value={input} onChange={setInput} onSubmit={() => send(input)} onStop={stop} busy={busy || remoteStreaming} />
 
   return (
     <div className="assistant-view">
       <StepUpBar unlocked={unlocked} busy={unlocking} remaining={remaining} masked={masked} onToggleMask={() => setMasked(m => !m)} onUnlock={unlock} onLock={lock} />
       {error && <p className="assets-error" onClick={() => setStoreError(null)}>{error}</p>}
       {!unlocked ? (
-        <Empty icon="assistant" title="Assistant is locked" hint="Unlock with your passkey to ask about your tasks, money, health, mail and the market. The Tuesday market note appears here too." />
+        <Empty icon="assistant" title="Assistant is locked" hint="Unlock with your passkey. Assistant adds events and todos, checks mail and uses a browser; Personal answers about money, health, notes and the market, and holds the Tuesday market note." />
       ) : (
         <div className={`split-view as-split${sidebar ? ' as-sidebar-open' : ''}${sbHidden ? ' as-collapsed' : ''}${dragging ? ' as-dragging' : ''}${masked ? ' as-masked' : ''}`} style={{ '--as-sidebar-w': `${sbWidth}px` } as CSSProperties}>
           <aside className="split-sidebar as-sidebar" aria-label="Conversations">
             <div className="as-sidebar-actions">
               <button className="btn-ghost btn-sm" onClick={newChat}><Icon name="plus" size={14} /> New chat</button>
-              <button className="btn-ghost btn-sm" onClick={onOpenNotes} title="Your notes, which the assistant searches and can propose changes to"><Icon name="note" size={14} /> Notes</button>
+              {profile === 'personal' && <button className="btn-ghost btn-sm" onClick={onOpenNotes} title="Your notes, which the Personal profile searches and can propose changes to"><Icon name="note" size={14} /> Notes</button>}
               <button className="icon-btn as-sidebar-close" onClick={closeSidebar} aria-label="Close sidebar" title="Close sidebar"><Icon name="close" size={16} /></button>
             </div>
             <ul className="as-history">
@@ -369,7 +382,15 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
           <section className="as-main">
             <div className="as-topbar">
               <button className="icon-btn as-menu" onClick={openSidebar} aria-label="Show conversations" title="Show conversations"><Icon name="sidebar" /></button>
-              <span className="as-topbar-title">{chat.turns.length ? chat.title : 'Assistant'}</span>
+              <div className="as-profile" role="group" aria-label="Profile">
+                {(['assistant', 'personal'] as const).map(p => (
+                  <button key={p} className={`as-profile-btn${profile === p ? ' active' : ''}`} onClick={() => setProfile(p)} aria-pressed={profile === p} disabled={busy && profile !== p} title={p === 'assistant' ? 'Does things: tasks, mail, browser' : 'Reads private data: money, health, notes'}>{PROFILE_LABELS[p]}</button>
+                ))}
+              </div>
+              <span className="as-topbar-title">{chat.turns.length ? chat.title : ''}</span>
+              {profile === 'assistant' && (
+                <button className={`icon-btn${browserOpen ? ' icon-btn-active' : ''}`} onClick={() => setBrowserOpen(o => !o)} aria-label="Browser" aria-pressed={browserOpen} title="The assistant's browser: watch it, sign in, take over"><Icon name="globe" /></button>
+              )}
               {chat.id && (
                 <label className="as-move">
                   <span className="as-meta">Folder</span>
@@ -384,17 +405,19 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
             ) : chat.turns.length === 0 ? (
               <div className="as-empty">
                 <Icon name="assistant" size={28} className="empty-icon" />
-                <h1>What do you want to know?</h1>
-                <p className="as-meta">Tasks, events and goals, spending and assets, health, mail, news and the market. Read-only: I never change anything.</p>
+                <h1>{profile === 'assistant' ? 'What should I do?' : 'What do you want to know?'}</h1>
+                <p className="as-meta">{profile === 'assistant'
+                  ? 'I add events, todos and tasks, check your mail, and use a browser for Coupang, Catch Table and 정부24. I ask before I spend, book or submit anything.'
+                  : 'Spending and assets, health, your notes and the market. Read-only: I never change anything (switch to Assistant for that).'}</p>
                 <div className="as-empty-composer">{composer}</div>
                 <div className="as-suggestions">
-                  {SUGGESTIONS.map(s => <button key={s} className="as-suggestion" onClick={() => send(s)}>{s}</button>)}
+                  {suggestionsFor(profile).map(s => <button key={s} className="as-suggestion" onClick={() => send(s)}>{s}</button>)}
                 </div>
               </div>
             ) : (
               <>
                 <div className="as-scroll" ref={scrollRef}>
-                  <ol className="as-thread">{chat.turns.map(t => <TurnView key={t.id} turn={t} />)}</ol>
+                  <ol className="as-thread">{chat.turns.map(t => <TurnView key={t.id} turn={t} onOpenBrowser={profile === 'assistant' ? () => setBrowserOpen(true) : undefined} />)}</ol>
                 </div>
                 <div className="as-dock">
                   {composer}
@@ -403,6 +426,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
               </>
             )}
           </section>
+          {browserOpen && profile === 'assistant' && <BrowserPanel onClose={() => setBrowserOpen(false)} />}
         </div>
       )}
     </div>

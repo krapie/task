@@ -260,7 +260,16 @@ export interface PushDevice {
   created_at: string
 }
 
-// ── Assistant (operator personal profile) ──
+// ── Assistant (operator profiles: "assistant" does things, "personal" reads private data) ──
+export type AssistantProfile = 'assistant' | 'personal'
+export interface AssistantApproval { id: string; summary: string; url: string | null; created_at: string }
+export interface BrowserState { url: string; title: string; tabs: number; gate_open_seconds: number }
+export type BrowserInput =
+  | { type: 'click'; fx: number; fy: number } // fractions (0..1) of the screenshot, so the window may be any size
+  | { type: 'text'; text: string }
+  | { type: 'key'; key: string }
+  | { type: 'scroll'; dy: number }
+  | { type: 'open'; url: string }
 export type AssistantFolder = 'summaries' | 'markets' | 'money' | 'health' | 'tasks' | 'mail' | 'life' | 'other'
 export interface AssistantSummary { id: string; title: string; folder: AssistantFolder | null; created_at: string; updated_at: string; turns: number; streaming: boolean }
 
@@ -279,7 +288,7 @@ export interface AssistantTurn {
   done?: { ok: boolean; duration_ms: number; reason?: string } | null
 }
 
-export interface AssistantConversation { id: string; title: string; created_at: string; updated_at: string; turns: AssistantTurn[] }
+export interface AssistantConversation { id: string; profile?: AssistantProfile; title: string; created_at: string; updated_at: string; turns: AssistantTurn[] }
 
 export type AssistantEvent =
   | { type: 'conversation'; id: string; turn_id: string }

@@ -1,6 +1,6 @@
 // MSW handlers for the staging build: task-api (/api/*) and auth's token endpoint, from db.ts.
 // Anything under /api without a handler returns 501 "not mocked" so a gap is visible in the UI.
-// Not mocked yet: the finance import details (a passkey step-up tab); the assistant only lists no conversations, enough to show its empty state.
+// Not mocked yet: the finance import details (a passkey step-up tab). The assistant has no stored conversations; its chat is scripted (see assistantChat below).
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
 import type { DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
 import * as db from './db'
@@ -26,6 +26,55 @@ const list = <T>(xs: T[]): T[] => (empty() ? [] : xs)
 const STEP_UP_TOKEN = 'mock-stepup-token'
 const unlocked = (request: Request) => request.headers.get('Authorization') === `Bearer ${STEP_UP_TOKEN}`
 const uid = () => Math.random().toString(36).slice(2, 10)
+
+// ── Assistant: a scripted chat (SSE) ──
+// "Assistant" profile: a question with table / book / Coupang opens the browser and waits for an approval;
+// anything else adds a calendar event. "Personal": a short read-only answer.
+let pendingApproval: { id: string; summary: string; url: string | null; created_at: string } | null = null
+let approvalDecision: 'approve' | 'deny' | null = null
+let browserUrl = 'https://www.catchtable.co.kr/'
+
+function assistantChat({ request }: { request: Request }) {
+  return request.json().then((b) => {
+    const { question = '', profile = 'personal' } = b as { question?: string; profile?: string }
+    const enc = new TextEncoder()
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+    const stream = new ReadableStream({
+      async start(c) {
+        const send = (o: object) => c.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`))
+        const convId = `00000000-0000-4000-8000-${uid().padEnd(12, '0').slice(0, 12)}`
+        send({ type: 'conversation', id: convId, turn_id: `t-${uid()}` })
+        await sleep(300)
+        if (profile === 'assistant' && /table|book|coupang|쿠팡|예약/i.test(question)) {
+          send({ type: 'text', text: 'Opening Catch Table to look for a table for two on Friday at 19:00.' })
+          send({ type: 'tool', id: 'b1', name: 'browser_open', input: { url: browserUrl } })
+          await sleep(400)
+          send({ type: 'tool_result', id: 'b1', error: false, output: JSON.stringify({ url: browserUrl, title: 'Catch Table (mock)' }) })
+          pendingApproval = { id: `a-${uid()}`, summary: 'Reserve 2 people at Restaurant X (Gangnam) on Friday 19:00. No deposit. Tap Approve to confirm the reservation.', url: browserUrl, created_at: new Date().toISOString() }
+          approvalDecision = null
+          send({ type: 'tool', id: 'a1', name: 'request_approval', input: { summary: pendingApproval.summary } })
+          for (let i = 0; i < 300 && !approvalDecision; i++) await sleep(200)
+          const result = approvalDecision === 'approve' ? 'approved' : approvalDecision === 'deny' ? 'denied' : 'timed out'
+          send({ type: 'tool_result', id: 'a1', error: false, output: JSON.stringify({ result }) })
+          send({ type: 'text', text: result === 'approved' ? 'Reserved: 2 people, Restaurant X, Friday 19:00.' : 'Okay, I did not book anything.' })
+        } else if (profile === 'assistant') {
+          const date = new Date(); const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+          const ev = { id: `e-${uid()}`, title: 'Dentist', start_date: iso, end_date: iso, time: '15:00', recurrence: null, created_at: Date.now() }
+          send({ type: 'tool', id: 'w1', name: 'event_add', input: { title: ev.title, start_date: iso, time: '15:00' } })
+          await sleep(300)
+          db.events.push(ev as (typeof db.events)[number])
+          send({ type: 'tool_result', id: 'w1', error: false, output: JSON.stringify({ created: 'event', id: ev.id, title: ev.title, start_date: iso, end_date: iso, time: '15:00' }) })
+          send({ type: 'text', text: `Added **Dentist** today (${iso}) at 15:00.` })
+        } else {
+          send({ type: 'text', text: 'This month you spent about ₩1,240,000 (mock numbers). Switch to Assistant if you want me to change something.' })
+        }
+        send({ type: 'done', ok: true, duration_ms: 1500 })
+        c.close()
+      },
+    })
+    return new HttpResponse(stream, { headers: { 'Content-Type': 'text/event-stream' } })
+  })
+}
 
 const slotOf = (date: string): Slot => (['weekend', 'mon', 'tue', 'wed', 'thu', 'fri', 'weekend'] as Slot[])[new Date(`${date}T12:00:00`).getDay()]
 
@@ -220,6 +269,23 @@ export const handlers: HttpHandler[] = [
   }),
 
   http.get('/api/assistant/conversations', async () => ok({ conversations: [] })),
+  http.post('/api/assistant/chat', assistantChat),
+  http.get('/api/assistant/approval', async () => ok({ approval: pendingApproval })),
+  http.post('/api/assistant/approval', async ({ request }) => {
+    const b = (await request.json()) as { id: string; decision: 'approve' | 'deny' }
+    if (pendingApproval && pendingApproval.id === b.id) { approvalDecision = b.decision; pendingApproval = null }
+    return ok({ ok: true })
+  }),
+  http.get('/api/assistant/browser/state', async () => ok({ url: browserUrl, title: 'Catch Table (mock)', tabs: 1, gate_open_seconds: 0 })),
+  http.get('/api/assistant/browser/screenshot', async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800"><rect width="1280" height="800" fill="#f4f4f4"/><rect x="0" y="0" width="1280" height="72" fill="#111"/><text x="32" y="46" font-family="sans-serif" font-size="28" fill="#fff">Mock browser page</text><text x="64" y="160" font-family="sans-serif" font-size="32" fill="#111">${browserUrl}</text><rect x="64" y="220" width="420" height="64" rx="6" fill="#fff" stroke="#111"/><text x="88" y="262" font-family="sans-serif" font-size="24" fill="#111">Reserve a table for 2</text></svg>`
+    return new HttpResponse(svg, { headers: { 'Content-Type': 'image/svg+xml' } })
+  }),
+  http.post('/api/assistant/browser/input', async ({ request }) => {
+    const b = (await request.json()) as { type: string; url?: string }
+    if (b.type === 'open' && b.url) browserUrl = b.url
+    return ok({ url: browserUrl, title: 'Catch Table (mock)' })
+  }),
   http.get('/api/mail/accounts', async () => ok(list(db.mailAccounts))),
   http.get('/api/mail/threads/items', async () => ok(list(db.mailItems))),
   http.get('/api/mail/threads', async ({ request }) => {
