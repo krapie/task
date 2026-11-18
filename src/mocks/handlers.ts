@@ -404,6 +404,15 @@ export const handlers: HttpHandler[] = [
     sites = sites.map(s => (s.id === params.id ? { ...s, ...b } : s))
     return ok({ site: sites.find(s => s.id === params.id), synced: false })
   }),
+  http.post('/api/assistant/browser/sites/:id/signin-check', async ({ params }) => {
+    const s = sites.find(x => x.id === params.id)
+    if (!s) return HttpResponse.json({ error: 'no such site' }, { status: 400 })
+    await delay(600)
+    // the account pages of Catch Table and Naver answer; another site has none
+    const known = /catchtable|naver/.test(s.domains.join(' '))
+    if (known) sites = sites.map(x => (x.id === s.id ? { ...x, login_status: 'signed_in' as const, login_checked_at: new Date().toISOString(), login_note: 'checked on the account page' } : x))
+    return ok({ site: s.label, status: known ? 'signed_in' : 'unknown', note: known ? 'signed in' : `no account page is known for ${s.label}: use Set up sign-in` })
+  }),
   http.post('/api/assistant/browser/sites/:id/signin-watch', async ({ request, params }) => {
     const b = (await request.json().catch(() => ({}))) as { stop?: boolean }
     // the watch sees the account a few seconds after the owner signs in (here: after 4 s)

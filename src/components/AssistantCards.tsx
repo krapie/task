@@ -477,6 +477,17 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
   const signInRef = useRef<BrowserSite | null>(null)
   signInRef.current = signIn
   // The bar appears once the watch really runs (and the baseline is the list as it is now), so it never promises a watch that failed.
+  // Integrations → "Check sign-in": the assistant opens the site's account page and records the answer.
+  const [checking, setChecking] = useState<string | null>(null)
+  const checkSignIn = async (s: BrowserSite) => {
+    setChecking(s.id)
+    setSiteNote(`Checking ${s.label}…`)
+    try {
+      const r = await api.assistant.checkSignIn(s.id)
+      setSiteNote(`${s.label}: ${r.status === 'signed_in' ? 'signed in' : r.status === 'needs_login' ? 'signed out: use Set up sign-in' : r.note}`)
+      loadSites()
+    } catch (err) { setSiteNote(err instanceof Error ? err.message : String(err)) } finally { setChecking(null) }
+  }
   const startSignIn = async (s: BrowserSite) => {
     setError(null)
     try {
@@ -593,6 +604,7 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
                   <span className={`as-meta br-site-state${s.login_status === 'needs_login' ? ' br-site-state-warn' : ''}`}>{signInText(s)}{s.login_note ? ` · ${s.login_note}` : ''}</span>
                 </div>
                 <div className="br-site-actions">
+                  <button type="button" className="btn-ghost btn-sm" onClick={() => void checkSignIn(s)} disabled={!s.enabled || checking !== null} title="Open the account page and see whether you are signed in" aria-label="Check sign-in">Check</button>
                   <button type="button" className="btn-ghost btn-sm" onClick={() => void startSignIn(s)} disabled={!s.enabled}>{s.login_status === 'signed_in' ? 'Sign in again' : 'Set up sign-in'}</button>
                   {s.login_status === 'signed_in' && <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { login_status: 'needs_login' }))}>Signed out</button>}
                   <button type="button" className="btn-ghost btn-sm" onClick={() => void siteAction(() => api.assistant.updateSite(s.id, { enabled: !s.enabled }))} aria-pressed={s.enabled}>{s.enabled ? 'On' : 'Off'}</button>

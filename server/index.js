@@ -1982,6 +1982,13 @@ app.post('/api/assistant/browser/sites/:id/signin-watch', stepUpAuth, async (req
   return assistantJson(req, res, '/browser/signin-watch', { method: 'POST', body: JSON.stringify(stop ? { stop: true } : { site_id: req.params.id }) })
 })
 
+// "Check sign-in": the operator opens the site's account page and records a clear answer (signed in, signed out, or nothing).
+app.post('/api/assistant/browser/sites/:id/signin-check', stepUpAuth, async (req, res) => {
+  if (!/^[0-9a-f-]{36}$/.test(req.params.id)) return res.status(400).json({ error: 'bad site id' })
+  await audit(`assistant_site_signin_check:${req.params.id}`, req)
+  return assistantJson(req, res, '/browser/signin-check', { method: 'POST', body: JSON.stringify({ site_id: req.params.id }) })
+})
+
 app.delete('/api/assistant/browser/sites/:id', stepUpAuth, async (req, res) => {
   const { rowCount } = await pool.query('DELETE FROM browser_sites WHERE id = $1', [req.params.id])
   if (!rowCount) return res.status(404).json({ error: 'not found' })

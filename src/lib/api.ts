@@ -459,6 +459,7 @@ export const api = {
     addSite: (s: BrowserSiteInput) => assetReq<{ site: BrowserSite; synced: boolean }>('POST', '/assistant/browser/sites', s),
     updateSite: (id: string, patch: Partial<Pick<BrowserSite, 'label' | 'url' | 'domains' | 'login_domains' | 'note' | 'quick_link' | 'enabled' | 'login_status'>>) => assetReq<{ site: BrowserSite; synced: boolean }>('PATCH', `/assistant/browser/sites/${id}`, patch),
     // "Set up sign-in": the assistant watches the page and marks the site signed in once it shows the owner's account.
+    checkSignIn: (id: string) => assetReq<{ site: string; status: 'signed_in' | 'needs_login' | 'unknown'; note: string }>('POST', `/assistant/browser/sites/${id}/signin-check`, {}),
     watchSignIn: (id: string) => assetReq<{ watching: string }>('POST', `/assistant/browser/sites/${id}/signin-watch`, {}),
     stopSignInWatch: (id: string) => assetReq<{ ok: boolean }>('POST', `/assistant/browser/sites/${id}/signin-watch`, { stop: true }),
     removeSite: (id: string) => assetReq<{ ok: boolean; synced: boolean }>('DELETE', `/assistant/browser/sites/${id}`),
