@@ -1701,9 +1701,10 @@ async function operatorFetch(req, path, init = {}, signal) {
   })
 }
 
-// Two profiles share the Assistant tab: "assistant" (does things, reads mail, browses) and "personal" (finance,
-// health, notes). The tab sends ?profile= (or a body field on POST); conversations opened by id are found by the operator.
-const assistantProfile = req => ((req.query?.profile ?? req.body?.profile) === 'assistant' ? 'assistant' : 'personal')
+// One Assistant tab, two agents per conversation: "assistant" (does things, reads mail, browses) and "personal"
+// (finance, health, notes). A new chat may name one in the body ("assistant" | "personal"); otherwise ("auto") the
+// operator routes by the question. Conversations opened by id are found by the operator, whichever agent holds them.
+const assistantProfile = req => (['assistant', 'personal'].includes(req.body?.profile) ? req.body.profile : 'auto')
 
 async function assistantJson(req, res, path, init = {}) {
   if (!PERSONAL_TOKEN) return res.status(503).json({ error: 'Assistant not configured' })
@@ -1745,7 +1746,7 @@ app.get('/api/assistant/conversations', stepUpAuth, (req, res) => assistantJson(
 app.get('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`))
 app.patch('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
-  assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'PATCH', body: JSON.stringify({ title: req.body?.title, folder: req.body?.folder }) }))
+  assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'PATCH', body: JSON.stringify({ title: req.body?.title, folder: req.body?.folder, profile: req.body?.profile }) }))
 app.delete('/api/assistant/conversations/:id', stepUpAuth, (req, res) =>
   assistantJson(req, res, `/conversations/${encodeURIComponent(req.params.id)}`, { method: 'DELETE' }))
 

@@ -3715,7 +3715,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .as-split { border: 1px solid var(--kp-border); border-radius: var(--kp-radius-md); min-height: 0; flex: 1; position: relative; }
 .as-sidebar { width: var(--as-sidebar-w, 240px); }
 .as-sidebar-actions { display: flex; gap: var(--kp-space-2); padding: var(--kp-space-3); border-bottom: 1px solid var(--kp-border); flex-shrink: 0; }
-.as-sidebar-actions button:not(.icon-btn) { display: inline-flex; align-items: center; gap: var(--kp-space-1); }
+.as-sidebar-actions button:not(.icon-btn) { display: inline-flex; align-items: center; gap: var(--kp-space-1); white-space: nowrap; }
 .as-sidebar-close { margin-left: auto; flex-shrink: 0; }
 
 /* Draggable divider between the conversation list and the chat (desktop). */
@@ -4240,13 +4240,9 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 @keyframes more-rise { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .more-sheet { animation: none; } }
 
-/* ── Assistant tab: profile switch, action and approval cards, browser panel ───────────────────── */
-.as-profile { display: inline-flex; border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); overflow: hidden; flex-shrink: 0; }
-.as-profile-btn { background: none; border: 0; color: var(--kp-fg-3); font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; }
-.as-profile-btn + .as-profile-btn { border-left: 1px solid var(--kp-border); }
-.as-profile-btn:hover:not(:disabled) { background: var(--kp-hover-bg); color: var(--kp-fg); }
-.as-profile-btn.active { background: var(--kp-fg); color: var(--kp-bg); }
-.as-profile-btn:disabled { opacity: 0.4; cursor: default; }
+/* ── Assistant tab: agent badge, action and approval cards, browser panel ───────────────────── */
+.as-badge { flex-shrink: 0; align-self: center; font-family: var(--kp-font-mono); font-size: 10px; line-height: 1; color: var(--kp-fg-3); border: 1px solid var(--kp-border); border-radius: var(--kp-radius-sm); padding: 2px 5px; }
+.as-history-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .as-action-undo { margin-left: auto; flex-shrink: 0; }
 .as-approval { border-color: var(--kp-border-strong); }
 .as-approval-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--kp-font-mono); }
@@ -4289,7 +4285,6 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
   .br-int .br-site-actions { justify-content: flex-start; }
   .br-panel { position: absolute; inset: 0; z-index: 3; width: auto; min-width: 0; max-width: none; border-left: 0; overflow-y: auto; }
   .br-wide-btn, .br-resizer { display: none; }
-  .as-profile-btn { padding: 4px 8px; }
 }
 /* Sites of the browser: the list the owner manages, and the sign-in state the assistant reports */
 .br-site-warn { position: relative; }

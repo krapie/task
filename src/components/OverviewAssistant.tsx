@@ -1,23 +1,22 @@
 import { useState, useSyncExternalStore, type FormEvent } from 'react'
-import { ask, assistantStore, isRemoteStreaming, setProfile, startNew, stop } from '../lib/assistantStore'
+import { ask, assistantStore, isRemoteStreaming, startNew, stop } from '../lib/assistantStore'
 import { useStepUp } from '../lib/useStepUp'
 import { PendingApproval } from './AssistantCards'
-import { TurnView } from './AssistantView'
+import { ProfileBadge, TurnView } from './AssistantView'
 import { Icon } from './Icons'
 
 // A floating one-line Assistant at the bottom of the Overview (owner only): ask, read the answer in a panel that opens
 // above the line, answer an approval. It floats over the page, so it takes no room from the panels behind it.
-// It always uses the Assistant profile (the one that does things); the Personal profile stays in the Assistant tab.
+// It follows the same rule as the Assistant tab: a new chat is routed to the right agent by the question (Auto), a
+// running chat keeps its agent, and a badge says which one answers.
 // Same passkey step-up and the same conversation state as the Assistant tab: "Open in Assistant" continues the chat there.
 export default function OverviewAssistant({ isAuth, onOpenAssistant }: { isAuth: boolean; onOpenAssistant: () => void }) {
   const [input, setInput] = useState('')
   const [open, setOpen] = useState(true)
   const s = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
   const { unlocked, busy: unlocking, error, unlock } = useStepUp('overview', isAuth, () => setInput(''))
-  const { profile, chat, live } = s
-  const mine = profile === 'assistant'
-  const turns = mine ? chat.turns : []
-  const last = turns[turns.length - 1]
+  const { chat, live } = s
+  const last = chat.turns[chat.turns.length - 1]
   const busy = live != null || isRemoteStreaming(s)
   const asking = last?.parts.some(p => p.kind === 'tool' && /(^|__)request_approval$/.test(p.name) && !p.result)
 
@@ -25,7 +24,6 @@ export default function OverviewAssistant({ isAuth, onOpenAssistant }: { isAuth:
     e.preventDefault()
     const q = input.trim()
     if (!q || busy) return
-    if (!mine) setProfile('assistant')
     setInput('')
     setOpen(true)
     void ask(q)
@@ -40,6 +38,7 @@ export default function OverviewAssistant({ isAuth, onOpenAssistant }: { isAuth:
           {last && (
             <div className="ov-asst-out">
               <div className="ov-asst-actions">
+                <ProfileBadge profile={chat.profile} />
                 <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(o => !o)} aria-expanded={open}>{open ? 'Hide answer' : 'Show answer'}</button>
                 <button type="button" className="btn-ghost btn-sm" onClick={onOpenAssistant}>Open in Assistant</button>
                 {!busy && <button type="button" className="btn-ghost btn-sm" onClick={startNew}>New</button>}
@@ -56,7 +55,7 @@ export default function OverviewAssistant({ isAuth, onOpenAssistant }: { isAuth:
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
-              placeholder="Ask the assistant: add an event, check mail, book a table"
+              placeholder="Ask the assistant: add an event, check mail, how much did I spend"
               aria-label="Ask the assistant"
               autoComplete="off"
               enterKeyHint="send"

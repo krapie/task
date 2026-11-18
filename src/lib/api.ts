@@ -1,5 +1,5 @@
 import { trackInflight } from './inflight'
-import type { AssistantApproval, AssistantConversation, BrowserSite, BrowserSiteInput, BrowserStreamEvent, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
+import type { AssistantApproval, AssistantConversation, BrowserSite, BrowserSiteInput, BrowserStreamEvent, AssistantChoice, AssistantEvent, AssistantFolder, AssistantProfile, BrowserInput, BrowserState, Note, NoteSummary, AssistantSummary, Template, Addition, Settings, ExportData, DailyData, Slot, CalendarEvent, Recurrence, MailAccount, MailItem, MailThread, MailCategory, MailUnreadCounts, MailSenderRule, MailSyncStatus, NewsItem, TodoItem, GoalPeriod, GoalCategory, GoalItem, AssetSummary, FinanceStatus, FinanceNotifySettings, HealthSummary, HealthReport, PushDevice, TraderSummary } from '../types'
 
 // Sign-in is on auth.kevinprk.com. Its session cookie (host-only on auth,
 // same-site with task) is exchanged for a 15-minute access token that lives
@@ -201,7 +201,7 @@ const noteReq = <T,>(method: string, path: string, body?: unknown, stepUpToken?:
 
 // Assistant chat: SSE from the operator's personal profile via task-api. The
 // stream is read with the step-up token, like every other step-up request.
-async function assistantChat(conversationId: string | null, question: string, onEvent: (e: AssistantEvent) => void, signal: AbortSignal, profile: AssistantProfile = 'personal'): Promise<void> {
+async function assistantChat(conversationId: string | null, question: string, onEvent: (e: AssistantEvent) => void, signal: AbortSignal, profile: AssistantChoice = 'auto'): Promise<void> {
   if (!hasAssetToken()) {
     clearAssetToken()
     throw new Error('ASSET_SESSION_EXPIRED')
@@ -209,7 +209,7 @@ async function assistantChat(conversationId: string | null, question: string, on
   const res = await fetch('/api/assistant/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${_assetToken}` },
-    body: JSON.stringify({ conversation_id: conversationId ?? undefined, question, profile }),
+    body: JSON.stringify({ conversation_id: conversationId ?? undefined, question, profile: conversationId || profile === 'auto' ? undefined : profile }),
     signal,
   })
   if (res.status === 401) { clearAssetToken(); throw new Error('ASSET_SESSION_EXPIRED') }
@@ -442,10 +442,10 @@ export const api = {
   assistant: {
     chat: assistantChat,
     stop: (turnId: string) => assetReq<{ stopped: boolean }>('POST', '/assistant/chat/stop', { turn_id: turnId }),
-    list: (profile: AssistantProfile = 'personal') => assetReq<{ conversations: AssistantSummary[] }>('GET', `/assistant/conversations?profile=${profile}`).then(r => r.conversations),
+    list: () => assetReq<{ conversations: AssistantSummary[] }>('GET', '/assistant/conversations').then(r => r.conversations),
     get: (id: string) => assetReq<AssistantConversation>('GET', `/assistant/conversations/${id}`),
     remove: (id: string) => assetReq<void>('DELETE', `/assistant/conversations/${id}`),
-    update: (id: string, patch: { title?: string; folder?: AssistantFolder }) => assetReq<void>('PATCH', `/assistant/conversations/${id}`, patch),
+    update: (id: string, patch: { title?: string; folder?: AssistantFolder; profile?: AssistantProfile }) => assetReq<void>('PATCH', `/assistant/conversations/${id}`, patch),
     approval: () => assetReq<{ approval: AssistantApproval | null }>('GET', '/assistant/approval').then(r => r.approval),
     decide: (id: string, decision: 'approve' | 'deny') => assetReq<{ ok: boolean }>('POST', '/assistant/approval', { id, decision }),
     browserState: () => assetReq<BrowserState>('GET', '/assistant/browser/state'),

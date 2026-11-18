@@ -17,7 +17,7 @@ import HealthView from './components/HealthView'
 import TraderView from './components/TraderView'
 import AssistantView from './components/AssistantView'
 import NotesView from './components/NotesView'
-import { setProfile as setChatProfile, startNew as startNewChat, TASK_DATA_CHANGED } from './lib/assistantStore'
+import { setChoice as setChatChoice, startNew as startNewChat, TASK_DATA_CHANGED } from './lib/assistantStore'
 import AssistantBubble from './components/AssistantBubble'
 import { Icon } from './components/Icons'
 import { DialogHost, Loading, LoadingBar, StatusScreen, ToastHost } from './components/Ui'
@@ -117,7 +117,7 @@ export default function App() {
   // "Ask about this note" in Notes: a new chat whose composer starts with this text.
   const [chatDraft, setChatDraft] = useState<string | null>(null)
   // Notes are read by the Personal profile only.
-  const askAboutNote = (title: string) => { setChatProfile('personal'); startNewChat(); setChatDraft(`About my note "${title}": `); setView('chats') }
+  const askAboutNote = (title: string) => { startNewChat(); setChatChoice('personal'); setChatDraft(`About my note "${title}": `); setView('chats') }
   const [calendarMonth, setCalendarMonth] = useState<YearMonth>(() => {
     if (initialRoute.month) return initialRoute.month
     const now = new Date()

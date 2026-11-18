@@ -260,8 +260,10 @@ export interface PushDevice {
   created_at: string
 }
 
-// ── Assistant (operator profiles: "assistant" does things, "personal" reads private data) ──
+// ── Assistant (one tab; each conversation has one of two agents: "assistant" does things, "personal" reads private data) ──
 export type AssistantProfile = 'assistant' | 'personal'
+// The agent of a new chat: "auto" lets the operator route by the question.
+export type AssistantChoice = 'auto' | AssistantProfile
 // kind "login": the assistant waits for the owner to sign in by hand; "action": a step that spends or submits.
 export interface AssistantApproval { id: string; kind?: 'action' | 'login'; summary: string; url: string | null; site?: { id: string; label: string } | null; created_at: string }
 export type SiteLoginStatus = 'unknown' | 'signed_in' | 'needs_login'
@@ -283,7 +285,7 @@ export type BrowserInput =
   | { type: 'reload' }
   | { type: 'open'; url: string }
 export type AssistantFolder = 'summaries' | 'markets' | 'money' | 'health' | 'tasks' | 'mail' | 'life' | 'other'
-export interface AssistantSummary { id: string; title: string; folder: AssistantFolder | null; created_at: string; updated_at: string; turns: number; streaming: boolean }
+export interface AssistantSummary { id: string; profile: AssistantProfile; title: string; folder: AssistantFolder | null; created_at: string; updated_at: string; turns: number; streaming: boolean }
 
 export type AssistantPart =
   | { kind: 'text'; text: string }

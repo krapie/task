@@ -1,30 +1,23 @@
 import { api, STEP_UP_EVENT } from './api'
-import type { AssistantEvent, AssistantFolder, AssistantProfile, AssistantSummary, AssistantTurn } from '../types'
+import type { AssistantChoice, AssistantConversation, AssistantEvent, AssistantFolder, AssistantProfile, AssistantSummary, AssistantTurn } from '../types'
 
 // One assistant conversation shared by the Assistant tab and the chat button
 // (bottom right): asking in either adds a turn to the same chat, streamed in
 // both places. Module state, not React state, so it survives the tab being
 // unmounted while an answer streams. Everything is dropped on lock.
 
-export type Chat = { id: string | null; title: string; turns: AssistantTurn[] }
-export const NEW_CHAT: Chat = { id: null, title: 'New chat', turns: [] }
-
-// The two profiles of the Assistant tab: "assistant" does things and browses, "personal" reads private data.
-// The choice is remembered per browser; the chat button and the tab always use the same one.
-const PROFILE_KEY = 'kp-as-profile'
-function savedProfile(): AssistantProfile {
-  try {
-    return localStorage.getItem(PROFILE_KEY) === 'personal' ? 'personal' : 'assistant'
-  } catch {
-    return 'assistant'
-  }
-}
+// profile = the agent that answers this chat ("assistant" does things and browses, "personal" reads private data);
+// null while a new chat has not been routed yet. The two agents keep their own tools: a chat has exactly one.
+export type Chat = { id: string | null; title: string; turns: AssistantTurn[]; profile: AssistantProfile | null }
+export const NEW_CHAT: Chat = { id: null, title: 'New chat', turns: [], profile: null }
+const chatOf = (c: AssistantConversation, prev: Chat): Chat => ({ id: c.id, title: c.title, turns: c.turns, profile: c.profile ?? prev.profile })
 // Fired when the assistant changed something in the Task app (an event, a todo, a task): screens reload their data.
 export const TASK_DATA_CHANGED = 'kp-task-data-changed'
 const WRITE_TOOLS = /(^|__)(event_add|event_update|todo_add|todo_complete|task_add)$/
 
 export interface AssistantState {
-  profile: AssistantProfile
+  // The agent a NEW chat gets: "auto" lets the operator route by the first question (the owner can change it later).
+  choice: AssistantChoice
   chat: Chat
   list: AssistantSummary[] | null
   // The turn this browser is streaming right now (one at a time).
@@ -34,7 +27,7 @@ export interface AssistantState {
 }
 
 const POLL_MS = 2000
-const EMPTY: AssistantState = { profile: savedProfile(), chat: NEW_CHAT, list: null, live: null, loading: false, error: null }
+const EMPTY: AssistantState = { choice: 'auto', chat: NEW_CHAT, list: null, live: null, loading: false, error: null }
 
 let state: AssistantState = EMPTY
 let abort: AbortController | null = null
@@ -59,7 +52,7 @@ function syncPolling() {
       if (!id) return
       api.assistant.get(id).then(c => {
         if (state.chat.id !== id) return
-        set({ chat: { id: c.id, title: c.title, turns: c.turns } })
+        set({ chat: chatOf(c, state.chat) })
         if (c.turns[c.turns.length - 1]?.state !== 'streaming') void refreshList()
       }, failure)
     }, POLL_MS)
@@ -107,9 +100,10 @@ function applyEvent(t: AssistantTurn, e: AssistantEvent): AssistantTurn {
 
 export async function refreshList() {
   try {
-    const profile = state.profile
-    const list = await api.assistant.list(profile)
-    if (state.profile === profile) set({ list })
+    const list = await api.assistant.list()
+    // The list is the truth about which agent holds a chat (a new chat is routed after its first question).
+    const mine = state.chat.id ? list.find(c => c.id === state.chat.id) : undefined
+    set(mine && mine.profile !== state.chat.profile ? { list, chat: { ...state.chat, profile: mine.profile } } : { list })
   } catch (err) {
     failure(err)
   }
@@ -117,18 +111,10 @@ export async function refreshList() {
 
 export async function open(id: string) {
   if (state.chat.id === id) return
-  set({ chat: { id, title: '', turns: [] }, loading: true, error: null })
+  set({ chat: { id, title: '', turns: [], profile: state.list?.find(c => c.id === id)?.profile ?? null }, loading: true, error: null })
   try {
     const c = await api.assistant.get(id)
-    if (state.chat.id === id) {
-      // A link (push notification) can name a chat of the other profile: switch to it.
-      if (c.profile && c.profile !== state.profile) {
-        try { localStorage.setItem(PROFILE_KEY, c.profile) } catch { /* private mode */ }
-        set({ profile: c.profile, list: null })
-        void refreshList()
-      }
-      set({ chat: { id: c.id, title: c.title, turns: c.turns } })
-    }
+    if (state.chat.id === id) set({ chat: chatOf(c, state.chat) })
   } catch (err) {
     set({ chat: NEW_CHAT })
     failure(err)
@@ -138,14 +124,26 @@ export async function open(id: string) {
 }
 
 export function startNew() {
-  set({ chat: NEW_CHAT, error: null })
+  set({ chat: NEW_CHAT, choice: 'auto', error: null })
 }
 
-export function setProfile(profile: AssistantProfile) {
-  if (state.profile === profile || state.live) return
-  try { localStorage.setItem(PROFILE_KEY, profile) } catch { /* private mode */ }
-  set({ profile, chat: NEW_CHAT, list: null, error: null })
-  void refreshList()
+// The agent of the next new chat (auto = by the question). Not used once a chat exists.
+export function setChoice(choice: AssistantChoice) {
+  if (!state.chat.id && !state.live) set({ choice })
+}
+
+// Hands the open chat to the other agent. Earlier turns stay visible; the new agent only remembers its own turns
+// (the operator replays each turn to the agent that gave it), so private-data answers never reach the mail-and-browser agent.
+export async function setChatProfile(profile: AssistantProfile) {
+  const id = state.chat.id
+  if (!id || state.live || isRemoteStreaming(state) || state.chat.profile === profile) return
+  try {
+    await api.assistant.update(id, { profile })
+    if (state.chat.id === id) set({ chat: { ...state.chat, profile } })
+    await refreshList()
+  } catch (err) {
+    failure(err)
+  }
 }
 
 export async function ask(question: string) {
@@ -156,7 +154,7 @@ export async function ask(question: string) {
   let convId = base.id
   let turnId: string | null = null
   set({
-    chat: { ...base, title: base.turns.length ? base.title : question.slice(0, 80), turns: [...base.turns, { id: tempId, question, parts: [], state: 'streaming' }] },
+    chat: { ...base, profile: base.profile ?? (state.choice === 'auto' ? null : state.choice), title: base.turns.length ? base.title : question.slice(0, 80), turns: [...base.turns, { id: tempId, question, parts: [], state: 'streaming' }] },
     error: null,
     live: { conversationId: convId, turnId: null },
   })
@@ -184,7 +182,7 @@ export async function ask(question: string) {
   }
 
   try {
-    await api.assistant.chat(base.id, question, onEvent, controller.signal, state.profile)
+    await api.assistant.chat(base.id, question, onEvent, controller.signal, state.choice)
     update(t => (t.state === 'streaming' ? { ...t, state: 'error', error: 'The answer stream ended early; reopen the chat to see if it finished.' } : t))
   } catch (err) {
     const msg = err instanceof Error ? err.message : ''
@@ -230,7 +228,7 @@ export async function remove(id: string) {
 export function reset() {
   abort?.abort()
   abort = null
-  set({ ...EMPTY, profile: state.profile })
+  set({ ...EMPTY })
 }
 
 export const setError = (error: string | null) => set({ error })

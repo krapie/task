@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, 
 import { useStepUp } from '../lib/useStepUp'
 import { ask, assistantStore, isRemoteStreaming, startNew, stop } from '../lib/assistantStore'
 import { Icon } from './Icons'
-import { suggestionsFor, TurnView } from './AssistantView'
+import { ProfileBadge, SUGGESTIONS, TurnView } from './AssistantView'
 
 // The passkey prompt leaves the page: remember that the panel was open so it is open again on return.
 // Read once and ignored after 5 minutes, so a later visit never opens it by surprise.
@@ -49,7 +49,7 @@ function writeSize(s: Size) {
 
 export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean; onOpenTab: () => void }) {
   const s = useSyncExternalStore(assistantStore.subscribe, assistantStore.get)
-  const { chat, live, profile } = s
+  const { chat, live } = s
   const busy = live != null || isRemoteStreaming(s)
   const [open, setOpen] = useState(takeReopen)
   const [input, setInput] = useState('')
@@ -150,6 +150,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
             <div className="as-fab-title">
               <span className="as-fab-name">Assistant</span>
               {unlocked && chat.turns.length > 0 && <span className="as-meta as-fab-chat" title={chat.title}>{chat.title}</span>}
+              {unlocked && chat.turns.length > 0 && <ProfileBadge profile={chat.profile} />}
             </div>
             <div className="as-fab-actions">
               {unlocked && (busy ? (
@@ -164,7 +165,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
           {!unlocked ? (
             <div className="as-fab-locked">
               <Icon name="lock" size={24} className="empty-icon" />
-              <p className="as-meta">The assistant reads your money, health and mail, so it needs your passkey.</p>
+              <p className="as-meta">The assistant reads your money, health and mail (two separate agents), so it needs your passkey.</p>
               <button className="btn-primary btn-sm" onClick={unlock} disabled={unlocking}>Unlock with passkey</button>
               {error && <p className="as-error">{error}</p>}
             </div>
@@ -173,7 +174,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
               <div className="as-fab-body" ref={bodyRef}>
                 {!last ? (
                   <div className="as-fab-suggestions">
-                    {suggestionsFor(profile).slice(0, 4).map(q => <button key={q} className="as-suggestion" onClick={() => send(q)}>{q}</button>)}
+                    {SUGGESTIONS.map(q => <button key={q} className="as-suggestion" onClick={() => send(q)}>{q}</button>)}
                   </div>
                 ) : (
                   <>

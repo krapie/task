@@ -1,8 +1,8 @@
 // MSW handlers for the staging build: task-api (/api/*) and auth's token endpoint, from db.ts.
 // Anything under /api without a handler returns 501 "not mocked" so a gap is visible in the UI.
-// Not mocked yet: the finance import details (a passkey step-up tab). The assistant has no stored conversations; its chat is scripted (see assistantChat below).
+// Not mocked yet: the finance import details (a passkey step-up tab). The assistant's chats are kept in memory (convs below) and its answers are scripted (see assistantChat).
 import { delay, http, HttpResponse, type HttpHandler } from 'msw'
-import type { DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
+import type { AssistantTurn, DailyData, GoalCategory, GoalItem, MailThread, Slot, TemplateWithState } from '../types'
 import * as db from './db'
 
 // Read once at load: the app rewrites the URL to its #/ route after the first render, which drops the query.
@@ -47,16 +47,46 @@ let browserUrl = 'https://www.catchtable.co.kr/'
 // The mock page the assistant's browser "shows" (a screenshot, or a frame of the live view).
 const mockPageSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800"><rect width="1280" height="800" fill="#f4f4f4"/><rect x="0" y="0" width="1280" height="72" fill="#111"/><text x="32" y="46" font-family="sans-serif" font-size="28" fill="#fff">Mock browser page</text><text x="64" y="160" font-family="sans-serif" font-size="32" fill="#111">${browserUrl}</text><rect x="64" y="220" width="420" height="64" rx="6" fill="#fff" stroke="#111"/><text x="88" y="262" font-family="sans-serif" font-size="24" fill="#111">Reserve a table for 2</text></svg>`
 
+// Stored chats of the one Assistant list: each has one of the two agents ("assistant" acts, "personal" reads private data).
+interface MockConv { id: string; profile: 'assistant' | 'personal'; title: string; folder: string | null; created_at: string; updated_at: string; turns: AssistantTurn[] }
+const mockTurn = (id: string, question: string, text: string): AssistantTurn => ({ id, question, parts: [{ kind: 'text', text }], state: 'done', done: { ok: true, duration_ms: 4000 } })
+const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
+const convs: MockConv[] = [
+  { id: '00000000-0000-4000-8000-000000000001', profile: 'personal', title: 'How much did I spend in October?', folder: 'money', created_at: hoursAgo(30), updated_at: hoursAgo(30), turns: [mockTurn('s1', 'How much did I spend in October?', 'In October you spent about ₩1,240,000 (mock numbers), mostly food and transport.')] },
+  { id: '00000000-0000-4000-8000-000000000002', profile: 'assistant', title: 'Any unread mail that needs a reply?', folder: 'mail', created_at: hoursAgo(5), updated_at: hoursAgo(5), turns: [mockTurn('s2', 'Any unread mail that needs a reply?', 'Two unread mails need a reply: the dentist (confirm Friday) and the landlord (lease question).')] },
+  { id: '00000000-0000-4000-8000-000000000003', profile: 'personal', title: 'Summarize my week', folder: 'summaries', created_at: hoursAgo(70), updated_at: hoursAgo(70), turns: [mockTurn('s3', 'Summarize my week', 'Four workouts, 7h 10m of sleep on average, and 12 of 15 tasks done (mock numbers).')] },
+]
+// The operator routes a new chat by its first question (keyword rule); unclear goes to personal.
+const mockRoute = (q: string): 'assistant' | 'personal' =>
+  /mail|inbox|reply|event|todo|remind|book|reserve|order|table|coupang|쿠팡|메일|일정|예약|주문|로그인|sign in|site|사이트/i.test(q) && !/spend|spent|sleep|health|stock|market|note|지출|건강|자산/i.test(q) ? 'assistant' : 'personal'
+
 function assistantChat({ request }: { request: Request }) {
   return request.json().then((b) => {
-    const { question = '', profile = 'personal' } = b as { question?: string; profile?: string }
+    const { question = '', profile: hint, conversation_id } = b as { question?: string; profile?: string; conversation_id?: string }
+    let conv = conversation_id ? convs.find((c) => c.id === conversation_id) : undefined
+    const profile = conv?.profile ?? (hint === 'assistant' || hint === 'personal' ? hint : mockRoute(question))
+    const convId = conv?.id ?? `00000000-0000-4000-8000-${uid().padEnd(12, '0').slice(0, 12)}`
+    if (!conv) {
+      conv = { id: convId, profile, title: question.slice(0, 80), folder: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), turns: [] }
+      convs.unshift(conv)
+    }
+    const saved: AssistantTurn = { id: `t-${uid()}`, question, parts: [], state: 'streaming' }
+    conv.turns.push(saved)
     const enc = new TextEncoder()
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
     const stream = new ReadableStream({
       async start(c) {
-        const send = (o: object) => c.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`))
-        const convId = `00000000-0000-4000-8000-${uid().padEnd(12, '0').slice(0, 12)}`
-        send({ type: 'conversation', id: convId, turn_id: `t-${uid()}` })
+        const send = (o: object) => {
+          c.enqueue(enc.encode(`data: ${JSON.stringify(o)}\n\n`))
+          const e = o as { type: string; text?: string; id?: string; name?: string; input?: unknown; error?: boolean; output?: string }
+          if (e.type === 'text') {
+            const last = saved.parts[saved.parts.length - 1]
+            if (last?.kind === 'text') last.text += e.text ?? ''
+            else saved.parts.push({ kind: 'text', text: e.text ?? '' })
+          } else if (e.type === 'tool') saved.parts.push({ kind: 'tool', id: e.id!, name: e.name!, input: e.input })
+          else if (e.type === 'tool_result') { const p = saved.parts.find((x) => x.kind === 'tool' && x.id === e.id); if (p && p.kind === 'tool') p.result = { error: !!e.error, output: e.output ?? '' } }
+        }
+        send({ type: 'conversation', id: convId, turn_id: saved.id })
         await sleep(300)
         if (profile === 'assistant' && /sign in|log ?in|로그인/i.test(question)) {
           const site = sites.find(s => s.label === 'Catch Table')!
@@ -101,9 +131,12 @@ function assistantChat({ request }: { request: Request }) {
           send({ type: 'tool_result', id: 'w1', error: false, output: JSON.stringify({ created: 'event', id: ev.id, title: ev.title, start_date: iso, end_date: iso, time: '15:00' }) })
           send({ type: 'text', text: `Added **Dentist** today (${iso}) at 15:00.` })
         } else {
-          send({ type: 'text', text: 'This month you spent about ₩1,240,000 (mock numbers). Switch to Assistant if you want me to change something.' })
+          send({ type: 'text', text: 'This month you spent about ₩1,240,000 (mock numbers). Hand this chat to Assistant if you want me to change something.' })
         }
         send({ type: 'done', ok: true, duration_ms: 1500 })
+        saved.state = 'done'; saved.done = { ok: true, duration_ms: 1500 }
+        conv!.updated_at = new Date().toISOString()
+        conv!.folder = conv!.folder ?? (profile === 'assistant' ? (/mail|메일/i.test(question) ? 'mail' : 'tasks') : 'money')
         c.close()
       },
     })
@@ -303,7 +336,26 @@ export const handlers: HttpHandler[] = [
     return ok({ flagged: false })
   }),
 
-  http.get('/api/assistant/conversations', async () => ok({ conversations: [] })),
+  http.get('/api/assistant/conversations', async () =>
+    ok({ conversations: [...convs].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map((c) => ({ id: c.id, profile: c.profile, title: c.title, folder: c.folder, created_at: c.created_at, updated_at: c.updated_at, turns: c.turns.length, streaming: c.turns.some((t) => t.state === 'streaming') })) })),
+  http.get('/api/assistant/conversations/:id', async ({ params }) => {
+    const c = convs.find((x) => x.id === params.id)
+    return c ? ok(c) : HttpResponse.json({ error: 'not found' }, { status: 404 })
+  }),
+  http.patch('/api/assistant/conversations/:id', async ({ request, params }) => {
+    const c = convs.find((x) => x.id === params.id)
+    if (!c) return HttpResponse.json({ error: 'conversation not found' }, { status: 400 })
+    const b = (await request.json()) as { title?: string; folder?: string; profile?: string }
+    if (b.title) c.title = b.title
+    if (b.folder) c.folder = b.folder
+    if (b.profile === 'assistant' || b.profile === 'personal') c.profile = b.profile
+    return new HttpResponse(null, { status: 204 })
+  }),
+  http.delete('/api/assistant/conversations/:id', async ({ params }) => {
+    const i = convs.findIndex((x) => x.id === params.id)
+    if (i >= 0) convs.splice(i, 1)
+    return new HttpResponse(null, { status: 204 })
+  }),
   http.post('/api/assistant/chat', assistantChat),
   http.get('/api/assistant/approval', async () => ok({ approval: pendingApproval })),
   http.post('/api/assistant/approval', async ({ request }) => {
