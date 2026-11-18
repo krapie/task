@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, 
 import { api } from '../lib/api'
 import { useStepUp } from '../lib/useStepUp'
 import { confirmDialog } from '../lib/notify'
+import { useEscToStop } from '../lib/useEscToStop'
 import { ask, assistantStore, isRemoteStreaming, moveChat, open, refreshList, remove, setChatProfile, setChoice, setError as setStoreError, startNew, stop } from '../lib/assistantStore'
 import { ActionCard, ApprovalCard, BrowserPanel, SiteProposal, isApprovalTool, isWriteTool } from './AssistantCards'
 import StepUpBar from './StepUpBar'
@@ -207,7 +208,7 @@ function Composer({ value, onChange, onSubmit, onStop, busy, placeholder }: {
     <form className="as-composer" onSubmit={submit}>
       <textarea ref={ref} rows={1} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)} onKeyDown={onKeyDown} aria-label="Message" />
       {busy ? (
-        <button type="button" className="as-send" onClick={onStop} aria-label="Stop" title="Stop"><Icon name="stop" /></button>
+        <button type="button" className="as-send" onClick={onStop} aria-label="Stop" title="Stop (Esc)"><Icon name="stop" /></button>
       ) : (
         <button type="submit" className="as-send" disabled={!value.trim()} aria-label="Send" title="Send"><Icon name="send" /></button>
       )}
@@ -270,7 +271,9 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
   const error = unlockError ?? chatError
 
   const busy = live != null
+  const mainRef = useRef<HTMLElement>(null)
   const remoteStreaming = isRemoteStreaming({ choice, chat, list, live, loading: loadingChat, error: chatError })
+  useEscToStop(unlocked && (busy || remoteStreaming), stop, mainRef) // Esc in the chat interrupts the agent; the browser panel keeps its own keys
 
   // Unlocked: load the list, and the conversation a push notification pointed at.
   useEffect(() => {
@@ -435,7 +438,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
           />
           {sidebar && <div className="as-scrim" onClick={() => setSidebar(false)} />}
 
-          <section className="as-main">
+          <section className="as-main" ref={mainRef}>
             <div className="as-topbar">
               <button className="icon-btn as-menu" onClick={openSidebar} aria-label="Show conversations" title="Show conversations"><Icon name="sidebar" /></button>
               <span className="as-topbar-title">{chat.turns.length ? chat.title : ''}</span>
@@ -489,7 +492,7 @@ export default function AssistantView({ isAuth, initialChatId, onOpenNotes, draf
                 </div>
                 <div className="as-dock">
                   {composer}
-                  <p className="as-meta as-hint">{remoteStreaming ? 'Answering in the background · this view follows it' : 'Enter to send · shift+enter for a new line'}</p>
+                  <p className="as-meta as-hint">{remoteStreaming ? 'Answering in the background · this view follows it · Esc to stop' : busy ? 'Esc to stop' : 'Enter to send · shift+enter for a new line'}</p>
                 </div>
               </>
             )}

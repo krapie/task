@@ -357,6 +357,7 @@ export const handlers: HttpHandler[] = [
     return new HttpResponse(null, { status: 204 })
   }),
   http.post('/api/assistant/chat', assistantChat),
+  http.post('/api/assistant/chat/stop', async () => ok({ stopped: true })),
   http.get('/api/assistant/approval', async () => ok({ approval: pendingApproval })),
   http.post('/api/assistant/approval', async ({ request }) => {
     const b = (await request.json()) as { id: string; decision: 'approve' | 'deny' }

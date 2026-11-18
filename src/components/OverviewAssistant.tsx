@@ -1,5 +1,6 @@
-import { useState, useSyncExternalStore, type FormEvent } from 'react'
+import { useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import { ask, assistantStore, isRemoteStreaming, startNew, stop } from '../lib/assistantStore'
+import { useEscToStop } from '../lib/useEscToStop'
 import { useStepUp } from '../lib/useStepUp'
 import { PendingApproval } from './AssistantCards'
 import { ProfileBadge, TurnView } from './AssistantView'
@@ -18,6 +19,8 @@ export default function OverviewAssistant({ isAuth, onOpenAssistant }: { isAuth:
   const { chat, live } = s
   const last = chat.turns[chat.turns.length - 1]
   const busy = live != null || isRemoteStreaming(s)
+  const root = useRef<HTMLElement>(null)
+  useEscToStop(unlocked && busy, stop, root)
   const asking = last?.parts.some(p => p.kind === 'tool' && /(^|__)request_approval$/.test(p.name) && !p.result)
 
   const send = (e: FormEvent) => {
@@ -30,7 +33,7 @@ export default function OverviewAssistant({ isAuth, onOpenAssistant }: { isAuth:
   }
 
   return (
-    <section className="ov-asst" aria-label="Assistant">
+    <section className="ov-asst" aria-label="Assistant" ref={root}>
       {error && <p className="as-error ov-asst-note">{error}</p>}
       {unlocked && (
         <>
@@ -61,7 +64,7 @@ export default function OverviewAssistant({ isAuth, onOpenAssistant }: { isAuth:
               enterKeyHint="send"
             />
             {busy ? (
-              <button type="button" className="as-send" onClick={stop} aria-label="Stop" title="Stop"><Icon name="stop" /></button>
+              <button type="button" className="as-send" onClick={stop} aria-label="Stop" title="Stop (Esc)"><Icon name="stop" /></button>
             ) : (
               <button type="submit" className="as-send" disabled={!input.trim()} aria-label="Send" title="Send"><Icon name="send" /></button>
             )}

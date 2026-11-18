@@ -4,6 +4,7 @@
 // tab picks up exactly where this left off. Same passkey lock as the tab.
 import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useStepUp } from '../lib/useStepUp'
+import { useEscToStop } from '../lib/useEscToStop'
 import { ask, assistantStore, isRemoteStreaming, startNew, stop } from '../lib/assistantStore'
 import { Icon } from './Icons'
 import { ProfileBadge, SUGGESTIONS, TurnView } from './AssistantView'
@@ -57,6 +58,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
   const [dragging, setDragging] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const panelRef = useRef<HTMLElement>(null)
   const last = chat.turns[chat.turns.length - 1]
   const earlier = chat.turns.length - 1
 
@@ -72,10 +74,12 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
   useEffect(() => {
     if (!open) return
     inputRef.current?.focus()
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !document.querySelector('.modal-overlay') && setOpen(false)
+    // Esc closes the panel, except while the agent answers: then it stops the answer (useEscToStop below) and a second Esc closes.
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && !document.querySelector('.modal-overlay') && setOpen(false)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open])
+  }, [open, busy])
+  useEscToStop(open && busy, stop, panelRef)
 
   const send = (q: string) => {
     q = q.trim()
@@ -138,6 +142,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
     <>
       {open && (
         <section
+          ref={panelRef}
           className={`as-fab-panel${dragging ? ' as-dragging' : ''}`}
           role="dialog"
           aria-label="Assistant"
@@ -154,7 +159,7 @@ export default function AssistantBubble({ isAuth, onOpenTab }: { isAuth: boolean
             </div>
             <div className="as-fab-actions">
               {unlocked && (busy ? (
-                <button className="btn-ghost btn-sm" onClick={stop}><Icon name="stop" size={14} /> Stop</button>
+                <button className="btn-ghost btn-sm" onClick={stop} title="Stop (Esc)"><Icon name="stop" size={14} /> Stop</button>
               ) : chat.turns.length > 0 && (
                 <button className="btn-ghost btn-sm" onClick={startNew} title="Start a new chat">New</button>
               ))}
