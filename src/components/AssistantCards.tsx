@@ -569,7 +569,7 @@ export function BrowserPanel({ onClose, wide, onToggleWide }: { onClose: () => v
 }
 
 // A reservation the assistant proposed. Nothing is scheduled until the owner approves (the passkey session): then at the
-// opening time the operator tries the slots from the latest and confirms the first one it gets, only if it costs nothing.
+// opening time the operator tries the slots in the order given and confirms the first one it gets, only if it costs nothing.
 export function ReservationProposal({ part }: { part: ToolPart }) {
   let p: Partial<ReservationInput> & { status?: string } = {}
   try { p = JSON.parse(part.result?.output ?? '') } catch { /* shown from the input */ }
@@ -578,7 +578,7 @@ export function ReservationProposal({ part }: { part: ToolPart }) {
   const [state, setState] = useState<'idle' | 'saving' | 'scheduled' | 'dismissed'>(() => (readStore(doneKey) ? 'scheduled' : 'idle'))
   const [when, setWhen] = useState<string | null>(readStore(doneKey))
   const [error, setError] = useState<string | null>(null)
-  const slots = [...(input.slots ?? [])].sort().reverse()
+  const slots = [...(input.slots ?? [])] // the owner's priority, as proposed
   const approve = async () => {
     setState('saving')
     setError(null)
@@ -600,7 +600,7 @@ export function ReservationProposal({ part }: { part: ToolPart }) {
         <span className="as-proposal-kind">{input.mode === 'dry_run' ? 'Reservation dry run' : 'Scheduled reservation'}</span>
         <span className="as-proposal-title">{input.shop_name}</span>
       </div>
-      <p className="as-proposal-summary">Opens {input.open_time} KST{input.date ? ` · ${input.date}` : ''} · {input.party} {input.party === 1 ? 'person' : 'people'} · slots {slots.join(' → ')} (latest first)</p>
+      <p className="as-proposal-summary">Opens {input.open_time} KST{input.date ? ` · ${input.date}` : ''} · {input.party} {input.party === 1 ? 'person' : 'people'} · slots {slots.join(' → ')} (in this order)</p>
       <p className="as-meta">{input.mode === 'dry_run'
         ? 'Goes as far as the final dialog and stops: nothing is booked.'
         : 'When it opens, the assistant takes the browser over (your input pauses), tries the slots in that order and confirms the first one it gets. It confirms only a reservation that costs nothing: a payment or a deposit stops it. You can cancel in Integrations until it runs.'}</p>
