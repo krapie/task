@@ -96,6 +96,50 @@ function ToolCall({ part }: { part: Extract<AssistantPart, { kind: 'tool' }> }) 
   )
 }
 
+type ToolPart = Extract<AssistantPart, { kind: 'tool' }>
+
+// A tool call that has a card of its own (a proposal to apply, an approval, a change to undo) stays outside the group.
+// Decided by name only, so a call does not jump out of its group when its result arrives.
+const PROPOSAL_TOOL = /(^|__)(propose_note|propose_site|propose_reservation)$/
+function hasCard(p: ToolPart): boolean {
+  return PROPOSAL_TOOL.test(p.name) || isWriteTool(p.name) || isApprovalTool(p.name)
+}
+
+// Consecutive plain tool calls fold into one closed block; cards and text break the run, so the order never changes.
+// A group is keyed by its first call's id, so it keeps its open state while later calls stream in.
+type Block = { kind: 'part'; part: AssistantPart; key: string } | { kind: 'tools'; parts: ToolPart[]; key: string }
+function groupParts(parts: AssistantPart[]): Block[] {
+  const out: Block[] = []
+  parts.forEach((p, i) => {
+    if (p.kind === 'tool' && !hasCard(p)) {
+      const prev = out[out.length - 1]
+      if (prev && prev.kind === 'tools') prev.parts.push(p)
+      else out.push({ kind: 'tools', parts: [p], key: `g${p.id}` })
+    } else out.push({ kind: 'part', part: p, key: p.kind === 'tool' ? p.id : `t${i}` })
+  })
+  return out
+}
+
+function ToolGroup({ parts }: { parts: ToolPart[] }) {
+  const running = parts.filter(p => !p.result)
+  const failed = parts.filter(p => p.result?.error).length
+  const state = running.length ? 'running' : failed ? 'error' : 'ok'
+  return (
+    <details className="tool-group">
+      <summary>
+        <span className={`tool-state tool-${state}`} aria-label={state} />
+        <span className="tool-name">{parts.length} {parts.length === 1 ? 'tool call' : 'tool calls'}</span>
+        {failed > 0 && <span className="tool-failed">{failed} failed</span>}
+        {running.length > 0 && <span className="tool-arg">{running[running.length - 1].name}</span>}
+        <svg className="tool-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+      </summary>
+      <div className="tool-group-body">
+        {parts.map(p => <ToolCall key={p.id} part={p} />)}
+      </div>
+    </details>
+  )
+}
+
 // A change the assistant drafted for one of the owner's notes. Nothing is saved
 // until Apply; the full text comes from the tool input (the stored result is clipped).
 function NoteProposal({ part }: { part: Extract<AssistantPart, { kind: 'tool' }> }) {
@@ -172,11 +216,14 @@ export function TurnView({ turn, onOpenBrowser }: { turn: AssistantTurn; onOpenB
       <div className="as-user"><div className="as-bubble">{turn.question}</div></div>
       <div className="as-answer">
         {turn.notice && <p className="as-meta">{turn.notice}</p>}
-        {turn.parts.map((p, i) => {
-          if (p.kind === 'text') return <Markdown key={i} text={tx.t(p.text)} />
-          if (p.name.endsWith('propose_note') && p.result && !p.result.error) return <NoteProposal key={p.id} part={p} />
-          if (p.name.endsWith('propose_site') && p.result && !p.result.error) return <SiteProposal key={p.id} part={p} />
-          if (p.name.endsWith('propose_reservation') && p.result && !p.result.error) return <ReservationProposal key={p.id} part={p} />
+        {groupParts(turn.parts).map(b => {
+          if (b.kind === 'tools') return <ToolGroup key={`g${b.key}`} parts={b.parts} />
+          const p = b.part
+          if (p.kind === 'text') return <Markdown key={b.key} text={tx.t(p.text)} />
+          const proposalDone = !!p.result && !p.result.error
+          if (p.name.endsWith('propose_note') && proposalDone) return <NoteProposal key={p.id} part={p} />
+          if (p.name.endsWith('propose_site') && proposalDone) return <SiteProposal key={p.id} part={p} />
+          if (p.name.endsWith('propose_reservation') && proposalDone) return <ReservationProposal key={p.id} part={p} />
           if (isWriteTool(p.name)) return <ActionCard key={p.id} part={p} />
           if (isApprovalTool(p.name)) return <ApprovalCard key={p.id} part={p} onOpenBrowser={onOpenBrowser} />
           return <ToolCall key={p.id} part={p} />

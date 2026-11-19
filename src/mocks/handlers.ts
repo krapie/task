@@ -49,10 +49,28 @@ const mockPageSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" width="1280" 
 // Stored chats of the one Assistant list: each has one of the two agents ("assistant" acts, "personal" reads private data).
 interface MockConv { id: string; profile: 'assistant' | 'personal'; title: string; folder: string | null; created_at: string; updated_at: string; turns: AssistantTurn[] }
 const mockTurn = (id: string, question: string, text: string): AssistantTurn => ({ id, question, parts: [{ kind: 'text', text }], state: 'done', done: { ok: true, duration_ms: 4000 } })
+// A stored turn with plain tool calls (they fold into one block), a proposal card (stays visible) and more tool calls after it.
+const toolTurn = (): AssistantTurn => {
+  const t = (id: string, name: string, input: unknown, output: string, error = false) => ({ kind: 'tool' as const, id, name, input, result: { error, output } })
+  return {
+    id: 's2b', question: 'Check my mail and the news, then add Yanolja to my sites.', state: 'done', done: { ok: true, duration_ms: 12000 },
+    parts: [
+      { kind: 'text', text: 'Looking through your mail and the news first.' },
+      t('m1', 'mail_search', { query: 'is:unread', limit: 10 }, JSON.stringify({ threads: 2 })),
+      t('m2', 'mail_get', { id: 'th-1' }, JSON.stringify({ subject: 'Dentist: confirm Friday' })),
+      t('m3', 'news', { topic: 'tech' }, JSON.stringify({ items: 5 })),
+      { kind: 'text', text: 'Two mails need a reply. Yanolja is not in the list, so I propose adding it:' },
+      t('p2', 'propose_site', { label: 'Yanolja', url: 'https://www.yanolja.com/', note: 'Hotel booking' }, JSON.stringify({ status: 'proposed', label: 'Yanolja', url: 'https://www.yanolja.com/' })),
+      t('m4', 'tasks_overview', {}, JSON.stringify({ todos: 3 })),
+      t('m5', 'mail_search', { query: 'from:landlord' }, 'upstream timeout', true),
+      { kind: 'text', text: 'Press Add on the card and I can use it.' },
+    ],
+  }
+}
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString()
 const convs: MockConv[] = [
   { id: '00000000-0000-4000-8000-000000000001', profile: 'personal', title: 'How much did I spend in October?', folder: 'money', created_at: hoursAgo(30), updated_at: hoursAgo(30), turns: [mockTurn('s1', 'How much did I spend in October?', 'In October you spent about ₩1,240,000 (mock numbers), mostly food and transport.')] },
-  { id: '00000000-0000-4000-8000-000000000002', profile: 'assistant', title: 'Any unread mail that needs a reply?', folder: 'mail', created_at: hoursAgo(5), updated_at: hoursAgo(5), turns: [mockTurn('s2', 'Any unread mail that needs a reply?', 'Two unread mails need a reply: the dentist (confirm Friday) and the landlord (lease question).')] },
+  { id: '00000000-0000-4000-8000-000000000002', profile: 'assistant', title: 'Any unread mail that needs a reply?', folder: 'mail', created_at: hoursAgo(5), updated_at: hoursAgo(5), turns: [mockTurn('s2', 'Any unread mail that needs a reply?', 'Two unread mails need a reply: the dentist (confirm Friday) and the landlord (lease question).'), toolTurn()] },
   { id: '00000000-0000-4000-8000-000000000003', profile: 'personal', title: 'Summarize my week', folder: 'summaries', created_at: hoursAgo(70), updated_at: hoursAgo(70), turns: [mockTurn('s3', 'Summarize my week', 'Four workouts, 7h 10m of sleep on average, and 12 of 15 tasks done (mock numbers).')] },
 ]
 // Scheduled reservations (the Integrations list and the proposal card's approval).
@@ -143,6 +161,12 @@ function assistantChat({ request }: { request: Request }) {
         } else if (profile === 'assistant') {
           const date = new Date(); const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
           const ev = { id: `e-${uid()}`, title: 'Dentist', start_date: iso, end_date: iso, time: '15:00', recurrence: null, created_at: Date.now() }
+          send({ type: 'tool', id: 'r1', name: 'tasks_overview', input: {} })
+          await sleep(500)
+          send({ type: 'tool_result', id: 'r1', error: false, output: JSON.stringify({ events: [] }) })
+          send({ type: 'tool', id: 'r2', name: 'mail_search', input: { query: 'is:unread' } })
+          await sleep(500)
+          send({ type: 'tool_result', id: 'r2', error: false, output: JSON.stringify({ threads: 2 }) })
           send({ type: 'tool', id: 'w1', name: 'event_add', input: { title: ev.title, start_date: iso, time: '15:00' } })
           await sleep(300)
           db.events.push(ev as (typeof db.events)[number])

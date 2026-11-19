@@ -3856,6 +3856,14 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible, [tabindex]
 .tool-call summary { display: flex; align-items: center; gap: var(--kp-space-2); cursor: pointer; list-style: none; padding: 6px var(--kp-space-3); font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); color: var(--kp-fg-3); min-width: 0; }
 .tool-call summary::-webkit-details-marker { display: none; }
 .tool-call summary:hover { background: var(--kp-hover-bg); }
+.tool-group { border: 1px solid var(--kp-border-faint); border-radius: var(--kp-radius-sm); }
+.tool-group > summary { display: flex; align-items: center; gap: var(--kp-space-2); cursor: pointer; list-style: none; padding: 6px var(--kp-space-3); font-family: var(--kp-font-mono); font-size: var(--kp-text-2xs); color: var(--kp-fg-3); min-width: 0; }
+.tool-group > summary::-webkit-details-marker { display: none; }
+.tool-group > summary:hover { background: var(--kp-hover-bg); }
+.tool-failed { color: var(--kp-danger); flex-shrink: 0; }
+.tool-chev { margin-left: auto; flex-shrink: 0; transition: transform var(--kp-dur-fast, 120ms) var(--kp-ease); }
+.tool-group[open] > summary .tool-chev { transform: rotate(180deg); }
+.tool-group-body { display: flex; flex-direction: column; gap: var(--kp-space-1); padding: 0 var(--kp-space-2) var(--kp-space-2); }
 .tool-state { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--kp-fg-4); }
 .tool-running { animation: kp-pulse 0.8s var(--kp-ease) infinite alternate; }
 .tool-ok { background: var(--kp-success); }
