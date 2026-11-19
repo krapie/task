@@ -78,7 +78,7 @@ export function ScheduleView({ onOpenChat }: { onOpenChat: (id: string) => void 
           return (
             <li key={j.id}>
               <div className="br-site-main">
-                <span className="br-site-name">{j.shop_name}{j.mode === 'dry_run' ? ' · dry run' : ''}</span>
+                <span className="br-site-name">{j.shop_name}{j.mode === 'dry_run' ? ' · dry run' : j.mode === 'live_force' ? ' · must go' : ''}</span>
                 <span className="as-meta br-site-domains">{j.date} {j.open_time} · {j.party} {j.party === 1 ? 'person' : 'people'} · {j.slots.join(' → ')}</span>
                 <span className={`as-meta br-site-state${j.state === 'failed' || j.state === 'expired' ? ' br-site-state-warn' : ''}`}>{RESERVATION_STATE[j.state]}{j.result?.time ? ` · ${j.result.time}` : ''}{j.result?.booking_number ? ` · No. ${j.result.booking_number}` : ''}{j.result?.detail && !active ? ` · ${j.result.detail}` : ''}</span>
                 {(j.attempts?.length ?? 0) > 0 && (
