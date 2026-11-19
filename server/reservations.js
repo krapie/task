@@ -1,5 +1,5 @@
 // Scheduled reservations (docs/apps/browser-agent.md, "Scheduled reservations"). The owner approves one job with the passkey:
-// a shop, a day, an opening time, a party size and the slots in the order to try them (the owner's priority; the latest first unless they ask for another), for a reservation that
+// a shop, a day, an opening time, a party size and the slots in the order to try them (latest first), for a reservation that
 // costs nothing. At the opening time the operator runs it. This file is the part that does not touch the network: what a job
 // may be, when it is due, and how its state may change.
 
@@ -32,7 +32,7 @@ export function jobFromInput(body = {}, domains = [], now = new Date()) {
   if (!Number.isInteger(party) || party < 1 || party > 6) throw new Error('party: 1 to 6')
   const slots = [...new Set(Array.isArray(body.slots) ? body.slots.map(String) : [])]
   if (!slots.length || slots.length > 8 || !slots.every((t) => TIME_RE.test(t))) throw new Error('slots: 1 to 8 times, HH:MM')
-  // the order given is the priority: the first slot that is open is taken
+  slots.sort().reverse() // the latest first: the order they are tried
   const open_time = String(body.open_time ?? '')
   if (!TIME_RE.test(open_time)) throw new Error('open_time: HH:MM (KST)')
   const today = kstDate(now)

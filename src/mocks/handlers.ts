@@ -381,7 +381,7 @@ export const handlers: HttpHandler[] = [
     const b = (await request.json()) as { shop_name: string; shop_url: string; party: number; slots: string[]; open_time: string; date?: string; mode?: 'live' | 'dry_run' }
     if (reservations.some((r) => ['scheduled', 'preparing', 'running'].includes(r.state) && r.shop_url === b.shop_url)) return HttpResponse.json({ error: 'that shop is already scheduled for that day' }, { status: 409 })
     const date = b.date ?? kstDay(new Date(Date.now() + 86_400_000))
-    const j: ReservationJob = { id: `rv-${uid()}`, shop_name: b.shop_name, shop_url: b.shop_url, party: b.party, slots: [...b.slots], open_time: b.open_time, date, mode: b.mode ?? 'live', fire_at: new Date(`${date}T${b.open_time}:00+09:00`).toISOString(), state: 'scheduled', result: {}, attempts: [], created_at: new Date().toISOString() }
+    const j: ReservationJob = { id: `rv-${uid()}`, shop_name: b.shop_name, shop_url: b.shop_url, party: b.party, slots: [...b.slots].sort().reverse(), open_time: b.open_time, date, mode: b.mode ?? 'live', fire_at: new Date(`${date}T${b.open_time}:00+09:00`).toISOString(), state: 'scheduled', result: {}, attempts: [], created_at: new Date().toISOString() }
     reservations.unshift(j)
     return HttpResponse.json({ reservation: j }, { status: 201 })
   }),

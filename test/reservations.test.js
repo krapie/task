@@ -6,10 +6,9 @@ const DOMAINS = ['catchtable.co.kr', 'catchtable.net', 'naver.com']
 const base = { shop_name: '고디바 롯데월드몰점', shop_url: 'https://app.catchtable.co.kr/ct/shop/godiva_lotteworldmall', party: 1, slots: ['10:30', '16:30', '12:30'], open_time: '09:00' }
 const at = (s) => new Date(s) // KST 08:00 on 2026-11-19 = 2026-11-18T23:00:00Z
 
-test('a job: slots keep the owner\'s priority, the day defaults to the next opening, fire_at is KST', () => {
+test('a job: slots are tried latest first, the day defaults to the next opening, fire_at is KST', () => {
   const j = jobFromInput(base, DOMAINS, at('2026-11-18T23:00:00Z'))
-  assert.deepEqual(j.slots, ['10:30', '16:30', '12:30'], 'the order given')
-  assert.deepEqual(jobFromInput({ ...base, slots: ['12:30', '14:30', '12:30', '16:30'] }, DOMAINS, at('2026-11-18T23:00:00Z')).slots, ['12:30', '14:30', '16:30'], 'lunch first, once each')
+  assert.deepEqual(j.slots, ['16:30', '12:30', '10:30'])
   assert.equal(j.date, '2026-11-19')
   assert.equal(j.fire_at, '2026-11-19T00:00:00.000Z') // 09:00 KST
   assert.equal(j.mode, 'live')
