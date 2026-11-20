@@ -20,6 +20,8 @@ export const RESERVATION_STATE: Record<ReservationJob['state'], string> = {
 }
 const ATTEMPT_LABEL: Record<string, string> = {
   preflight: 'Sign-in check before the opening',
+  recover: 'Browser restarted and timed before the opening',
+  fast: 'Fast path (no model)',
   prepare: 'Took the browser over',
   open: 'The shop opened',
   gate: 'Final confirmation allowed',
